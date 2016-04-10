@@ -5,37 +5,7 @@ import tornado.tcpserver
 import tornado.tcpclient
 import tornado.iostream
 
-from http_parser.parser import HttpParser
-from gzip import GzipFile
-from StringIO import StringIO
-
-class HttpMessage(object):
-    def __init__(self):
-        super(HttpMessage, self).__init__()
-        self.raw_data = b""
-        self.header = None
-        self.body = None
-        self.parser = HttpParser()
-    
-    def clear(self):
-        self.raw_data = b""
-        self.parser = HttpParser()
-
-    def read(self, data):
-        self.raw_data += data
-
-        self.parser.execute(data, len(data))
-        if self.parser.is_message_complete():
-            self.header = self.parser.get_headers()
-            self.body = self.parser.recv_body()
-            print "src -> dest"
-            print "http header"
-            headers = self.parser.get_headers()
-            for header in headers:
-                print "{0} : {1}".format(header, headers[header])
-            return self.raw_data
-
-        return None
+from http import HttpRequest, HttpResponse
 
 class HttpServer(object):
     '''
@@ -43,7 +13,8 @@ class HttpServer(object):
     '''
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
         super(HttpServer, self).__init__()
-        self.http_message = HttpMessage()
+        self.http_request = HttpRequest()
+        self.http_response = HttpResponse()
 
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
@@ -54,23 +25,27 @@ class HttpServer(object):
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
 
     def on_request(self, data):
-        raw_data = self.http_message.read(data)
-        if raw_data is not None:
-            self.target_dest_stream.write(raw_data)
-            self.http_message.clear()
+        self.http_request.parse(data)
+        if self.http_request.is_done:
+            print "src -> dest"
+            try:
+                self.http_request.header["Accept-Encoding"] = "gzip, deflate"
+            except KeyError:
+                print " no such header"
+
+            self.target_dest_stream.write(self.http_request.data)
+            self.http_request.clear()
 
     def on_response(self, data):
-        raw_data = self.http_message.read(data)
-        if raw_data is not None:
-            # sio = StringIO(self.http_message.body)
-            # gz = GzipFile(fileobj=sio, mode="rb")
-            # print gz.read()
-            self.target_src_stream.write(raw_data)
-            self.http_message.clear()
+        self.http_response.parse(data)
+        if self.http_response.is_done:
+            print "dest -> src"
+            self.target_src_stream.write(self.http_response.data)
+            self.http_response.clear()
 
 class TLSServer(object):
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
-        super(DirectServer, self).__init__()
+        super(TLSServer, self).__init__()
 
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
@@ -107,9 +82,9 @@ class DirectServer(object):
     def on_response(self, data):
         self.target_src_stream.write(data)
 
-class SocksServer(object):
+class SocksLayer(object):
     def __init__(self, stream):
-        super(SocksServer, self).__init__()
+        super(SocksLayer, self).__init__()
         self.stream = stream
         self.stream.read_bytes(3, self.on_socks_greeting)
     
@@ -120,7 +95,6 @@ class SocksServer(object):
         socks_nmethod = socks_init_data[1]
         socks_methods = socks_init_data[2]
     
-        # Auth is not supported
         if socks_nmethod != 1:
             print "Auth not supported"
         
@@ -156,7 +130,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         super(ProxyServer, self).__init__()
 
     def handle_stream(self, stream, port):
-        SocksServer(stream)
+        SocksLayer(stream)
 
 def main():
     server = ProxyServer()
