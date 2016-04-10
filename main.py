@@ -1,143 +1,166 @@
-import pyuv
 import struct
 import socket
-import signal
+import tornado.ioloop
+import tornado.tcpserver
+import tornado.tcpclient
+import tornado.iostream
 
-from blinker import signal as blinker_signal
 from http_parser.parser import HttpParser
+from gzip import GzipFile
+from StringIO import StringIO
 
-def dump_hex(data):
-    hex_str = ":".join(hex(ord(char)) for char in data)
-    print(hex_str)
-
-class HttpProtocol(object):
+class HttpMessage(object):
     def __init__(self):
-        pass
-
-class SocksProtocol(object):
-    def __init__(self):
-        pass
-
-class ProxyClient(object):
-    def __init__(self):
-        self.uv_sock = pyuv.TCP(pyuv.Loop.default_loop())
-        self.raw_data = ""
-
-        self.is_socks_complete_signal = blinker_signal("complete")
-        self.is_socks_complete_signal.connect(self.on_socks_complete, sender=self)
-        self.is_socks_complete = False
-        self.socks_protocol = SocksProtocol()
-
-        self.http_protocol = HttpProtocol()
-        self.http_parser = HttpParser()
-        self.http_complete = False
-        self.http_header = None
-        self.http_body = []
+        super(HttpMessage, self).__init__()
+        self.raw_data = b""
+        self.header = None
+        self.body = None
+        self.parser = HttpParser()
     
-    def on_socks_complete(self, sender):
-        self.is_socks_complete = True
+    def clear(self):
+        self.raw_data = b""
+        self.parser = HttpParser()
 
-    def start_read(self):
-        self.uv_sock.start_read(self.on_read)
+    def read(self, data):
+        self.raw_data += data
+
+        self.parser.execute(data, len(data))
+        if self.parser.is_message_complete():
+            self.header = self.parser.get_headers()
+            self.body = self.parser.recv_body()
+            print "src -> dest"
+            print "http header"
+            headers = self.parser.get_headers()
+            for header in headers:
+                print "{0} : {1}".format(header, headers[header])
+            return self.raw_data
+
+        return None
+
+class HttpServer(object):
+    '''
+    HTTPServer: HTTPServer will handle http trafic.
+    '''
+    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+        super(HttpServer, self).__init__()
+        self.http_message = HttpMessage()
+
+        self.target_src_stream = target_src_stream
+        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.target_dest_stream = tornado.iostream.IOStream(s)
+        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+
+    def on_request(self, data):
+        raw_data = self.http_message.read(data)
+        if raw_data is not None:
+            self.target_dest_stream.write(raw_data)
+            self.http_message.clear()
+
+    def on_response(self, data):
+        raw_data = self.http_message.read(data)
+        if raw_data is not None:
+            # sio = StringIO(self.http_message.body)
+            # gz = GzipFile(fileobj=sio, mode="rb")
+            # print gz.read()
+            self.target_src_stream.write(raw_data)
+            self.http_message.clear()
+
+class TLSServer(object):
+    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+        super(DirectServer, self).__init__()
+
+        self.target_src_stream = target_src_stream
+        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.target_dest_stream = tornado.iostream.IOStream(s)
+        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+
+    def on_request(self, data):
+        self.target_dest_stream.write(data)
+
+    def on_response(self, data):
+        self.target_src_stream.write(data)
+
+class DirectServer(object):
+    '''
+    DirectServer: passing all the src data to destination. Will not intercept anything
+    '''
+    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+        super(DirectServer, self).__init__()
+
+        self.target_src_stream = target_src_stream
+        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.target_dest_stream = tornado.iostream.IOStream(s)
+        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+
+    def on_request(self, data):
+        self.target_dest_stream.write(data)
+
+    def on_response(self, data):
+        self.target_src_stream.write(data)
+
+class SocksServer(object):
+    def __init__(self, stream):
+        super(SocksServer, self).__init__()
+        self.stream = stream
+        self.stream.read_bytes(3, self.on_socks_greeting)
     
-    def on_read(self, client, data, error):
-        if data is None:
-            client.close()
-            return
+    def on_socks_greeting(self, data):
+        print "socks client greeting"
+        socks_init_data = struct.unpack('BBB', data)
+        socks_version = socks_init_data[0]
+        socks_nmethod = socks_init_data[1]
+        socks_methods = socks_init_data[2]
+    
+        # Auth is not supported
+        if socks_nmethod != 1:
+            print "Auth not supported"
+        
+        response = struct.pack('BB', 5, 0)
+        self.stream.write(response)
+        self.stream.read_bytes(10, self.on_socks_request)
 
-        if not self.is_socks_complete:
-            if len(data) == 3:
-                socks_init_data = struct.unpack('BBB', data)
-                socks_version = socks_init_data[0]
-                socks_nmethod = socks_init_data[1]
-                socks_methods = socks_init_data[2]
-                
-                if socks_nmethod != 1:
-                    client.close()
-                    self.clients.remove(client)
-                    print "Auth not supported"
-                
-                response = struct.pack('BB', 5, 0)
+    def on_socks_request(self, data):
+        print "socks client request"
+        socks_init_data = struct.unpack('!BBxBIH', data)
+        socks_version = socks_init_data[0]
+        socks_cmd = socks_init_data[1]
+        socks_atyp = socks_init_data[2]
+        socks_dest_addr = socks_init_data[3]
+        socks_dest_port = socks_init_data[4]
 
-            if len(data) > 3:
-                socks_init_data = struct.unpack('!BBxBIH', data)
-                socks_version = socks_init_data[0]
-                socks_cmd = socks_init_data[1]
-                socks_atyp = socks_init_data[2]
-                socks_dest_addr = socks_init_data[3]
-                socks_dest_port = socks_init_data[4]
+        socks_version = 5 # socks 5
+        socks_status = 0 # Success
+        socks_connection_type = 1 #IPV4
+        response = struct.pack('!BBxBIH', 5, 0, 1, socks_init_data[-2], socks_init_data[-1])
+        self.stream.write(response)
 
-                print socket.inet_ntoa(struct.pack('!I', socks_dest_addr))
-                print socks_dest_port
+        print "socks -> http"
+        print "{0}:{1}".format(socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
-                socks_version = 5 # socks 5
-                socks_status = 0 # Success
-                socks_connection_type = 1 #IPV4
-                response = struct.pack('!BBxBIH', 5, 0, 1, socks_init_data[-2], socks_init_data[-1])
-                self.is_socks_complete_signal.send(self)
-            client.write(response)
-
+        if socks_dest_port == 80:
+            HttpServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
         else:
-            self.http_parser.execute(data, len(data))
-            if self.http_parser.is_headers_complete():
-                print "header complete"
-                self.http_header = self.http_parser.get_headers()
+            DirectServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
-            if self.http_parser.is_partial_body():
-                print "keep getting body"
-                self.http_body.append(self.http_parser.recv_body())
+class ProxyServer(tornado.tcpserver.TCPServer):
+    def __init__(self):
+        super(ProxyServer, self).__init__()
 
-            if self.http_parser.is_message_complete():
-                print "message complete"
-                self.http_complete = True
-                print self.http_header
-                print self.http_body
-            
+    def handle_stream(self, stream, port):
+        SocksServer(stream)
 
-class SocksProxy(object):
-    def __init__(self, ip, port):
-        # pyuv instance
-        self.loop = pyuv.Loop.default_loop()
-        self.socks_server = pyuv.TCP(self.loop)
+def main():
+    server = ProxyServer()
+    server.listen(5580, "127.0.0.1")
+    tornado.ioloop.IOLoop.instance().start()
 
-        # basic configurations
-        self.ip = ip
-        self.port = port
-
-        # proxy
-        self.clients = []
-    
-    def start(self):
-        """
-        start socks proxy server
-        """
-        conn_info = (self.ip, self.port)
-        self.socks_server.bind(conn_info)
-        self.socks_server.listen(self.on_connect)
-    
-    def on_connect(self, server, error):
-        """
-        socks connect callback
-        """
-        client = ProxyClient()
-        server.accept(client.uv_sock)
-        client.start_read()
-        self.clients.append(client)
-
-
-def on_signal(handle, num):
-    print("program termination\n")
-    loop = handle.loop
-    handle.close()
-    loop.stop()
-
-loop = pyuv.Loop.default_loop()
-
-# when user press Ctrl-C program terminated
-signal_h = pyuv.Signal(loop)
-signal_h.start(on_signal, signal.SIGINT)
-
-proxy = SocksProxy("127.0.0.1", 5580)
-proxy.start()
-
-loop.run()
+main()
