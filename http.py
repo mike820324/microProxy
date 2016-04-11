@@ -41,7 +41,11 @@ class HttpRequest(HttpMessage):
     
     @property
     def data(self):
-        http_query_str = "{0} {1}?{2} HTTP/{3}".format(self.method, self.path, self.query_string, self.version)
+        if len(self.query_string) == 0:
+            http_query_str = "{0} {1} HTTP/{2}".format(self.method, self.path, self.version)
+        else:
+            http_query_str = "{0} {1}?{2} HTTP/{3}".format(self.method, self.path, self.query_string, self.version)
+
         http_header_list = [ "{0}: {1}".format(key, self.header[key]) for key in self.header]
 
         final_list = []
