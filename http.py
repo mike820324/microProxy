@@ -53,21 +53,31 @@ class HttpRequest(HttpMessage):
         final_list.extend(http_header_list)
 
         final_data = b"{0}\r\n\r\n{1}".format("\r\n".join(final_list), self.body)
-        print final_data
         return final_data
 
 class HttpResponse(HttpMessage):
     def __init__(self):
         super(HttpResponse, self).__init__()
 
+    def is_chunked_encoding(self):
+        try:
+            return "chunked" in self.header['Transfer-Encoding'].lower()
+        except KeyError:
+            return False
+
     @property
     def data(self):
         http_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
+
+        # chunked encoding is not supported yet
+        if self.is_chunked_encoding():
+            self.header.pop("Transfer-Encoding", None)
+            self.header["Content-Length"] = str(len(self.body))
+
         http_header_list = [ "{0}: {1}".format(key, self.header[key]) for key in self.header]
 
         final_list = []
         final_list.append(http_query_str)
         final_list.extend(http_header_list)
-
         final_data = b"{0}\r\n\r\n{1}".format("\r\n".join(final_list), self.body)
         return final_data

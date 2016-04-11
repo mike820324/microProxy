@@ -38,12 +38,13 @@ class HttpServer(object):
         self.http_request.parse(data)
         if self.http_request.is_done:
             try:
-                self.http_request.header["Accept-Encoding"] = "gzip, deflate"
+                self.http_request.header["Accept-Encoding"] = "deflate"
             except KeyError:
                 print " no such header"
 
             if not self.is_dest_close:
                 print "src -> dest"
+                print self.http_request.data
                 self.target_dest_stream.write(self.http_request.data)
 
             self.http_request.clear()
@@ -147,7 +148,7 @@ class SocksLayer(object):
         print "socks -> http"
         print "{0}:{1}".format(socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
-        if socks_dest_port == 80:
+        if socks_dest_port == 5000 or socks_dest_port == 80:
             HttpServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
         else:
             DirectServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
