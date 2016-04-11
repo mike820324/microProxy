@@ -16,31 +16,46 @@ class HttpServer(object):
         self.http_request = HttpRequest()
         self.http_response = HttpResponse()
 
+        self.is_src_close = False
+        self.is_dest_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+        self.target_src_stream.set_close_callback(self.on_src_close)
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.target_dest_stream = tornado.iostream.IOStream(s)
         self.target_dest_stream.connect((target_dest_host, target_dest_port))
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+    def on_src_close(self):
+        self.is_src_close = True
+
+    def on_dest_close(self):
+        self.is_dest_close = True
 
     def on_request(self, data):
         self.http_request.parse(data)
         if self.http_request.is_done:
-            print "src -> dest"
             try:
                 self.http_request.header["Accept-Encoding"] = "gzip, deflate"
             except KeyError:
                 print " no such header"
 
-            self.target_dest_stream.write(self.http_request.data)
+            if not self.is_dest_close:
+                print "src -> dest"
+                self.target_dest_stream.write(self.http_request.data)
+
             self.http_request.clear()
 
     def on_response(self, data):
         self.http_response.parse(data)
         if self.http_response.is_done:
-            print "dest -> src"
-            self.target_src_stream.write(self.http_response.data)
+            if not self.is_src_close:
+                print "dest -> src"
+                print self.http_response.data
+                self.target_src_stream.write(self.http_response.data)
+
             self.http_response.clear()
 
 class TLSServer(object):
@@ -68,19 +83,31 @@ class DirectServer(object):
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
         super(DirectServer, self).__init__()
 
+        self.is_dest_close = False
+        self.is_src_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+        self.target_src_stream.set_close_callback(self.on_src_close)
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.target_dest_stream = tornado.iostream.IOStream(s)
         self.target_dest_stream.connect((target_dest_host, target_dest_port))
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+    def on_src_close(self):
+        self.is_src_close = True
+
+    def on_dest_close(self):
+        self.is_dest_close = True
 
     def on_request(self, data):
-        self.target_dest_stream.write(data)
+        if not self.is_dest_close:
+            self.target_dest_stream.write(data)
 
     def on_response(self, data):
-        self.target_src_stream.write(data)
+        if not self.is_src_close:
+            self.target_src_stream.write(data)
 
 class SocksLayer(object):
     def __init__(self, stream):
