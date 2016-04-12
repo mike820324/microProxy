@@ -51,10 +51,10 @@ class HttpRequest(HttpMessage):
         return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
 
     def _assemble_body(self):
-        pass
+        raise NotImplementedError
 
     def _assemble_data(self):
-        pass
+        raise NotImplementedError
 
     @property
     def data(self):
@@ -82,10 +82,14 @@ class HttpResponse(HttpMessage):
         return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
 
     def _assemble_body(self):
-        pass
+        raise NotImplementedError
 
     def _assemble_data(self):
-        pass
+        raise NotImplementedError
+
+    @property
+    def status_str(self):
+        return "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
 
     @property
     def data(self):
