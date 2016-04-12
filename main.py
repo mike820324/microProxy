@@ -1,5 +1,6 @@
 import struct
 import socket
+import datetime, time
 import tornado.ioloop
 import tornado.tcpserver
 import tornado.tcpclient
@@ -7,12 +8,13 @@ import tornado.iostream
 
 from http import HttpRequest, HttpResponse
 
-class HttpServer(object):
+class HttpLayer(object):
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
-        super(HttpServer, self).__init__()
+        super(HttpLayer, self).__init__()
+        self.dest_ip = target_dest_host
         self.http_request = HttpRequest()
         self.http_response = HttpResponse()
 
@@ -37,7 +39,8 @@ class HttpServer(object):
     def on_request(self, data):
         self.http_request.parse(data)
         if self.http_request.is_done and not self.is_dest_close:
-            print "timestamp : dest_ip {0}".format(self.http_request.url)
+            current_time = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            print "{0} : {1} {2}".format(current_time, self.dest_ip, self.http_request.url)
             self.target_dest_stream.write(self.http_request.data)
 
             self.http_request.clear()
@@ -45,7 +48,8 @@ class HttpServer(object):
     def on_response(self, data):
         self.http_response.parse(data)
         if self.http_response.is_done and not self.is_src_close:
-            print "timestamp : dest_ip {0}".format(self.http_request.url)
+            current_time = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            print "{0} : {1} {2}".format(current_time, self.dest_ip, self.http_response.status_str)
 
             for chunk in self.http_response.data:
                 try:
@@ -55,12 +59,13 @@ class HttpServer(object):
 
             self.http_response.clear()
 
-class TLSServer(object):
+class TLSLayer(object):
     '''
-    TLSServer: passing all the src data to destination. Will not intercept anything
+    TLSLayer: passing all the src data to destination. Will not intercept anything
     '''
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
-        super(TLSServer, self).__init__()
+        super(TLSLayer, self).__init__()
+        self.is_tls = None
 
         self.is_dest_close = False
         self.is_src_close = False
@@ -73,6 +78,13 @@ class TLSServer(object):
         self.target_dest_stream.connect((target_dest_host, target_dest_port))
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+    def is_tls_protocol(self, data):
+        return (
+            data[0] == '\x16' and
+            data[1] == '\x03' and
+            data[2] in ('\x00', '\x01', '\x02', '\x03')
+        )
 
     def on_src_close(self):
         self.is_src_close = True
@@ -128,7 +140,7 @@ class SocksLayer(object):
         self.stream.read_bytes(3, self.on_socks_greeting)
     
     def on_socks_greeting(self, data):
-        print "socks client greeting"
+        # print "socks client greeting"
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
@@ -142,7 +154,7 @@ class SocksLayer(object):
         self.stream.read_bytes(10, self.on_socks_request)
 
     def on_socks_request(self, data):
-        print "socks client request"
+        # print "socks client request"
         socks_init_data = struct.unpack('!BBxBIH', data)
         socks_version = socks_init_data[0]
         socks_cmd = socks_init_data[1]
@@ -156,14 +168,13 @@ class SocksLayer(object):
         response = struct.pack('!BBxBIH', 5, 0, 1, socks_init_data[-2], socks_init_data[-1])
         self.stream.write(response)
 
-        print "socks -> http"
-        print "{0}:{1}".format(socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+        # print "socks -> http"
 
         if socks_dest_port == 5000 or socks_dest_port == 80:
-            HttpServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+            HttpLayer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
         elif socks_dest_port == 5001 or socks_dest_port == 443:
-            TLSServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+            TLSLayer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
         else:
             DirectServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
@@ -173,14 +184,17 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         super(ProxyServer, self).__init__()
 
     def handle_stream(self, stream, port):
+        if port == 6680:
+            print "ok it's good"
         SocksLayer(stream)
 
 def main():
     server = ProxyServer()
     server.listen(5580, "127.0.0.1")
+
     try:
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
-        print "bye~~"
+        print "bye..."
 
 main()
