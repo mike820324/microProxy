@@ -8,6 +8,7 @@ class HttpMessage(object):
         self.version = ""
         self.status = ""
         self.method = ""
+        self.url = ""
         self.path = ""
         self.query_string = ""
         self.header = None
@@ -30,6 +31,7 @@ class HttpMessage(object):
             self.version = "{0}.{1}".format(self.parser.get_version()[0], self.parser.get_version()[1])
             self.status = self.parser.get_status_code()
             self.method = self.parser.get_method()
+            self.url = self.parser.get_url()
             self.path = self.parser.get_path()
             self.query_string = self.parser.get_query_string()
             self.header = self.parser.get_headers()
@@ -39,20 +41,24 @@ class HttpRequest(HttpMessage):
     def __init__(self):
         super(HttpRequest, self).__init__()
     
+    def _assemble_header(self):
+        http_header_query_str = "{0} {1} HTTP/{2}".format(self.method, self.url, self.version)
+        http_header_fields = [ "{0}: {1}".format(key, self.header[key]) for key in self.header ]
+
+        http_header_list = [http_header_query_str]
+        http_header_list.extend(http_header_fields)
+
+        return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
+
+    def _assemble_body(self):
+        pass
+
+    def _assemble_data(self):
+        pass
+
     @property
     def data(self):
-        if len(self.query_string) == 0:
-            http_query_str = "{0} {1} HTTP/{2}".format(self.method, self.path, self.version)
-        else:
-            http_query_str = "{0} {1}?{2} HTTP/{3}".format(self.method, self.path, self.query_string, self.version)
-
-        http_header_list = [ "{0}: {1}".format(key, self.header[key]) for key in self.header]
-
-        final_list = []
-        final_list.append(http_query_str)
-        final_list.extend(http_header_list)
-
-        final_data = b"{0}\r\n\r\n{1}".format("\r\n".join(final_list), self.body)
+        final_data = b"{0}{1}".format(self._assemble_header(), self.body)
         return final_data
 
 class HttpResponse(HttpMessage):
@@ -65,19 +71,34 @@ class HttpResponse(HttpMessage):
         except KeyError:
             return False
 
+    def _assemble_header(self):
+        http_header_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
+
+        http_header_fields = [ "{0}: {1}".format(key, self.header[key]) for key in self.header ]
+
+        http_header_list = [http_header_query_str]
+        http_header_list.extend(http_header_fields)
+
+        return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
+
+    def _assemble_body(self):
+        pass
+
+    def _assemble_data(self):
+        pass
+
     @property
     def data(self):
-        http_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
-
-        # chunked encoding is not supported yet
         if self.is_chunked_encoding():
-            self.header.pop("Transfer-Encoding", None)
-            self.header["Content-Length"] = str(len(self.body))
+            chunk_size = 1024
+            chunks = [self.body[i:i+chunk_size] for i in range(0, len(self.body), chunk_size)]
 
-        http_header_list = [ "{0}: {1}".format(key, self.header[key]) for key in self.header]
+            yield b"{0}{1:x}\r\n{2}\r\n".format(self._assemble_header(), len(chunks[0]), chunks.pop(0))
 
-        final_list = []
-        final_list.append(http_query_str)
-        final_list.extend(http_header_list)
-        final_data = b"{0}\r\n\r\n{1}".format("\r\n".join(final_list), self.body)
-        return final_data
+            for chunk in chunks:
+                yield b"{0:x}\r\n{1}\r\n".format(len(chunk), chunk)
+
+            yield b"0\r\n\r\n"
+
+        else:
+            yield b"{0}{1}".format(self._assemble_header(), self.body)

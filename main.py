@@ -36,46 +36,57 @@ class HttpServer(object):
 
     def on_request(self, data):
         self.http_request.parse(data)
-        if self.http_request.is_done:
-            try:
-                self.http_request.header["Accept-Encoding"] = "deflate"
-            except KeyError:
-                print " no such header"
-
-            if not self.is_dest_close:
-                print "src -> dest"
-                print self.http_request.data
-                self.target_dest_stream.write(self.http_request.data)
+        if self.http_request.is_done and not self.is_dest_close:
+            print "timestamp : dest_ip {0}".format(self.http_request.url)
+            self.target_dest_stream.write(self.http_request.data)
 
             self.http_request.clear()
 
     def on_response(self, data):
         self.http_response.parse(data)
-        if self.http_response.is_done:
-            if not self.is_src_close:
-                print "dest -> src"
-                print self.http_response.data
-                self.target_src_stream.write(self.http_response.data)
+        if self.http_response.is_done and not self.is_src_close:
+            print "timestamp : dest_ip {0}".format(self.http_request.url)
+
+            for chunk in self.http_response.data:
+                try:
+                    self.target_src_stream.write(chunk)
+                except tornado.iostream.StreamClosedError(real_error):
+                    self.on_dest_close()
 
             self.http_response.clear()
 
 class TLSServer(object):
+    '''
+    TLSServer: passing all the src data to destination. Will not intercept anything
+    '''
     def __init__(self, target_src_stream, target_dest_host, target_dest_port):
         super(TLSServer, self).__init__()
 
+        self.is_dest_close = False
+        self.is_src_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+        self.target_src_stream.set_close_callback(self.on_src_close)
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self.target_dest_stream = tornado.iostream.IOStream(s)
         self.target_dest_stream.connect((target_dest_host, target_dest_port))
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+    def on_src_close(self):
+        self.is_src_close = True
+
+    def on_dest_close(self):
+        self.is_dest_close = True
 
     def on_request(self, data):
-        self.target_dest_stream.write(data)
+        if not self.is_dest_close:
+            self.target_dest_stream.write(data)
 
     def on_response(self, data):
-        self.target_src_stream.write(data)
+        if not self.is_src_close:
+            self.target_src_stream.write(data)
 
 class DirectServer(object):
     '''
@@ -150,6 +161,10 @@ class SocksLayer(object):
 
         if socks_dest_port == 5000 or socks_dest_port == 80:
             HttpServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+
+        elif socks_dest_port == 5001 or socks_dest_port == 443:
+            TLSServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+
         else:
             DirectServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
 
@@ -163,6 +178,9 @@ class ProxyServer(tornado.tcpserver.TCPServer):
 def main():
     server = ProxyServer()
     server.listen(5580, "127.0.0.1")
-    tornado.ioloop.IOLoop.instance().start()
+    try:
+        tornado.ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:
+        print "bye~~"
 
 main()
