@@ -12,21 +12,19 @@ class HttpLayer(object):
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
-    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+    def __init__(self, target_src_stream, target_dest_stream):
         super(HttpLayer, self).__init__()
-        self.dest_ip = target_dest_host
         self.http_request = HttpRequest()
         self.http_response = HttpResponse()
 
         self.is_src_close = False
-        self.is_dest_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
         self.target_src_stream.set_close_callback(self.on_src_close)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.target_dest_stream = tornado.iostream.IOStream(s)
-        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.is_dest_close = False
+        self.dest_ip = target_dest_stream.socket.getpeername()[0]
+        self.target_dest_stream = target_dest_stream
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
 
@@ -63,19 +61,18 @@ class TLSLayer(object):
     '''
     TLSLayer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+    def __init__(self, target_src_stream, target_dest_stream):
         super(TLSLayer, self).__init__()
         self.is_tls = None
 
-        self.is_dest_close = False
         self.is_src_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
         self.target_src_stream.set_close_callback(self.on_src_close)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.target_dest_stream = tornado.iostream.IOStream(s)
-        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.is_dest_close = False
+        self.dest_ip = target_dest_stream.socket.getpeername()[0] 
+        self.target_dest_stream = target_dest_stream
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
 
@@ -104,18 +101,17 @@ class DirectServer(object):
     '''
     DirectServer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, target_src_stream, target_dest_host, target_dest_port):
+    def __init__(self, target_src_stream, target_dest_stream):
         super(DirectServer, self).__init__()
 
-        self.is_dest_close = False
         self.is_src_close = False
         self.target_src_stream = target_src_stream
         self.target_src_stream.read_until_close(streaming_callback=self.on_request)
         self.target_src_stream.set_close_callback(self.on_src_close)
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.target_dest_stream = tornado.iostream.IOStream(s)
-        self.target_dest_stream.connect((target_dest_host, target_dest_port))
+        self.is_dest_close = False
+        self.dest_ip = target_dest_stream.socket.getpeername()[0]
+        self.target_dest_stream = target_dest_stream
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
 
@@ -136,11 +132,13 @@ class DirectServer(object):
 class SocksLayer(object):
     def __init__(self, stream):
         super(SocksLayer, self).__init__()
-        self.stream = stream
-        self.stream.read_bytes(3, self.on_socks_greeting)
+        self.request_data = None
+        self.src_stream = stream
+        self.src_stream.read_bytes(3, self.on_socks_greeting)
+        self.dest_stream = None
     
     def on_socks_greeting(self, data):
-        # print "socks client greeting"
+        print "socks client greeting"
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
@@ -150,34 +148,36 @@ class SocksLayer(object):
             print "Auth not supported"
         
         response = struct.pack('BB', 5, 0)
-        self.stream.write(response)
-        self.stream.read_bytes(10, self.on_socks_request)
+        self.src_stream.write(response)
+        self.src_stream.read_bytes(10, self.on_socks_request)
 
     def on_socks_request(self, data):
         # print "socks client request"
-        socks_init_data = struct.unpack('!BBxBIH', data)
-        socks_version = socks_init_data[0]
-        socks_cmd = socks_init_data[1]
-        socks_atyp = socks_init_data[2]
-        socks_dest_addr = socks_init_data[3]
-        socks_dest_port = socks_init_data[4]
+        self.request_data = struct.unpack('!BBxBIH', data)
+        socks_version = self.request_data[0]
+        socks_cmd = self.request_data[1]
+        socks_atyp = self.request_data[2]
+        socks_dest_addr = self.request_data[3]
+        socks_dest_port = self.request_data[4]
 
-        socks_version = 5 # socks 5
-        socks_status = 0 # Success
-        socks_connection_type = 1 #IPV4
-        response = struct.pack('!BBxBIH', 5, 0, 1, socks_init_data[-2], socks_init_data[-1])
-        self.stream.write(response)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.dest_stream = tornado.iostream.IOStream(s)
+        self.dest_stream.connect((socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port), self.on_dest_connect)
 
+    def on_dest_connect(self):
+        socks_dest_port = self.request_data[4]
+        response = struct.pack('!BBxBIH', 5, 0, 1, self.request_data[-2], self.request_data[-1])
+        self.src_stream.write(response)
         # print "socks -> http"
 
         if socks_dest_port == 5000 or socks_dest_port == 80:
-            HttpLayer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+            HttpLayer(self.src_stream, self.dest_stream)
 
         elif socks_dest_port == 5001 or socks_dest_port == 443:
-            TLSLayer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+            TLSLayer(self.src_stream, self.dest_stream)
 
         else:
-            DirectServer(self.stream, socket.inet_ntoa(struct.pack('!I', socks_dest_addr)), socks_dest_port)
+            DirectServer(self.src_stream, socks_dest_stream)
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self):
