@@ -1,3 +1,4 @@
+import json, base64
 from http_parser.parser import HttpParser
 from status_codes import RESPONSES
 
@@ -36,6 +37,29 @@ class HttpMessage(object):
             self.query_string = self.parser.get_query_string()
             self.header = self.parser.get_headers()
             self.body = self.parser.recv_body()
+
+    def serialize(self):
+        data = {}
+        data["version"] = self.version
+        data["status"] = self.status
+        data["method"] = self.method
+        data["url"] = self.url
+        data["path"] = self.path
+        data["query_string"] = self.query_string
+        data["header"] = self.header
+        data["body"] = base64.b64encode(self.body)
+        return json.dumps(data, ensure_ascii=False)
+
+    def deserialize(self, json_data):
+        data = json.loads(json_data)
+        self.version = data["version"]
+        self.status = data["status"]
+        self.method = data["method"]
+        self.url = data["url"]
+        self.path = data["path"]
+        self.query_string = data["query_string"]
+        self.header = data["header"]
+        self.body = base64.b64decode(data["body"])
 
 class HttpRequest(HttpMessage):
     def __init__(self):
