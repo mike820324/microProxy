@@ -96,11 +96,12 @@ class HttpResponse(HttpMessage):
         if self.is_chunked_encoding():
             chunk_size = 1024
             chunks = [self.body[i:i+chunk_size] for i in range(0, len(self.body), chunk_size)]
-
-            yield b"{0}{1:x}\r\n{2}\r\n".format(self._assemble_header(), len(chunks[0]), chunks.pop(0))
-
-            for chunk in chunks:
-                yield b"{0:x}\r\n{1}\r\n".format(len(chunk), chunk)
+            if not chunks:
+                yield b"{0}".format(self._assemble_header())
+            else:
+                yield b"{0}{1:x}\r\n{2}\r\n".format(self._assemble_header(), len(chunks[0]), chunks.pop(0))
+                for chunk in chunks:
+                    yield b"{0:x}\r\n{1}\r\n".format(len(chunk), chunk)
 
             yield b"0\r\n\r\n"
 
