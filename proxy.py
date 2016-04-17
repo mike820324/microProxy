@@ -2,6 +2,7 @@ import struct
 import socket
 import json
 import datetime, time
+import ConfigParser
 
 import zmq
 from zmq.eventloop import ioloop, zmqstream
@@ -43,10 +44,15 @@ class HttpLayer(object):
         self.target_dest_stream.read_until_close(streaming_callback=self.on_response_in)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
 
+        parser = ConfigParser.SafeConfigParser()
+        parser.read("application.cfg")
+        host = parser.get("ConnectionController", "zmq.host")
+        port = parser.get("ConnectionController", "zmq.port")
+
         context = zmq.Context()
         zmq_socket = context.socket(zmq.REQ)
         # fixme: use unix domain socket instead of tcp
-        zmq_socket.connect("tcp://localhost:5581")
+        zmq_socket.connect("tcp://{0}:{1}".format(host, port))
         self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
         self.zmq_stream.on_recv(self.on_zmq_recv)
 
@@ -234,11 +240,12 @@ class ProxyServer(tornado.tcpserver.TCPServer):
     def handle_stream(self, stream, port):
         SocksLayer(stream)
 
-def main():
+def start_proxy_server(host, port):
     server = ProxyServer()
 
     # fixme: use options
-    server.listen(5580, "127.0.0.1")
+    server.listen(port, host) 
+    logger.info("proxy server is listening at {0}:{1}".format(host, port))
 
     try:
         ioloop.IOLoop.instance().start()
