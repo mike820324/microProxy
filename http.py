@@ -12,8 +12,8 @@ class HttpMessage(object):
         self.url = ""
         self.path = ""
         self.query_string = ""
-        self.header = None
-        self.body = None
+        self.header = []
+        self.body = b""
     
     def data(self):
         raise NotImplementedError
@@ -48,10 +48,9 @@ class HttpMessage(object):
         data["query_string"] = self.query_string
         data["header"] = self.header
         data["body"] = base64.b64encode(self.body)
-        return json.dumps(data, ensure_ascii=False)
+        return data
 
-    def deserialize(self, json_data):
-        data = json.loads(json_data)
+    def deserialize(self, data):
         self.version = data["version"]
         self.status = data["status"]
         self.method = data["method"]

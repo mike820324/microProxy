@@ -1,5 +1,6 @@
 import struct
 import socket
+import json
 import datetime, time
 
 import zmq
@@ -57,17 +58,18 @@ class HttpLayer(object):
         # fixme: need better error handling
         pass
 
-    def on_zmq_recv(self, data):
+    def on_zmq_recv(self, str_data):
+        data = json.loads(str_data[0])
         if self.state == self.REQUEST_IN:
-            logger.info("request out")
-            self.http_request.deserialize(data[0])
+            logger.debug("request out")
+            self.http_request.deserialize(data["req_data"])
             self.target_dest_stream.write(self.http_request.data)
             self.http_request.clear()
             self.state = self.REQUEST_OUT
 
         elif self.state == self.RESPONSE_IN:
-            logger.info("response out")
-            self.http_response.deserialize(data[0])
+            logger.debug("response out")
+            self.http_response.deserialize(data["resp_data"])
             for chunk in self.http_response.data:
                 try:
                     self.target_src_stream.write(chunk)
@@ -77,22 +79,30 @@ class HttpLayer(object):
             self.state = self.RESPONSE_OUT
 
     def on_request_in(self, data):
-        logger.info("request in")
+        logger.debug("request in")
         self.state = self.REQUEST_IN
         self.http_request.parse(data)
         if self.http_request.is_done and not self.target_dest_stream.closed():
-            logger.info("request in complete")
-            __data = self.http_request.serialize()
-            self.zmq_stream.send(__data)
+            logger.debug("request in complete")
+            __data = {
+                "type": "request",
+                "req_data": self.http_request.serialize(),
+                "resp_data": self.http_response.serialize()
+            }
+            self.zmq_stream.send_json(__data)
 
     def on_response_in(self, data):
-        logger.info("response in")
+        logger.debug("response in")
         self.state = self.RESPONSE_IN
         self.http_response.parse(data)
         if self.http_response.is_done and not self.target_src_stream.closed():
-            logger.info("request out complete")
-            __data = self.http_response.serialize()
-            self.zmq_stream.send(__data)
+            logger.debug("request out complete")
+            __data = {
+                "type": "response",
+                "req_data": self.http_request.serialize(),
+                "resp_data": self.http_response.serialize()
+            }
+            self.zmq_stream.send_json(__data)
 
 class TLSLayer(object):
     '''
