@@ -1,7 +1,11 @@
 import struct
 import socket
 import datetime, time
-import tornado.ioloop
+
+import zmq
+from zmq.eventloop import ioloop, zmqstream
+ioloop.install()
+
 import tornado.tcpserver
 import tornado.iostream
 
@@ -12,24 +16,38 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 class HttpLayer(object):
+    CONNECT = 0
+    REQUEST_IN = 1
+    REQUEST_OUT = 2
+    RESPONSE_IN = 3
+    RESPONSE_OUT = 4
+
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
     def __init__(self, target_src_stream, target_dest_stream):
         super(HttpLayer, self).__init__()
+        self.state = self.CONNECT
         self.http_request = HttpRequest()
         self.http_response = HttpResponse()
 
         self.is_src_close = False
         self.target_src_stream = target_src_stream
-        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+        self.target_src_stream.read_until_close(streaming_callback=self.on_request_in)
         self.target_src_stream.set_close_callback(self.on_src_close)
 
         self.is_dest_close = False
         self.dest_ip = target_dest_stream.socket.getpeername()[0]
         self.target_dest_stream = target_dest_stream
-        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.target_dest_stream.read_until_close(streaming_callback=self.on_response_in)
         self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+        context = zmq.Context()
+        zmq_socket = context.socket(zmq.REQ)
+        # fixme: use unix domain socket instead of tcp
+        zmq_socket.connect("tcp://localhost:5581")
+        self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
+        self.zmq_stream.on_recv(self.on_zmq_recv)
 
     def on_src_close(self):
         # fixme: need better error handling
@@ -39,27 +57,42 @@ class HttpLayer(object):
         # fixme: need better error handling
         pass
 
-    def on_request(self, data):
-        self.http_request.parse(data)
-        if self.http_request.is_done and not self.target_dest_stream.closed():
-            __data = self.http_request.serialize()
-            self.http_request.deserialize(__data)
+    def on_zmq_recv(self, data):
+        if self.state == self.REQUEST_IN:
+            logger.info("request out")
+            self.http_request.deserialize(data[0])
             self.target_dest_stream.write(self.http_request.data)
             self.http_request.clear()
+            self.state = self.REQUEST_OUT
 
-    def on_response(self, data):
-        self.http_response.parse(data)
-        if self.http_response.is_done and not self.target_src_stream.closed():
-            current_time = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-            # wait for zmq reply
+        elif self.state == self.RESPONSE_IN:
+            logger.info("response out")
+            self.http_response.deserialize(data[0])
             for chunk in self.http_response.data:
                 try:
                     self.target_src_stream.write(chunk)
                 except tornado.iostream.StreamClosedError(real_error):
                     self.on_src_close()
-            logger.info("{0} : {1} {2} {3} {4}".format(current_time, self.dest_ip, self.http_response.status, self.http_request.method, self.http_request.url))
             self.http_response.clear()
-            logger.info(self.http_response.serialize())
+            self.state = self.RESPONSE_OUT
+
+    def on_request_in(self, data):
+        logger.info("request in")
+        self.state = self.REQUEST_IN
+        self.http_request.parse(data)
+        if self.http_request.is_done and not self.target_dest_stream.closed():
+            logger.info("request in complete")
+            __data = self.http_request.serialize()
+            self.zmq_stream.send(__data)
+
+    def on_response_in(self, data):
+        logger.info("response in")
+        self.state = self.RESPONSE_IN
+        self.http_response.parse(data)
+        if self.http_response.is_done and not self.target_src_stream.closed():
+            logger.info("request out complete")
+            __data = self.http_response.serialize()
+            self.zmq_stream.send(__data)
 
 class TLSLayer(object):
     '''
@@ -198,7 +231,7 @@ def main():
     server.listen(5580, "127.0.0.1")
 
     try:
-        tornado.ioloop.IOLoop.instance().start()
+        ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
         logger.info("bye")
 
