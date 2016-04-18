@@ -57,12 +57,14 @@ class HttpLayer(object):
         self.zmq_stream.on_recv(self.on_zmq_recv)
 
     def on_src_close(self):
-        # fixme: need better error handling
-        pass
+        # fixme: better handling
+        if not self.target_dest_stream.closed():
+            self.target_dest_stream.close()
 
     def on_dest_close(self):
-        # fixme: need better error handling
-        pass
+        # fixme: better handling
+        if not self.target_src_stream.closed():
+            self.target_src_stream.close()
 
     def on_zmq_recv(self, str_data):
         data = json.loads(str_data[0])
@@ -243,7 +245,6 @@ class ProxyServer(tornado.tcpserver.TCPServer):
 def start_proxy_server(host, port):
     server = ProxyServer()
 
-    # fixme: use options
     server.listen(port, host) 
     logger.info("proxy server is listening at {0}:{1}".format(host, port))
 
