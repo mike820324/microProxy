@@ -1,4 +1,4 @@
-import json, base64
+import json
 from http_parser.parser import HttpParser
 from status_codes import RESPONSES
 
@@ -47,7 +47,7 @@ class HttpMessage(object):
         data["path"] = self.path
         data["query_string"] = self.query_string
         data["header"] = self.header
-        data["body"] = base64.b64encode(self.body)
+        data["body"] = self.body.encode("base64")
         return data
 
     def deserialize(self, data):
@@ -58,7 +58,7 @@ class HttpMessage(object):
         self.path = data["path"]
         self.query_string = data["query_string"]
         self.header = data["header"]
-        self.body = base64.b64decode(data["body"])
+        self.body = data["body"].decode("base64")
 
 class HttpRequest(HttpMessage):
     def __init__(self):
@@ -109,10 +109,6 @@ class HttpResponse(HttpMessage):
 
     def _assemble_data(self):
         raise NotImplementedError
-
-    @property
-    def status_str(self):
-        return "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
 
     @property
     def data(self):
