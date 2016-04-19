@@ -17,7 +17,35 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-class HttpLayer(object):
+class AbstractServer(object):
+    def __init__(self, target_src_stream, dest_stream):
+        super(AbstractServer, self).__init__()
+        self.target_src_stream = target_src_stream
+        self.target_dest_stream = dest_stream
+
+    def start_server(self):
+        logger.info("{0} socket is ready for process the request".format(__name__))
+        self.is_src_close = False
+        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
+        self.target_src_stream.set_close_callback(self.on_src_close)
+
+        self.is_dest_close = False
+        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.target_dest_stream.set_close_callback(self.on_dest_close)
+
+    def on_src_close(self):
+        raise NotImplementedError
+
+    def on_dest_close(self):
+        raise NotImplementedError
+
+    def on_request(self, data):
+        raise NotImplementedError
+
+    def on_response(self, data):
+        raise NotImplementedError
+
+class HttpLayer(AbstractServer):
     CONNECT = 0
     REQUEST_IN = 1
     REQUEST_OUT = 2
@@ -27,34 +55,12 @@ class HttpLayer(object):
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
-    def __init__(self, target_src_stream, target_dest_stream):
-        super(HttpLayer, self).__init__()
+    def __init__(self, target_src_stream, dest_stream):
+        super(HttpLayer, self).__init__(target_src_stream, dest_stream)
         self.state = self.CONNECT
         self.http_request = HttpRequest()
         self.http_response = HttpResponse()
-
-        self.is_src_close = False
-        self.target_src_stream = target_src_stream
-        self.target_src_stream.read_until_close(streaming_callback=self.on_request_in)
-        self.target_src_stream.set_close_callback(self.on_src_close)
-
-        self.is_dest_close = False
-        self.dest_ip = target_dest_stream.socket.getpeername()[0]
-        self.target_dest_stream = target_dest_stream
-        self.target_dest_stream.read_until_close(streaming_callback=self.on_response_in)
-        self.target_dest_stream.set_close_callback(self.on_dest_close)
-
-        parser = ConfigParser.SafeConfigParser()
-        parser.read("application.cfg")
-        host = parser.get("ConnectionController", "zmq.host")
-        port = parser.get("ConnectionController", "zmq.port")
-
-        context = zmq.Context()
-        zmq_socket = context.socket(zmq.REQ)
-        # fixme: use unix domain socket instead of tcp
-        zmq_socket.connect("tcp://{0}:{1}".format(host, port))
-        self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
-        self.zmq_stream.on_recv(self.on_zmq_recv)
+        self.zmq_stream = self.create_zmq_stream()
 
     def on_src_close(self):
         # fixme: better handling
@@ -65,6 +71,20 @@ class HttpLayer(object):
         # fixme: better handling
         if not self.target_src_stream.closed():
             self.target_src_stream.close()
+
+    def create_zmq_stream(self):
+        parser = ConfigParser.SafeConfigParser()
+        parser.read("application.cfg")
+        host = parser.get("ConnectionController", "zmq.host")
+        port = parser.get("ConnectionController", "zmq.port")
+
+        zmq_context = zmq.Context()
+        zmq_socket = zmq_context.socket(zmq.REQ)
+        # fixme: use unix domain socket instead of tcp
+        zmq_socket.connect("tcp://{0}:{1}".format(host, port))
+        zmq_stream = zmqstream.ZMQStream(zmq_socket)
+        zmq_stream.on_recv(self.on_zmq_recv)
+        return zmq_stream
 
     def on_zmq_recv(self, str_data):
         data = json.loads(str_data[0])
@@ -81,12 +101,12 @@ class HttpLayer(object):
             for chunk in self.http_response.data:
                 try:
                     self.target_src_stream.write(chunk)
-                except tornado.iostream.StreamClosedError(real_error):
+                except tornado.iostream.StreamClosedError:
                     self.on_src_close()
             self.http_response.clear()
             self.state = self.RESPONSE_OUT
 
-    def on_request_in(self, data):
+    def on_request(self, data):
         logger.debug("request in")
         self.state = self.REQUEST_IN
         self.http_request.parse(data)
@@ -99,7 +119,7 @@ class HttpLayer(object):
             }
             self.zmq_stream.send_json(__data)
 
-    def on_response_in(self, data):
+    def on_response(self, data):
         logger.debug("response in")
         self.state = self.RESPONSE_IN
         self.http_response.parse(data)
@@ -112,24 +132,13 @@ class HttpLayer(object):
             }
             self.zmq_stream.send_json(__data)
 
-class TLSLayer(object):
+class TLSLayer(AbstractServer):
     '''
     TLSLayer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, target_src_stream, target_dest_stream):
-        super(TLSLayer, self).__init__()
+    def __init__(self, target_src_stream, dest_stream):
+        super(TLSLayer, self).__init__(target_src_stream, dest_stream)
         self.is_tls = None
-
-        self.is_src_close = False
-        self.target_src_stream = target_src_stream
-        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
-        self.target_src_stream.set_close_callback(self.on_src_close)
-
-        self.is_dest_close = False
-        self.dest_ip = target_dest_stream.socket.getpeername()[0] 
-        self.target_dest_stream = target_dest_stream
-        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
-        self.target_dest_stream.set_close_callback(self.on_dest_close)
 
     def is_tls_protocol(self, data):
         return (
@@ -152,23 +161,12 @@ class TLSLayer(object):
         if not self.is_src_close:
             self.target_src_stream.write(data)
 
-class DirectServer(object):
+class DirectServer(AbstractServer):
     '''
     DirectServer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, target_src_stream, target_dest_stream):
-        super(DirectServer, self).__init__()
-
-        self.is_src_close = False
-        self.target_src_stream = target_src_stream
-        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
-        self.target_src_stream.set_close_callback(self.on_src_close)
-
-        self.is_dest_close = False
-        self.dest_ip = target_dest_stream.socket.getpeername()[0]
-        self.target_dest_stream = target_dest_stream
-        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
-        self.target_dest_stream.set_close_callback(self.on_dest_close)
+    def __init__(self, target_src_stream, dest_stream):
+        super(DirectServer, self).__init__(target_src_stream, dest_stream)
 
     def on_src_close(self):
         self.is_src_close = True
@@ -185,13 +183,24 @@ class DirectServer(object):
             self.target_src_stream.write(data)
 
 class SocksLayer(object):
+    STATE_INIT = "init"
+    STATE_GREETED = "greeted"
+    STATE_REQ = "request"
+    STATE_READY = "ready"
+    STATE_CLOSE = "close"
+
     def __init__(self, stream):
         super(SocksLayer, self).__init__()
-        self.request_data = None
         self.src_stream = stream
-        self.src_stream.read_bytes(3, self.on_socks_greeting)
-        self.dest_stream = None
-    
+        self.state = self.STATE_INIT
+
+    def read(self):
+        if self.state == self.STATE_INIT:
+            self.src_stream.read_bytes(3, self.on_socks_greeting)
+
+        elif self.state == self.STATE_GREETED:
+            self.src_stream.read_bytes(10, self.on_socks_request)
+
     def on_socks_greeting(self, data):
         logger.info("socks greeting to {0}".format(self.src_stream.socket.getpeername()[0]))
         socks_init_data = struct.unpack('BBB', data)
@@ -205,53 +214,56 @@ class SocksLayer(object):
         else: 
             response = struct.pack('BB', 5, 0)
             self.src_stream.write(response)
-            self.src_stream.read_bytes(10, self.on_socks_request)
+            self.state = self.STATE_GREETED
+            self.read()
 
     def on_socks_request(self, data):
-        self.request_data = struct.unpack('!BBxBIH', data)
-        socks_version = self.request_data[0]
-        socks_cmd = self.request_data[1]
-        socks_atyp = self.request_data[2]
-        socks_dest_addr = socket.inet_ntoa(struct.pack('!I', self.request_data[3]))
-        socks_dest_port = self.request_data[4]
+        request_data = struct.unpack('!BBxBIH', data)
+        socks_version = request_data[0]
+        socks_cmd = request_data[1]
+        socks_atyp = request_data[2]
+        socks_dest_addr = socket.inet_ntoa(struct.pack('!I', request_data[3]))
+        socks_dest_port = request_data[4]
         logger.info("socks request to {0}:{1}".format(socks_dest_addr, socks_dest_port))
 
+
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.dest_stream = tornado.iostream.IOStream(s)
-        self.dest_stream.connect((socks_dest_addr, socks_dest_port), self.on_dest_connect)
+        dest_stream = tornado.iostream.IOStream(s)
 
-    def on_dest_connect(self):
-        socks_dest_port = self.request_data[4]
-        response = struct.pack('!BBxBIH', 5, 0, 1, self.request_data[-2], self.request_data[-1])
-        self.src_stream.write(response)
+        def on_socks_ready():
+            response = struct.pack('!BBxBIH', 5, 0, 1, request_data[-2], request_data[-1])
+            self.src_stream.write(response)
+            self.create_http_server(dest_stream, socks_dest_port).start_server()
 
-        # fixme: Determine in runtime.
-        if socks_dest_port == 5000 or socks_dest_port == 80:
-            HttpLayer(self.src_stream, self.dest_stream)
+        dest_stream.connect((socks_dest_addr, socks_dest_port), on_socks_ready)
 
-        elif socks_dest_port == 5001 or socks_dest_port == 443:
-            TLSLayer(self.src_stream, self.dest_stream)
-
+    def create_http_server(self, dest_stream, dest_port):
+        if dest_port == 5000 or dest_port == 80:
+            return HttpLayer(self.src_stream, dest_stream)
+        elif dest_port == 5001 or dest_port == 443:
+            return TLSLayer(self.src_stream, dest_stream)
         else:
-            DirectServer(self.src_stream, socks_dest_stream)
+            return DirectServer(self.src_stream, dest_stream)
 
 class ProxyServer(tornado.tcpserver.TCPServer):
-    def __init__(self):
+    def __init__(self, host, port):
         super(ProxyServer, self).__init__()
+        self.host = host
+        self.port = port
 
     def handle_stream(self, stream, port):
-        SocksLayer(stream)
+        socks_layer = SocksLayer(stream)
+        socks_layer.read()
+
+    def start_listener(self):
+        self.listen(self.port, self.host)
+        logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
 
 def start_proxy_server(host, port):
-    server = ProxyServer()
-
-    server.listen(port, host) 
-    logger.info("proxy server is listening at {0}:{1}".format(host, port))
+    server = ProxyServer(host, port)
+    server.start_listener()
 
     try:
         ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
         logger.info("bye")
-
-if __name__ == "__main__":
-    main()
