@@ -1,6 +1,6 @@
 import json
 from http_parser.parser import HttpParser
-from status_codes import RESPONSES
+from http_parser.util import status_reasons
 
 import logging
 logger = logging.getLogger("HttpParser")
@@ -33,7 +33,7 @@ class HttpMessage(object):
 
         if self.parser.is_message_complete():
             self.version = "{0}.{1}".format(self.parser.get_version()[0], self.parser.get_version()[1])
-            self.status = self.parser.get_status_code()
+            self.status = int(self.parser.get_status_code())
             self.method = self.parser.get_method()
             self.url = self.parser.get_url()
             self.path = self.parser.get_path()
@@ -98,7 +98,7 @@ class HttpResponse(HttpMessage):
             return False
 
     def _assemble_header(self):
-        http_header_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
+        http_header_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, status_reasons[self.status])
 
         http_header_fields = []
         for header_key in self.header:
