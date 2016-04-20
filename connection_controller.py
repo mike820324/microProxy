@@ -22,9 +22,8 @@ def start_server():
     while True:
         data = socket.recv()
         message = json.loads(data)
-        if message["type"] == "response":
-            status = message["resp_data"]["status"]
-            method = message["req_data"]["method"]
-            url = message["req_data"]["url"]
-            logger.info("{0} {1} {2}".format(status, method, url))
+        status = message["response"]["status"]
+        method = message["request"]["method"]
+        url = message["request"]["url"]
+        logger.info("{0} {1} {2}".format(status, method, url))
         socket.send_json(message)
