@@ -1,6 +1,6 @@
 import json
 from http_parser.parser import HttpParser
-from status_codes import RESPONSES
+from http_parser.util import status_reasons
 
 class HttpMessage(object):
     def __init__(self,
@@ -39,7 +39,7 @@ class HttpMessageBuilder(object):
             raise IOError
         version = "{0}.{1}".format(self.http_parser.get_version()[0],
                 self.http_parser.get_version()[1])
-        status = self.http_parser.get_status_code()
+        status = int(self.http_parser.get_status_code())
         method = self.http_parser.get_method()
         url = self.http_parser.get_url()
         path = self.http_parser.get_path()
@@ -105,9 +105,17 @@ def is_chunked_encoding(http_message):
         return False
 
 def _assemble_res_header(http_message):
-    http_header_query_str = "HTTP/{0} {1} {2}".format(http_message.version, http_message.status, RESPONSES[http_message.status])
+    http_header_query_str = "HTTP/{0} {1} {2}".format(http_message.version, http_message.status, status_reasons[http_message.status])
 
-    http_header_fields = [ "{0}: {1}".format(key, http_message.header[key]) for key in http_message.header ]
+    http_header_fields = []
+    for header_key in http_message.header:
+        try:
+            header_value = bytes(http_message.header[header_key])
+        except UnicodeEncodeError:
+            header_value = bytes(http_message.header[header_key].encode("utf8"))
+            logger.info("Unicode Encode Error in : {0}".format(header_key))
+        finally:
+            http_header_fields.append(b"{0}: {1}".format(header_key, header_value))
 
     http_header_list = [http_header_query_str]
     http_header_list.extend(http_header_fields)
