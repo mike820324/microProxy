@@ -2,6 +2,9 @@ import json
 from http_parser.parser import HttpParser
 from status_codes import RESPONSES
 
+import logging
+logger = logging.getLogger("HttpParser")
+
 class HttpMessage(object):
     def __init__(self):
         super(HttpMessage, self).__init__()
@@ -97,7 +100,15 @@ class HttpResponse(HttpMessage):
     def _assemble_header(self):
         http_header_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, RESPONSES[self.status])
 
-        http_header_fields = [ "{0}: {1}".format(key, self.header[key]) for key in self.header ]
+        http_header_fields = []
+        for header_key in self.header:
+            try:
+                header_value = bytes(self.header[header_key])
+            except UnicodeEncodeError:
+                header_value = bytes(self.header[header_key].encode("utf8"))
+                logger.info("Unicode Encode Error in : {0}".format(header_key))
+            finally:
+                http_header_fields.append(b"{0}: {1}".format(header_key, header_value))
 
         http_header_list = [http_header_query_str]
         http_header_list.extend(http_header_fields)
