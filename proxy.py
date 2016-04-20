@@ -2,7 +2,6 @@ import struct
 import socket
 import json
 import datetime, time
-import ConfigParser
 import http
 
 import zmq
@@ -17,6 +16,12 @@ from http import HttpMessage, HttpMessageBuilder
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+import ConfigParser
+parser = ConfigParser.SafeConfigParser()
+parser.read("application.cfg")
+host = parser.get("ConnectionController", "zmq.host")
+port = parser.get("ConnectionController", "zmq.port")
 
 class AbstractServer(object):
     def __init__(self, target_src_stream, dest_stream):
@@ -75,11 +80,6 @@ class HttpLayer(AbstractServer):
             self.target_src_stream.close()
 
     def create_zmq_stream(self):
-        parser = ConfigParser.SafeConfigParser()
-        parser.read("application.cfg")
-        host = parser.get("ConnectionController", "zmq.host")
-        port = parser.get("ConnectionController", "zmq.port")
-
         zmq_context = zmq.Context()
         zmq_socket = zmq_context.socket(zmq.REQ)
         # fixme: use unix domain socket instead of tcp
