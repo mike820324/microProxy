@@ -10,6 +10,8 @@ ioloop.install()
 
 import tornado.tcpserver
 import tornado.iostream
+import tornado.netutil
+import tornado.gen
 
 from http import HttpMessage, HttpMessageBuilder
 
@@ -182,25 +184,46 @@ class DirectServer(AbstractServer):
             self.target_src_stream.write(data)
 
 class SocksLayer(object):
-    STATE_INIT = "init"
-    STATE_GREETED = "greeted"
-    STATE_REQ = "request"
-    STATE_READY = "ready"
-    STATE_CLOSE = "close"
+    SOCKS_VERSION = 0x05
+
+    SOCKS_REQ_COMMAND = {
+            "CONNECT": 0x1,
+            "BIND": 0x02,
+            "UDP_ASSOCIATE": 0x03
+    }
+
+    SOCKS_RESP_STATUS = {
+            "SUCCESS": 0x0,
+            "GENRAL_FAILURE": 0x01,
+            "CONNECTION_NOT_ALLOWED": 0x02,
+            "NETWORK_UNREACHABLE": 0x03,
+            "HOST_UNREACHABLE": 0x04,
+            "CONNECTION_REFUSED": 0x05,
+            "TTL_EXPIRED": 0x06,
+            "COMMAND_NOT_SUPPORTED": 0x07,
+            "ADDRESS_TYPE_NOT_SUPPORTED": 0x08,
+    }
+
+    SOCKS_ADDR_TYPE = {
+            "IPV4" : 0x01,
+            "DOMAINNAME" : 0x03,
+            "IPV6" :0x04
+    }
 
     def __init__(self, stream):
         super(SocksLayer, self).__init__()
         self.src_stream = stream
-        self.state = self.STATE_INIT
 
+    @tornado.gen.coroutine
     def read(self):
-        if self.state == self.STATE_INIT:
-            self.src_stream.read_bytes(3, self.on_socks_greeting)
+        data = yield self.src_stream.read_bytes(3)
+        self.socks_greeting(data)
 
-        elif self.state == self.STATE_GREETED:
-            self.src_stream.read_bytes(10, self.on_socks_request)
+        data = yield self.src_stream.read_bytes(4)
+        self.socks_request(data)
 
-    def on_socks_greeting(self, data):
+    @tornado.gen.coroutine
+    def socks_greeting(self, data):
         logger.info("socks greeting to {0}".format(self.src_stream.socket.getpeername()[0]))
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
@@ -211,30 +234,58 @@ class SocksLayer(object):
             logger.warning("SOCKS5 Auth not supported")
             self.src_stream.close()
         else: 
-            response = struct.pack('BB', 5, 0)
-            self.src_stream.write(response)
-            self.state = self.STATE_GREETED
-            self.read()
+            response = struct.pack('BB', self.SOCKS_VERSION, 0)
+            yield self.src_stream.write(response)
 
-    def on_socks_request(self, data):
-        request_data = struct.unpack('!BBxBIH', data)
-        socks_version = request_data[0]
-        socks_cmd = request_data[1]
-        socks_atyp = request_data[2]
-        socks_dest_addr = socket.inet_ntoa(struct.pack('!I', request_data[3]))
-        socks_dest_port = request_data[4]
-        logger.info("socks request to {0}:{1}".format(socks_dest_addr, socks_dest_port))
+    @tornado.gen.coroutine
+    def socks_request(self, data):
+        request_header_data = struct.unpack('!BBxB', data)
+        socks_version = request_header_data[0]
+        socks_cmd = request_header_data[1]
+        socks_atyp = request_header_data[2]
 
+        if socks_cmd != self.SOCKS_REQ_COMMAND["CONNECT"]:
+            # fixme: response with error
+            self.src_stream.close()
 
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        dest_stream = tornado.iostream.IOStream(s)
+        if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
+            data = yield self.src_stream.read_bytes(6)
+            request_info = struct.unpack("!IH", data)
+            socks_dest_addr = socket.inet_ntoa(struct.pack('!I', request_info[0]))
+            socks_dest_port = request_info[1]
+            logger.info("socks request to {0}:{1}".format(socks_dest_addr, socks_dest_port))
 
-        def on_socks_ready():
-            response = struct.pack('!BBxBIH', 5, 0, 1, request_data[-2], request_data[-1])
-            self.src_stream.write(response)
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            dest_stream = tornado.iostream.IOStream(s)
+            yield dest_stream.connect((socks_dest_addr, socks_dest_port))
+
+            response = struct.pack('!BBxBIH',
+                    self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["IPV4"],
+                    request_info[0], request_info[1])
+
+            yield self.src_stream.write(response)
             self.create_http_server(dest_stream, socks_dest_port).start_server()
 
-        dest_stream.connect((socks_dest_addr, socks_dest_port), on_socks_ready)
+        elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
+            data = yield self.src_stream.read_bytes(1)
+            host_length = struct.unpack("!B", data)[0]
+
+            data = yield self.src_stream.read_bytes(host_length + 2)
+            request_info_dns = struct.unpack("!{0}sH".format(host_length), data)
+            request_info_ip = yield tornado.netutil.BlockingResolver().resolve(*request_info_dns)
+
+            ipv4_addr_info = [ addr_info for addr_type, addr_info in request_info_ip if addr_type == socket.AF_INET ]
+
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+            dest_stream = tornado.iostream.IOStream(s)
+            yield dest_stream.connect(ipvr_addr_info[0])
+
+            response = struct.pack("!BBxBB{0}sH".format(host_length),
+                    self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["DOMAINNAME"],
+                    host_length, request_info_dns[0], request_info_dns[1])
+
+            yield self.src_stream.write(response)
+            self.create_http_server(dest_stream, socks_dest_port).start_server()
 
     def create_http_server(self, dest_stream, dest_port):
         if dest_port == 5000 or dest_port == 80:
