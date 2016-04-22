@@ -2,138 +2,138 @@ import json
 from http_parser.parser import HttpParser
 from http_parser.util import status_reasons
 
-import logging
-logger = logging.getLogger("HttpParser")
-
 class HttpMessage(object):
-    def __init__(self):
+    def __init__(self,
+            version = "",
+            status = "",
+            method = "",
+            url = "",
+            path = "",
+            query_string = "",
+            header = [],
+            body = b""):
         super(HttpMessage, self).__init__()
-        self.parser = HttpParser()
-        self.version = ""
-        self.status = ""
-        self.method = ""
-        self.url = ""
-        self.path = ""
-        self.query_string = ""
-        self.header = []
-        self.body = b""
-    
-    def data(self):
-        raise NotImplementedError
+        self.version = version 
+        self.status = status
+        self.method = method
+        self.url = url
+        self.path = path
+        self.query_string = query_string
+        self.header = header
+        self.body = body
+
+class HttpMessageBuilder(object):
+    def __init__(self):
+        super(HttpMessageBuilder, self).__init__()
+        self.http_parser = HttpParser()
+
+    def parse(self, data):
+        self.http_parser.execute(data, len(data))
 
     @property
     def is_done(self):
-        return self.parser.is_message_complete()
+        return self.http_parser.is_message_complete()
 
-    def clear(self):
-        self.parser = HttpParser()
+    def build(self):
+        if not self.is_done:
+            raise IOError
+        version = "{0}.{1}".format(self.http_parser.get_version()[0],
+                self.http_parser.get_version()[1])
+        status = int(self.http_parser.get_status_code())
+        method = self.http_parser.get_method()
+        url = self.http_parser.get_url()
+        path = self.http_parser.get_path()
+        query_string = self.http_parser.get_query_string()
+        header = self.http_parser.get_headers()
+        body = self.http_parser.recv_body()
+        return HttpMessage(version = version,
+                status = status,
+                method = method,
+                url = url,
+                path = path,
+                query_string = query_string,
+                header = header,
+                body = body)
 
-    def parse(self, data):
-        self.parser.execute(data, len(data))
+def serialize(http_message):
+    data = {}
+    data["version"] = http_message.version
+    data["status"] = http_message.status
+    data["method"] = http_message.method
+    data["url"] = http_message.url
+    data["path"] = http_message.path
+    data["query_string"] = http_message.query_string
+    data["header"] = http_message.header
+    data["body"] = http_message.body.encode("base64")
+    return data
 
-        if self.parser.is_message_complete():
-            self.version = "{0}.{1}".format(self.parser.get_version()[0], self.parser.get_version()[1])
-            self.status = int(self.parser.get_status_code())
-            self.method = self.parser.get_method()
-            self.url = self.parser.get_url()
-            self.path = self.parser.get_path()
-            self.query_string = self.parser.get_query_string()
-            self.header = self.parser.get_headers()
-            self.body = self.parser.recv_body()
+def deserialize(data):
+    version = data["version"]
+    status = data["status"]
+    method = data["method"]
+    url = data["url"]
+    path = data["path"]
+    query_string = data["query_string"]
+    header = data["header"]
+    body = data["body"].decode("base64")
+    return HttpMessage(version = version,
+            status = status,
+            method = method,
+            url = url,
+            path = path,
+            query_string = query_string,
+            header = header,
+            body = body)
 
-    def serialize(self):
-        data = {}
-        data["version"] = self.version
-        data["status"] = self.status
-        data["method"] = self.method
-        data["url"] = self.url
-        data["path"] = self.path
-        data["query_string"] = self.query_string
-        data["header"] = self.header
-        data["body"] = self.body.encode("base64")
-        return data
+def _assemble_req_header(http_message):
+    http_header_query_str = "{0} {1} HTTP/{2}".format(http_message.method, http_message.url, http_message.version)
+    http_header_fields = [ "{0}: {1}".format(key, http_message.header[key]) for key in http_message.header ]
 
-    def deserialize(self, data):
-        self.version = data["version"]
-        self.status = data["status"]
-        self.method = data["method"]
-        self.url = data["url"]
-        self.path = data["path"]
-        self.query_string = data["query_string"]
-        self.header = data["header"]
-        self.body = data["body"].decode("base64")
+    http_header_list = [http_header_query_str]
+    http_header_list.extend(http_header_fields)
 
-class HttpRequest(HttpMessage):
-    def __init__(self):
-        super(HttpRequest, self).__init__()
-    
-    def _assemble_header(self):
-        http_header_query_str = "{0} {1} HTTP/{2}".format(self.method, self.url, self.version)
-        http_header_fields = [ "{0}: {1}".format(key, self.header[key]) for key in self.header ]
+    return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
 
-        http_header_list = [http_header_query_str]
-        http_header_list.extend(http_header_fields)
+def assemble_request(http_message):
+    final_data = b"{0}{1}".format(_assemble_req_header(http_message), http_message.body)
+    return final_data
 
-        return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
+def is_chunked_encoding(http_message):
+    try:
+        return "chunked" in http_message.header['Transfer-Encoding'].lower()
+    except KeyError:
+        return False
 
-    def _assemble_body(self):
-        raise NotImplementedError
+def _assemble_res_header(http_message):
+    http_header_query_str = "HTTP/{0} {1} {2}".format(http_message.version, http_message.status, status_reasons[http_message.status])
 
-    def _assemble_data(self):
-        raise NotImplementedError
-
-    @property
-    def data(self):
-        final_data = b"{0}{1}".format(self._assemble_header(), self.body)
-        return final_data
-
-class HttpResponse(HttpMessage):
-    def __init__(self):
-        super(HttpResponse, self).__init__()
-
-    def is_chunked_encoding(self):
+    http_header_fields = []
+    for header_key in http_message.header:
         try:
-            return "chunked" in self.header['Transfer-Encoding'].lower()
-        except KeyError:
-            return False
+            header_value = bytes(http_message.header[header_key])
+        except UnicodeEncodeError:
+            header_value = bytes(http_message.header[header_key].encode("utf8"))
+            logger.info("Unicode Encode Error in : {0}".format(header_key))
+        finally:
+            http_header_fields.append(b"{0}: {1}".format(header_key, header_value))
 
-    def _assemble_header(self):
-        http_header_query_str = "HTTP/{0} {1} {2}".format(self.version, self.status, status_reasons[self.status])
+    http_header_list = [http_header_query_str]
+    http_header_list.extend(http_header_fields)
 
-        http_header_fields = []
-        for header_key in self.header:
-            try:
-                header_value = bytes(self.header[header_key])
-            except UnicodeEncodeError:
-                header_value = bytes(self.header[header_key].encode("utf8"))
-                logger.info("Unicode Encode Error in : {0}".format(header_key))
-            finally:
-                http_header_fields.append(b"{0}: {1}".format(header_key, header_value))
+    return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
 
-        http_header_list = [http_header_query_str]
-        http_header_list.extend(http_header_fields)
-
-        return "{0}\r\n\r\n".format("\r\n".join(http_header_list))
-
-    def _assemble_body(self):
-        raise NotImplementedError
-
-    def _assemble_data(self):
-        raise NotImplementedError
-
-    @property
-    def data(self):
-        if self.is_chunked_encoding():
-            chunk_size = 1024
-            chunks = [self.body[i:i+chunk_size] for i in range(0, len(self.body), chunk_size)]
-            if not chunks:
-                yield b"{0}".format(self._assemble_header())
-            else:
-                yield b"{0}{1:x}\r\n{2}\r\n".format(self._assemble_header(), len(chunks[0]), chunks.pop(0))
-                for chunk in chunks:
-                    yield b"{0:x}\r\n{1}\r\n".format(len(chunk), chunk)
-
-            yield b"0\r\n\r\n"
-
+def assemble_responses(http_message):
+    if is_chunked_encoding(http_message):
+        chunk_size = 1024
+        chunks = [http_message.body[i:i+chunk_size] for i in range(0, len(http_message.body), chunk_size)]
+        if not chunks:
+            yield b"{0}".format(_assemble_res_header(http_message))
         else:
-            yield b"{0}{1}".format(self._assemble_header(), self.body)
+            yield b"{0}{1:x}\r\n{2}\r\n".format(_assemble_res_header(http_message), len(chunks[0]), chunks.pop(0))
+            for chunk in chunks:
+                yield b"{0:x}\r\n{1}\r\n".format(len(chunk), chunk)
+
+        yield b"0\r\n\r\n"
+
+    else:
+        yield b"{0}{1}".format(_assemble_res_header(http_message), http_message.body)

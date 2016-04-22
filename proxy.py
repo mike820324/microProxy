@@ -2,7 +2,7 @@ import struct
 import socket
 import json
 import datetime, time
-import ConfigParser
+import http
 
 import zmq
 from zmq.eventloop import ioloop, zmqstream
@@ -11,11 +11,17 @@ ioloop.install()
 import tornado.tcpserver
 import tornado.iostream
 
-from http import HttpRequest, HttpResponse
+from http import HttpMessage, HttpMessageBuilder
 
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+import ConfigParser
+parser = ConfigParser.SafeConfigParser()
+parser.read("application.cfg")
+host = parser.get("ConnectionController", "zmq.host")
+port = parser.get("ConnectionController", "zmq.port")
 
 class AbstractServer(object):
     def __init__(self, target_src_stream, dest_stream):
@@ -58,8 +64,9 @@ class HttpLayer(AbstractServer):
     def __init__(self, target_src_stream, dest_stream):
         super(HttpLayer, self).__init__(target_src_stream, dest_stream)
         self.state = self.CONNECT
-        self.http_request = HttpRequest()
-        self.http_response = HttpResponse()
+        self.request_builder = HttpMessageBuilder()
+        self.response_builder = HttpMessageBuilder()
+        self.current_result = {}
         self.zmq_stream = self.create_zmq_stream()
 
     def on_src_close(self):
@@ -73,11 +80,6 @@ class HttpLayer(AbstractServer):
             self.target_src_stream.close()
 
     def create_zmq_stream(self):
-        parser = ConfigParser.SafeConfigParser()
-        parser.read("application.cfg")
-        host = parser.get("ConnectionController", "zmq.host")
-        port = parser.get("ConnectionController", "zmq.port")
-
         zmq_context = zmq.Context()
         zmq_socket = zmq_context.socket(zmq.REQ)
         # fixme: use unix domain socket instead of tcp
@@ -87,50 +89,47 @@ class HttpLayer(AbstractServer):
         return zmq_stream
 
     def on_zmq_recv(self, str_data):
-        data = json.loads(str_data[0])
-        if self.state == self.REQUEST_IN:
-            logger.debug("request out")
-            self.http_request.deserialize(data["req_data"])
-            self.target_dest_stream.write(self.http_request.data)
-            self.http_request.clear()
-            self.state = self.REQUEST_OUT
+        logger.debug("zmq receive message")
 
-        elif self.state == self.RESPONSE_IN:
-            logger.debug("response out")
-            self.http_response.deserialize(data["resp_data"])
-            for chunk in self.http_response.data:
-                try:
-                    self.target_src_stream.write(chunk)
-                except tornado.iostream.StreamClosedError:
-                    self.on_src_close()
-            self.http_response.clear()
-            self.state = self.RESPONSE_OUT
+    def req_to_destination(self, request):
+        logger.debug("request out")
+        self.target_dest_stream.write(http.assemble_request(request))
+        self.request_builder = HttpMessageBuilder()
+        self.state = self.REQUEST_OUT
+
+    def res_to_source(self, response):
+        logger.debug("response out")
+        for chunk in http.assemble_responses(response):
+            try:
+                self.target_src_stream.write(chunk)
+            except tornado.iostream.StreamClosedError:
+                self.on_src_close()
+        self.response_builder = HttpMessageBuilder()
+        self.state = self.RESPONSE_OUT
 
     def on_request(self, data):
         logger.debug("request in")
         self.state = self.REQUEST_IN
-        self.http_request.parse(data)
-        if self.http_request.is_done and not self.target_dest_stream.closed():
+        self.request_builder.parse(data)
+        if self.request_builder.is_done and not self.target_dest_stream.closed():
             logger.debug("request in complete")
-            __data = {
-                "type": "request",
-                "req_data": self.http_request.serialize(),
-                "resp_data": self.http_response.serialize()
-            }
-            self.zmq_stream.send_json(__data)
+            http_message = self.request_builder.build()
+            self.current_result["request"] = http.serialize(http_message)
+            self.req_to_destination(http_message)
 
     def on_response(self, data):
         logger.debug("response in")
         self.state = self.RESPONSE_IN
-        self.http_response.parse(data)
-        if self.http_response.is_done and not self.target_src_stream.closed():
+        self.response_builder.parse(data)
+        if self.response_builder.is_done and not self.target_src_stream.closed():
             logger.debug("request out complete")
-            __data = {
-                "type": "response",
-                "req_data": self.http_request.serialize(),
-                "resp_data": self.http_response.serialize()
-            }
-            self.zmq_stream.send_json(__data)
+            http_message = self.response_builder.build()
+            self.current_result["response"] = http.serialize(http_message)
+            self.res_to_source(http_message)
+            self.record()
+
+    def record(self):
+        self.zmq_stream.send_json(self.current_result)
 
 class TLSLayer(AbstractServer):
     '''
