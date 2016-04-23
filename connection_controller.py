@@ -1,16 +1,15 @@
 import zmq
 import json
-import logging
 import ConfigParser
+import logging
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def start_server():
     parser = ConfigParser.SafeConfigParser()
     parser.read("application.cfg")
-
-    logging.basicConfig()
-    logger = logging.getLogger("FlowControl")
-    logger.setLevel(logging.INFO)
 
     context = zmq.Context()
     socket = context.socket(zmq.REP)
