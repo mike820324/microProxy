@@ -23,6 +23,7 @@ parser.read("application.cfg")
 host = parser.get("ConnectionController", "zmq.host")
 port = parser.get("ConnectionController", "zmq.port")
 
+
 class AbstractServer(object):
     def __init__(self, target_src_stream, dest_stream):
         super(AbstractServer, self).__init__()
@@ -50,6 +51,7 @@ class AbstractServer(object):
 
     def on_response(self, data):
         raise NotImplementedError
+
 
 class HttpLayer(AbstractServer):
     CONNECT = 0
@@ -131,6 +133,7 @@ class HttpLayer(AbstractServer):
     def record(self):
         self.zmq_stream.send_json(self.current_result)
 
+
 class TLSLayer(AbstractServer):
     '''
     TLSLayer: passing all the src data to destination. Will not intercept anything
@@ -160,6 +163,7 @@ class TLSLayer(AbstractServer):
         if not self.is_src_close:
             self.target_src_stream.write(data)
 
+
 class DirectServer(AbstractServer):
     '''
     DirectServer: passing all the src data to destination. Will not intercept anything
@@ -181,31 +185,32 @@ class DirectServer(AbstractServer):
         if not self.is_src_close:
             self.target_src_stream.write(data)
 
+
 class SocksLayer(object):
     SOCKS_VERSION = 0x05
 
     SOCKS_REQ_COMMAND = {
-            "CONNECT": 0x1,
-            "BIND": 0x02,
-            "UDP_ASSOCIATE": 0x03
+        "CONNECT": 0x1,
+        "BIND": 0x02,
+        "UDP_ASSOCIATE": 0x03
     }
 
     SOCKS_RESP_STATUS = {
-            "SUCCESS": 0x0,
-            "GENRAL_FAILURE": 0x01,
-            "CONNECTION_NOT_ALLOWED": 0x02,
-            "NETWORK_UNREACHABLE": 0x03,
-            "HOST_UNREACHABLE": 0x04,
-            "CONNECTION_REFUSED": 0x05,
-            "TTL_EXPIRED": 0x06,
-            "COMMAND_NOT_SUPPORTED": 0x07,
-            "ADDRESS_TYPE_NOT_SUPPORTED": 0x08,
+        "SUCCESS": 0x0,
+        "GENRAL_FAILURE": 0x01,
+        "CONNECTION_NOT_ALLOWED": 0x02,
+        "NETWORK_UNREACHABLE": 0x03,
+        "HOST_UNREACHABLE": 0x04,
+        "CONNECTION_REFUSED": 0x05,
+        "TTL_EXPIRED": 0x06,
+        "COMMAND_NOT_SUPPORTED": 0x07,
+        "ADDRESS_TYPE_NOT_SUPPORTED": 0x08,
     }
 
     SOCKS_ADDR_TYPE = {
-            "IPV4" : 0x01,
-            "DOMAINNAME" : 0x03,
-            "IPV6" :0x04
+        "IPV4": 0x01,
+        "DOMAINNAME": 0x03,
+        "IPV6": 0x04
     }
 
     def __init__(self, stream):
@@ -230,11 +235,11 @@ class SocksLayer(object):
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
         socks_methods = socks_init_data[2]
-    
-        if socks_nmethod != 1: 
+
+        if socks_nmethod != 1:
             logger.warning("SOCKS5 Auth not supported")
             self.src_stream.close()
-        else: 
+        else:
             response = struct.pack('BB', self.SOCKS_VERSION, 0)
             yield self.src_stream.write(response)
 
@@ -252,12 +257,15 @@ class SocksLayer(object):
         if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
             data = yield self.src_stream.read_bytes(6)
             request_info = struct.unpack("!IH", data)
-            dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])), request_info[1])
+            dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])),
+                              request_info[1])
             logger.info("socks request to {0}:{1}".format(*dest_addr_info))
 
             response = struct.pack('!BBxBIH',
-                    self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["IPV4"],
-                    *socks_dest_info)
+                                   self.SOCKS_VERSION,
+                                   self.SOCKS_RESP_STATUS["SUCCESS"],
+                                   self.SOCKS_ADDR_TYPE["IPV4"],
+                                   *socks_dest_info)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
             data = yield self.src_stream.read_bytes(1)
@@ -267,12 +275,18 @@ class SocksLayer(object):
             addr_info_dns = struct.unpack("!{0}sH".format(host_length), data)
             addr_info_ip = yield tornado.netutil.BlockingResolver().resolve(*addr_info_dns)
 
-            ipv4_addr_info = [ addr_info for addr_type, addr_info in addr_info_ip if addr_type == socket.AF_INET ]
+            ipv4_addr_info = [addr_info
+                              for addr_type, addr_info in addr_info_ip
+                              if addr_type == socket.AF_INET]
+
             dest_addr_info = ipv4_addr_info[0]
 
             response = struct.pack("!BBxBB{0}sH".format(host_length),
-                    self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["DOMAINNAME"],
-                    host_length, *addr_info_dns)
+                                   self.SOCKS_VERSION,
+                                   self.SOCKS_RESP_STATUS["SUCCESS"],
+                                   self.SOCKS_ADDR_TYPE["DOMAINNAME"],
+                                   host_length,
+                                   *addr_info_dns)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
             # fixme: response with error
@@ -280,6 +294,7 @@ class SocksLayer(object):
 
         yield self.dest_stream.connect(dest_addr_info)
         yield self.src_stream.write(response)
+
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self, host, port):
@@ -305,6 +320,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
     def start_listener(self):
         self.listen(self.port, self.host)
         logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
+
 
 def start_proxy_server(host, port):
     server = ProxyServer(host, port)

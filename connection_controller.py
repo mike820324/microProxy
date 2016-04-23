@@ -3,6 +3,7 @@ import json
 import logging
 import ConfigParser
 
+
 def start_server():
     parser = ConfigParser.SafeConfigParser()
     parser.read("application.cfg")
@@ -10,14 +11,14 @@ def start_server():
     logging.basicConfig()
     logger = logging.getLogger("FlowControl")
     logger.setLevel(logging.INFO)
-    
+
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     host = parser.get("ConnectionController", "zmq.host")
     port = parser.get("ConnectionController", "zmq.port")
     socket.bind("tcp://{0}:{1}".format(host, port))
 
-    logger.info("zmq is listening at tcp://{0}:{1}".format(host, port))    
+    logger.info("zmq is listening at tcp://{0}:{1}".format(host, port))
 
     while True:
         data = socket.recv()
