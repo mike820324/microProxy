@@ -1,8 +1,5 @@
 import struct
 import socket
-import json
-import datetime, time
-import http
 
 import zmq
 from zmq.eventloop import ioloop, zmqstream
@@ -13,6 +10,7 @@ import tornado.iostream
 import tornado.netutil
 import tornado.gen
 
+import http
 from http import HttpMessage, HttpMessageBuilder
 
 import logging
@@ -214,13 +212,16 @@ class SocksLayer(object):
         super(SocksLayer, self).__init__()
         self.src_stream = stream
 
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self.dest_stream = tornado.iostream.IOStream(s)
+
     @tornado.gen.coroutine
     def read(self):
         data = yield self.src_stream.read_bytes(3)
-        self.socks_greeting(data)
+        yield self.socks_greeting(data)
 
         data = yield self.src_stream.read_bytes(4)
-        self.socks_request(data)
+        yield self.socks_request(data)
 
     @tornado.gen.coroutine
     def socks_greeting(self, data):
@@ -251,49 +252,34 @@ class SocksLayer(object):
         if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
             data = yield self.src_stream.read_bytes(6)
             request_info = struct.unpack("!IH", data)
-            socks_dest_addr = socket.inet_ntoa(struct.pack('!I', request_info[0]))
-            socks_dest_port = request_info[1]
-            logger.info("socks request to {0}:{1}".format(socks_dest_addr, socks_dest_port))
-
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            dest_stream = tornado.iostream.IOStream(s)
-            yield dest_stream.connect((socks_dest_addr, socks_dest_port))
+            dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])), request_info[1])
+            logger.info("socks request to {0}:{1}".format(*dest_addr_info))
 
             response = struct.pack('!BBxBIH',
                     self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["IPV4"],
-                    request_info[0], request_info[1])
-
-            yield self.src_stream.write(response)
-            self.create_http_server(dest_stream, socks_dest_port).start_server()
+                    *socks_dest_info)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
             data = yield self.src_stream.read_bytes(1)
             host_length = struct.unpack("!B", data)[0]
 
             data = yield self.src_stream.read_bytes(host_length + 2)
-            request_info_dns = struct.unpack("!{0}sH".format(host_length), data)
-            request_info_ip = yield tornado.netutil.BlockingResolver().resolve(*request_info_dns)
+            addr_info_dns = struct.unpack("!{0}sH".format(host_length), data)
+            addr_info_ip = yield tornado.netutil.BlockingResolver().resolve(*addr_info_dns)
 
-            ipv4_addr_info = [ addr_info for addr_type, addr_info in request_info_ip if addr_type == socket.AF_INET ]
-
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            dest_stream = tornado.iostream.IOStream(s)
-            yield dest_stream.connect(ipvr_addr_info[0])
+            ipv4_addr_info = [ addr_info for addr_type, addr_info in addr_info_ip if addr_type == socket.AF_INET ]
+            dest_addr_info = ipv4_addr_info[0]
 
             response = struct.pack("!BBxBB{0}sH".format(host_length),
                     self.SOCKS_VERSION, self.SOCKS_RESP_STATUS["SUCCESS"], self.SOCKS_ADDR_TYPE["DOMAINNAME"],
-                    host_length, request_info_dns[0], request_info_dns[1])
+                    host_length, *addr_info_dns)
 
-            yield self.src_stream.write(response)
-            self.create_http_server(dest_stream, socks_dest_port).start_server()
+        elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
+            # fixme: response with error
+            self.src_stream.close()
 
-    def create_http_server(self, dest_stream, dest_port):
-        if dest_port == 5000 or dest_port == 80:
-            return HttpLayer(self.src_stream, dest_stream)
-        elif dest_port == 5001 or dest_port == 443:
-            return TLSLayer(self.src_stream, dest_stream)
-        else:
-            return DirectServer(self.src_stream, dest_stream)
+        yield self.dest_stream.connect(dest_addr_info)
+        yield self.src_stream.write(response)
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self, host, port):
@@ -301,9 +287,20 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         self.host = host
         self.port = port
 
+    @tornado.gen.coroutine
     def handle_stream(self, stream, port):
         socks_layer = SocksLayer(stream)
-        socks_layer.read()
+        yield socks_layer.read()
+        self.create_http_server(socks_layer.src_stream, socks_layer.dest_stream).start_server()
+
+    def create_http_server(self, src_stream, dest_stream):
+        dest_port = dest_stream.socket.getpeername()[1]
+        if dest_port == 5000 or dest_port == 80:
+            return HttpLayer(src_stream, dest_stream)
+        elif dest_port == 5001 or dest_port == 443:
+            return TLSLayer(src_stream, dest_stream)
+        else:
+            return DirectServer(src_stream, dest_stream)
 
     def start_listener(self):
         self.listen(self.port, self.host)
