@@ -14,6 +14,7 @@ import http
 from http import HttpMessage, HttpMessageBuilder
 
 import logging
+logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
