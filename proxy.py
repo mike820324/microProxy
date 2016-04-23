@@ -260,8 +260,6 @@ class SocksLayer(object):
             request_info = struct.unpack("!IH", data)
             dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])),
                               request_info[1])
-            logger.info("socks request to {0}:{1}".format(*dest_addr_info))
-
             response = struct.pack('!BBxBIH',
                                    self.SOCKS_VERSION,
                                    self.SOCKS_RESP_STATUS["SUCCESS"],
@@ -273,26 +271,19 @@ class SocksLayer(object):
             host_length = struct.unpack("!B", data)[0]
 
             data = yield self.src_stream.read_bytes(host_length + 2)
-            addr_info_dns = struct.unpack("!{0}sH".format(host_length), data)
-            addr_info_ip = yield tornado.netutil.BlockingResolver().resolve(*addr_info_dns)
-
-            ipv4_addr_info = [addr_info
-                              for addr_type, addr_info in addr_info_ip
-                              if addr_type == socket.AF_INET]
-
-            dest_addr_info = ipv4_addr_info[0]
-
+            dest_addr_info = struct.unpack("!{0}sH".format(host_length), data)
             response = struct.pack("!BBxBB{0}sH".format(host_length),
                                    self.SOCKS_VERSION,
                                    self.SOCKS_RESP_STATUS["SUCCESS"],
                                    self.SOCKS_ADDR_TYPE["DOMAINNAME"],
                                    host_length,
-                                   *addr_info_dns)
+                                   *dest_addr_info)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
             # fixme: response with error
             self.src_stream.close()
 
+        logger.info("socks request to {0}:{1}".format(*dest_addr_info))
         yield self.dest_stream.connect(dest_addr_info)
         yield self.src_stream.write(response)
 
