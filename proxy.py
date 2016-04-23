@@ -237,8 +237,14 @@ class SocksLayer(object):
         socks_nmethod = socks_init_data[1]
         socks_methods = socks_init_data[2]
 
+        if socks_version != self.SOCKS_VERSION:
+            logger.warning("Socks Version incorrent : {}".format(socks_version))
+            # fixme: response with error
+            self.src_stream.close()
+
         if socks_nmethod != 1:
             logger.warning("SOCKS5 Auth not supported")
+            # fixme: response with error
             self.src_stream.close()
         else:
             response = struct.pack('BB', self.SOCKS_VERSION, 0)
@@ -251,11 +257,22 @@ class SocksLayer(object):
         socks_cmd = request_header_data[1]
         socks_atyp = request_header_data[2]
 
-        if socks_cmd != self.SOCKS_REQ_COMMAND["CONNECT"]:
+        if socks_version != self.SOCKS_VERSION:
+            logger.warning("Socks Version incorrent : {}".format(socks_version))
             # fixme: response with error
             self.src_stream.close()
 
-        if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
+        if socks_cmd != self.SOCKS_REQ_COMMAND["CONNECT"]:
+            logger.warning("Socks Command Not Supported : {}".format(socks_cmd))
+            # fixme: response with error
+            self.src_stream.close()
+
+        if socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
+            logger.warning("Socks Address Type Not Supported : {}".format(socks_atyp))
+            # fixme: response with error
+            self.src_stream.close()
+
+        elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
             data = yield self.src_stream.read_bytes(6)
             request_info = struct.unpack("!IH", data)
             dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])),
@@ -264,7 +281,7 @@ class SocksLayer(object):
                                    self.SOCKS_VERSION,
                                    self.SOCKS_RESP_STATUS["SUCCESS"],
                                    self.SOCKS_ADDR_TYPE["IPV4"],
-                                   *socks_dest_info)
+                                   *request_info)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
             data = yield self.src_stream.read_bytes(1)
@@ -279,9 +296,6 @@ class SocksLayer(object):
                                    host_length,
                                    *dest_addr_info)
 
-        elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
-            # fixme: response with error
-            self.src_stream.close()
 
         logger.info("socks request to {0}:{1}".format(*dest_addr_info))
         yield self.dest_stream.connect(dest_addr_info)
