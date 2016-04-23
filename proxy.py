@@ -1,28 +1,21 @@
 import struct
 import socket
 
-import zmq
-from zmq.eventloop import ioloop, zmqstream
-ioloop.install()
-
 import tornado.tcpserver
 import tornado.iostream
 import tornado.netutil
 import tornado.gen
 
-import http
-from http import HttpMessage, HttpMessageBuilder
-
 import logging
+
+import http
+from http import HttpMessageBuilder
+from utils import curr_loop
+import msg_publisher
+
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-import ConfigParser
-parser = ConfigParser.SafeConfigParser()
-parser.read("application.cfg")
-host = parser.get("ConnectionController", "zmq.host")
-port = parser.get("ConnectionController", "zmq.port")
+logger.setLevel(logging.DEBUG)
 
 
 class AbstractServer(object):
@@ -64,13 +57,13 @@ class HttpLayer(AbstractServer):
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
-    def __init__(self, target_src_stream, dest_stream):
+    def __init__(self, target_src_stream, dest_stream, publisher):
         super(HttpLayer, self).__init__(target_src_stream, dest_stream)
         self.state = self.CONNECT
         self.request_builder = HttpMessageBuilder()
         self.response_builder = HttpMessageBuilder()
         self.current_result = {}
-        self.zmq_stream = self.create_zmq_stream()
+        self.publisher = publisher
 
     def on_src_close(self):
         # fixme: better handling
@@ -81,18 +74,6 @@ class HttpLayer(AbstractServer):
         # fixme: better handling
         if not self.target_src_stream.closed():
             self.target_src_stream.close()
-
-    def create_zmq_stream(self):
-        zmq_context = zmq.Context()
-        zmq_socket = zmq_context.socket(zmq.REQ)
-        # fixme: use unix domain socket instead of tcp
-        zmq_socket.connect("tcp://{0}:{1}".format(host, port))
-        zmq_stream = zmqstream.ZMQStream(zmq_socket)
-        zmq_stream.on_recv(self.on_zmq_recv)
-        return zmq_stream
-
-    def on_zmq_recv(self, str_data):
-        logger.debug("zmq receive message")
 
     def req_to_destination(self, request):
         logger.debug("request out")
@@ -132,7 +113,7 @@ class HttpLayer(AbstractServer):
             self.record()
 
     def record(self):
-        self.zmq_stream.send_json(self.current_result)
+        self.publisher.publish(self.current_result)
 
 
 class TLSLayer(AbstractServer):
@@ -307,6 +288,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         super(ProxyServer, self).__init__()
         self.host = host
         self.port = port
+        self.publisher = msg_publisher.create()
 
     @tornado.gen.coroutine
     def handle_stream(self, stream, port):
@@ -317,7 +299,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
     def create_http_server(self, src_stream, dest_stream):
         dest_port = dest_stream.socket.getpeername()[1]
         if dest_port == 5000 or dest_port == 80:
-            return HttpLayer(src_stream, dest_stream)
+            return HttpLayer(src_stream, dest_stream, self.publisher)
         elif dest_port == 5001 or dest_port == 443:
             return TLSLayer(src_stream, dest_stream)
         else:
@@ -333,6 +315,6 @@ def start_proxy_server(host, port):
     server.start_listener()
 
     try:
-        ioloop.IOLoop.instance().start()
+        curr_loop().start()
     except KeyboardInterrupt:
         logger.info("bye")
