@@ -356,8 +356,8 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
 
 
-def start_proxy_server(host, port):
-    server = ProxyServer(host, port)
+def start_proxy_server(host, port, proxy_mode):
+    server = ProxyServer(host, port, proxy_mode)
     server.start_listener()
 
     try:
