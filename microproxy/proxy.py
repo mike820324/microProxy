@@ -170,15 +170,10 @@ class DirectServer(AbstractServer):
 
 class ProxyHandler(object):
     def __init__(self):
-        self.src_stream = None
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        self.dest_stream = tornado.iostream.IOStream(s)
+        super(ProxyHandler, self).__init__()
 
-    def read(self, src_stream):
-        self.src_stream = src_stream
-
-    def get_stream(self):
-        return (self.src_stream, self.dest_stream)
+    def read_and_return_addr(self, src_stream):
+        raise NotImplementedError()
 
 
 class SocksProxyHandler(ProxyHandler):
@@ -212,17 +207,17 @@ class SocksProxyHandler(ProxyHandler):
         super(SocksProxyHandler, self).__init__()
 
     @tornado.gen.coroutine
-    def read(self, src_stream):
-        super(SocksProxyHandler, self).read(src_stream)
-        data = yield self.src_stream.read_bytes(3)
-        yield self.socks_greeting(data)
+    def read_and_return_addr(self, src_stream):
+        data = yield src_stream.read_bytes(3)
+        yield self.socks_greeting(src_stream, data)
 
-        data = yield self.src_stream.read_bytes(4)
-        yield self.socks_request(data)
+        data = yield src_stream.read_bytes(4)
+        dest_addr_info = yield self.socks_request(src_stream, data)
+        raise tornado.gen.Return(dest_addr_info)
 
     @tornado.gen.coroutine
-    def socks_greeting(self, data):
-        logger.info("socks greeting to {0}".format(self.src_stream.socket.getpeername()[0]))
+    def socks_greeting(self, src_stream, data):
+        logger.info("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
@@ -231,18 +226,18 @@ class SocksProxyHandler(ProxyHandler):
         if socks_version != self.SOCKS_VERSION:
             logger.warning("Socks Version incorrent : {}".format(socks_version))
             # fixme: response with error
-            self.src_stream.close()
+            src_stream.close()
 
         if socks_nmethod != 1:
             logger.warning("SOCKS5 Auth not supported")
             # fixme: response with error
-            self.src_stream.close()
+            src_stream.close()
         else:
             response = struct.pack('BB', self.SOCKS_VERSION, 0)
-            yield self.src_stream.write(response)
+            yield src_stream.write(response)
 
     @tornado.gen.coroutine
-    def socks_request(self, data):
+    def socks_request(self, src_stream, data):
         request_header_data = struct.unpack('!BBxB', data)
         socks_version = request_header_data[0]
         socks_cmd = request_header_data[1]
@@ -251,20 +246,20 @@ class SocksProxyHandler(ProxyHandler):
         if socks_version != self.SOCKS_VERSION:
             logger.warning("Socks Version incorrent : {}".format(socks_version))
             # fixme: response with error
-            self.src_stream.close()
+            src_stream.close()
 
         if socks_cmd != self.SOCKS_REQ_COMMAND["CONNECT"]:
             logger.warning("Socks Command Not Supported : {}".format(socks_cmd))
             # fixme: response with error
-            self.src_stream.close()
+            src_stream.close()
 
         if socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
             logger.warning("Socks Address Type Not Supported : {}".format(socks_atyp))
             # fixme: response with error
-            self.src_stream.close()
+            src_stream.close()
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
-            data = yield self.src_stream.read_bytes(6)
+            data = yield src_stream.read_bytes(6)
             request_info = struct.unpack("!IH", data)
             dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])),
                               request_info[1])
@@ -275,10 +270,10 @@ class SocksProxyHandler(ProxyHandler):
                                    *request_info)
 
         elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
-            data = yield self.src_stream.read_bytes(1)
+            data = yield src_stream.read_bytes(1)
             host_length = struct.unpack("!B", data)[0]
 
-            data = yield self.src_stream.read_bytes(host_length + 2)
+            data = yield src_stream.read_bytes(host_length + 2)
             dest_addr_info = struct.unpack("!{0}sH".format(host_length), data)
             response = struct.pack("!BBxBB{0}sH".format(host_length),
                                    self.SOCKS_VERSION,
@@ -288,9 +283,8 @@ class SocksProxyHandler(ProxyHandler):
                                    *dest_addr_info)
 
         logger.info("socks request to {0}:{1}".format(*dest_addr_info))
-        yield self.dest_stream.connect(dest_addr_info)
-        yield self.src_stream.write(response)
-
+        yield src_stream.write(response)
+        raise tornado.gen.Return(dest_addr_info)
 
 class TranparentProxyHandler(ProxyHandler):
     SO_ORIGINAL_DST = 80
@@ -298,25 +292,22 @@ class TranparentProxyHandler(ProxyHandler):
     def __init__(self):
         super(TranparentProxyHandler, self).__init__()
 
-    def _get_dst_addr(self):
+    def _get_dst_addr(self, src_stream):
         # Currently, we only support Linux
         if platform.system() != "Linux":
             raise NotImplementedError
 
-        data = self.src_stream.socket.getsockopt(socket.SOL_IP,
+        sock_opt = src_stream.socket.getsockopt(socket.SOL_IP,
                                                  self.SO_ORIGINAL_DST,
                                                  16)
 
-        _, port, a1, a2, a3, a4 = struct.unpack("!HHBBBBxxxxxxxx", data)
+        _, port, a1, a2, a3, a4 = struct.unpack("!HHBBBBxxxxxxxx", sock_opt)
         address = "%d.%d.%d.%d" % (a1, a2, a3, a4)
         return address, port
 
     @tornado.gen.coroutine
-    def read(self, src_stream):
-        super(TranparentProxyHandler, self).read(src_stream)
-        addr_info = self._get_dst_addr()
-        yield self.dest_stream.connect(addr_info)
-
+    def read_and_return_addr(self, src_stream):
+        raise tornado.gen.Return(self._get_dst_addr(src_stream))
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self,
@@ -339,8 +330,9 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         else:
             logger.warning("Unsupport proxy mode : {0}".format(self.proxy_mode))
 
-        yield proxy_handler.read(stream)
-        self.create_http_server(*proxy_handler.get_stream()).start_server()
+        dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
+        dest_stream = yield self.create_dest_stream(dest_addr_info)
+        self.create_http_server(stream, dest_stream).start_server()
 
     def create_http_server(self, src_stream, dest_stream):
         dest_port = dest_stream.socket.getpeername()[1]
@@ -355,6 +347,10 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         self.listen(self.port, self.host)
         logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
 
+    def create_dest_stream(self, dest_addr_info):
+        dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        dest_stream = tornado.iostream.IOStream(dest_socket)
+        return dest_stream.connect(dest_addr_info)
 
 def start_proxy_server(host, port, proxy_mode):
     server = ProxyServer(host, port, proxy_mode)
