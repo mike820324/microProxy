@@ -6,16 +6,15 @@ import tornado.iostream
 import tornado.netutil
 import tornado.gen
 
-import logging
-
 import http
 from http import HttpMessageBuilder
 from utils import curr_loop
 import msg_publisher
 
+import logging
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 class AbstractServer(object):
