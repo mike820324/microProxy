@@ -1,7 +1,7 @@
 import zmq
 import json
 
-from config import Config
+from microproxy.config import Config
 import logging
 
 logging.basicConfig()
