@@ -1,6 +1,6 @@
 import argparse
-import proxy
-import msg_subscriber
+from microproxy import proxy
+from microproxy import msg_subscriber
 
 
 def main():
