@@ -1,6 +1,9 @@
-import json
 from http_parser.parser import HttpParser
 from http_parser.util import status_reasons
+import logging
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 class HttpMessage(object):
@@ -140,7 +143,7 @@ def _assemble_res_header(http_message):
 def assemble_responses(http_message):
     if is_chunked_encoding(http_message):
         chunk_size = 1024
-        chunks = [http_message.body[i:i+chunk_size] for i in range(0, len(http_message.body), chunk_size)]
+        chunks = [http_message.body[i:i + chunk_size] for i in range(0, len(http_message.body), chunk_size)]
         if not chunks:
             yield b"{0}".format(_assemble_res_header(http_message))
         else:

@@ -221,7 +221,6 @@ class SocksProxyHandler(ProxyHandler):
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
-        socks_methods = socks_init_data[2]
 
         if socks_version != self.SOCKS_VERSION:
             logger.warning("Socks Version incorrent : {}".format(socks_version))
@@ -286,6 +285,7 @@ class SocksProxyHandler(ProxyHandler):
         yield src_stream.write(response)
         raise tornado.gen.Return(dest_addr_info)
 
+
 class TranparentProxyHandler(ProxyHandler):
     SO_ORIGINAL_DST = 80
 
@@ -298,8 +298,8 @@ class TranparentProxyHandler(ProxyHandler):
             raise NotImplementedError
 
         sock_opt = src_stream.socket.getsockopt(socket.SOL_IP,
-                                                 self.SO_ORIGINAL_DST,
-                                                 16)
+                                                self.SO_ORIGINAL_DST,
+                                                16)
 
         _, port, a1, a2, a3, a4 = struct.unpack("!HHBBBBxxxxxxxx", sock_opt)
         address = "%d.%d.%d.%d" % (a1, a2, a3, a4)
@@ -308,6 +308,7 @@ class TranparentProxyHandler(ProxyHandler):
     @tornado.gen.coroutine
     def read_and_return_addr(self, src_stream):
         raise tornado.gen.Return(self._get_dst_addr(src_stream))
+
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self,
@@ -351,6 +352,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_stream = tornado.iostream.IOStream(dest_socket)
         return dest_stream.connect(dest_addr_info)
+
 
 def start_proxy_server(host, port, proxy_mode):
     server = ProxyServer(host, port, proxy_mode)
