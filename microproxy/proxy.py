@@ -348,10 +348,12 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         self.listen(self.port, self.host)
         logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
 
+    @tornado.gen.coroutine
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_stream = tornado.iostream.IOStream(dest_socket)
-        return dest_stream.connect(dest_addr_info)
+        yield dest_stream.connect(dest_addr_info)
+        raise tornado.gen.Return(dest_stream)
 
 
 def start_proxy_server(host, port, proxy_mode):
