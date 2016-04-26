@@ -2,3 +2,5 @@ tornado
 pyzmq
 http-parser
 mock
+coverage
+coveralls
