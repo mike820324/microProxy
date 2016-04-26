@@ -2,7 +2,7 @@ import zmq
 from zmq.eventloop import zmqstream
 import logging
 
-from config import Config
+from config import config
 
 
 class MsgPublisher(object):
@@ -16,7 +16,6 @@ class MsgPublisher(object):
 
 
 def create():
-    config = Config()
     binding = config.prop("ZmqServer", "zmq.binding")
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
