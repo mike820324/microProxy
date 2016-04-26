@@ -1,18 +1,15 @@
 import zmq
 import json
 
-from microproxy.config import Config
-import logging
+from microproxy.config import config
+from microproxy.utils import get_logger
 
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_logger(__name__)
 
 
 def start():
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    config = Config()
     destination = config.prop("ZmqClient", "zmq.destination")
     socket.connect(destination)
     socket.setsockopt(zmq.SUBSCRIBE, "")

@@ -9,13 +9,10 @@ import tornado.gen
 
 import http
 from http import HttpMessageBuilder
-from utils import curr_loop
+from utils import curr_loop, get_logger
 import msg_publisher
 
-import logging
-logging.basicConfig()
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger = get_logger(__name__)
 
 
 class AbstractServer(object):
