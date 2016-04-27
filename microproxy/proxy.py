@@ -2,6 +2,7 @@ import struct
 import socket
 import platform
 import sys
+import datetime
 
 import tornado.tcpserver
 import tornado.iostream
@@ -180,12 +181,14 @@ class SocksProxyHandler(ProxyHandler):
 
     @tornado.gen.coroutine
     def read_and_return_addr(self, src_stream):
-        data = yield src_stream.read_bytes(3)
-        yield self.socks_greeting(src_stream, data)
-
-        data = yield src_stream.read_bytes(4)
-        dest_addr_info = yield self.socks_request(src_stream, data)
-        raise tornado.gen.Return(dest_addr_info)
+        try:
+            data = yield src_stream.read_bytes(3)
+            yield self.socks_greeting(src_stream, data)
+            data = yield src_stream.read_bytes(4)
+            dest_addr_info = yield self.socks_request(src_stream, data)
+            raise tornado.gen.Return(dest_addr_info)
+        except tornado.iostream.StreamClosedError:
+            logger.warning("Source Stream Closed")
 
     @tornado.gen.coroutine
     def socks_greeting(self, src_stream, data):
@@ -299,14 +302,16 @@ class ProxyServer(tornado.tcpserver.TCPServer):
     def handle_stream(self, stream, port):
         # fixme: expired time and timeout handler
         proxy_handler = self.get_proxy_handler()
-        dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
-        dest_stream = yield self.create_dest_stream(dest_addr_info)
-        stream_handler = self.get_stream_handler(stream, dest_stream)
-        context = Context(
-            stream,
-            dest_stream,
-            self.interceptor)
-        stream_handler.process(context)
+        try:
+            dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
+            dest_stream = yield self.create_dest_stream(dest_addr_info)
+            stream_handler = self.get_stream_handler(stream, dest_stream)
+            context = Context(stream,
+                              dest_stream,
+                              self.interceptor)
+            stream_handler.process(context)
+        except tornado.gen.TimeoutError:
+            stream.close()
 
     def get_proxy_handler(self):
         if self.mode == "socks":
@@ -334,8 +339,12 @@ class ProxyServer(tornado.tcpserver.TCPServer):
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_stream = tornado.iostream.IOStream(dest_socket)
-        yield dest_stream.connect(dest_addr_info)
-        raise tornado.gen.Return(dest_stream)
+        try:
+            yield tornado.gen.with_timeout(datetime.timedelta(5), dest_stream.connect(dest_addr_info))
+            raise tornado.gen.Return(dest_stream)
+        except tornado.gen.TimeoutError:
+            logger.warning("Connect to Destination Timeout")
+            raise
 
 
 def start_proxy_server(config):
