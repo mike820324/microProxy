@@ -14,7 +14,7 @@ class HttpMessage(object):
                  url="",
                  path="",
                  query_string="",
-                 header=[],
+                 header={},
                  body=b""):
         super(HttpMessage, self).__init__()
         self.version = version
@@ -39,9 +39,17 @@ class HttpMessageBuilder(object):
     def is_done(self):
         return self.http_parser.is_message_complete()
 
+    @property
+    def is_header_done(self):
+        return self.http_parser.is_headers_complete()
+
+    @property
+    def headers(self):
+        return self.http_parser.get_headers()
+
     def build(self):
         if not self.is_done:
-            raise IOError
+            raise AssertionError
         version = "{0}.{1}".format(*self.http_parser.get_version())
         status = int(self.http_parser.get_status_code())
         method = self.http_parser.get_method()
