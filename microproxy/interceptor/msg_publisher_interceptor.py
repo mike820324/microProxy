@@ -1,10 +1,10 @@
 import zmq
 from zmq.eventloop import zmqstream
 
-from ..http import serialize
-from .base import BaseInterceptor
-from ..utils import get_logger
-from ..config import config
+from base import BaseInterceptor
+from microproxy.http import serialize
+from microproxy.utils import get_logger
+from microproxy.config import config
 
 logger = get_logger(__name__)
 
@@ -17,10 +17,10 @@ class MsgPublisherInterceptor(BaseInterceptor):
         self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
 
     def request(self, request):
-        None
+        pass
 
     def response(self, response):
-        None
+        pass
 
     def record(self, request, response):
         message = {

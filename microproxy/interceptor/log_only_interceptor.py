@@ -1,6 +1,6 @@
-from .base import BaseInterceptor
-from ..utils import get_logger
-from ..http import serialize
+from base import BaseInterceptor
+from microproxy.utils import get_logger
+from microproxy.http import serialize
 
 logger = get_logger(__name__)
 
