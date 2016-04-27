@@ -1,2 +1,2 @@
-from .log_only_interceptor import LogOnlyInterceptor 
-from .msg_publisher_interceptor import MsgPublisherInterceptor
+from log_only_interceptor import LogOnlyInterceptor
+from msg_publisher_interceptor import MsgPublisherInterceptor
