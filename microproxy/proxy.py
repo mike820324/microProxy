@@ -80,10 +80,11 @@ class HttpLayer(object):
         else:
             return 0
 
+    @tornado.gen.coroutine
     def resp_to_src(self, response):
         logger.debug("start resp_to_src")
         for chunk in http.assemble_responses(response):
-            self.context.src_stream.write(chunk)
+            yield self.context.src_stream.write(chunk)
         logger.debug("end resp_to_src")
 
     def closed(self):
