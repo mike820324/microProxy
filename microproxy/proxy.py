@@ -63,19 +63,14 @@ class HttpLayer(object):
         self.resp_to_src(response)
         self.context.interceptor.record(request, response)
         logger.debug("end HttpLayer process")
-        raise tornado.gen.Return(None)
 
     @tornado.gen.coroutine
     def read(self, stream):
         logger.debug("start read")
         http_message_builder = HttpMessageBuilder()
-        headers = yield stream.read_until("\r\n\r\n")
-        http_message_builder.parse(headers)
-        if not http_message_builder.is_header_done:
-            raise ValueError
         while not http_message_builder.is_done:
-            body_chunk = yield stream.read_bytes(sys.maxsize, partial=True)
-            http_message_builder.parse(body_chunk)
+            data = yield stream.read_bytes(sys.maxsize, partial=True)
+            http_message_builder.parse(data)
         logger.debug("end read")
         raise tornado.gen.Return(http_message_builder.build())
 
