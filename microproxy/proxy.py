@@ -74,12 +74,6 @@ class HttpLayer(object):
         logger.debug("end read")
         raise tornado.gen.Return(http_message_builder.build())
 
-    def _get_content_length(self, http_message_builder):
-        if "content-length" in http_message_builder.headers:
-            return int(http_message_builder.headers["content-length"])
-        else:
-            return 0
-
     @tornado.gen.coroutine
     def resp_to_src(self, response):
         logger.debug("start resp_to_src")
