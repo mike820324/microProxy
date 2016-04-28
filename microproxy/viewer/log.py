@@ -19,7 +19,8 @@ def start():
         logger.debug("waiting for next message")
         data = socket.recv()
         message = json.loads(data)
+        host = message["request"]["header"]["Host"]
         status = message["response"]["status"]
         method = message["request"]["method"]
         url = message["request"]["url"]
-        logger.info("{0} {1} {2}".format(status, method, url))
+        logger.info("{0} {1} {2} {3}".format(host, status, method, url))
