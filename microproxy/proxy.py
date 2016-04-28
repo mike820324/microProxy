@@ -1,7 +1,6 @@
 import struct
 import socket
 import platform
-import traceback
 import sys
 
 import tornado.tcpserver
@@ -40,7 +39,7 @@ class HttpHandler(AbstractHandler):
         except tornado.iostream.StreamClosedError:
             logger.warning("stream closed")
         except:
-            traceback.print_exc()
+            logger.exception("http handle failed")
         http_layer.close()
         logger.debug("end HttpHandler process")
 
