@@ -1,6 +1,7 @@
 import struct
 import socket
 import platform
+import sys
 
 import tornado.tcpserver
 import tornado.iostream
@@ -10,116 +11,110 @@ import tornado.gen
 import http
 from http import HttpMessageBuilder
 from utils import curr_loop, get_logger
-import msg_publisher
+from interceptor import MsgPublisherInterceptor as Interceptor
 
 logger = get_logger(__name__)
 
 
-class AbstractServer(object):
-    def __init__(self, target_src_stream, dest_stream):
-        super(AbstractServer, self).__init__()
-        self.target_src_stream = target_src_stream
-        self.target_dest_stream = dest_stream
+class Context(object):
+    def __init__(self, src_stream, dest_stream, interceptor):
+        self.src_stream = src_stream
+        self.dest_stream = dest_stream
+        self.interceptor = interceptor
 
-    def start_server(self):
-        logger.info("{0} socket is ready for process the request".format(__name__))
-        self.is_src_close = False
-        self.target_src_stream.read_until_close(streaming_callback=self.on_request)
-        self.target_src_stream.set_close_callback(self.on_src_close)
 
-        self.is_dest_close = False
-        self.target_dest_stream.read_until_close(streaming_callback=self.on_response)
-        self.target_dest_stream.set_close_callback(self.on_dest_close)
-
-    def on_src_close(self):
-        raise NotImplementedError
-
-    def on_dest_close(self):
-        raise NotImplementedError
-
-    def on_request(self, data):
-        raise NotImplementedError
-
-    def on_response(self, data):
+class AbstractHandler(object):
+    def process(self, context):
         raise NotImplementedError
 
 
-class HttpLayer(AbstractServer):
-    CONNECT = 0
-    REQUEST_IN = 1
-    REQUEST_OUT = 2
-    RESPONSE_IN = 3
-    RESPONSE_OUT = 4
+class HttpHandler(AbstractHandler):
+    @tornado.gen.coroutine
+    def process(self, context):
+        logger.debug("start HttpHandler process")
+        http_layer = HttpLayer(context)
+        try:
+            while not http_layer.closed():
+                yield http_layer.process()
+        except tornado.iostream.StreamClosedError:
+            logger.warning("stream closed")
+        except:
+            logger.exception("http handle failed")
+        http_layer.close()
+        logger.debug("end HttpHandler process")
 
+
+class HttpLayer(object):
     '''
     HTTPServer: HTTPServer will handle http trafic.
     '''
-    def __init__(self, target_src_stream, dest_stream, publisher):
-        super(HttpLayer, self).__init__(target_src_stream, dest_stream)
-        self.state = self.CONNECT
-        self.request_builder = HttpMessageBuilder()
-        self.response_builder = HttpMessageBuilder()
-        self.current_result = {}
-        self.publisher = publisher
+    def __init__(self, context):
+        self.context = context
 
-    def on_src_close(self):
-        # fixme: better handling
-        if not self.target_dest_stream.closed():
-            self.target_dest_stream.close()
+    @tornado.gen.coroutine
+    def process(self):
+        logger.debug("start HttpLayer process")
+        request = yield self.read(self.context.src_stream)
+        self.context.interceptor.request(request)
+        yield self.context.dest_stream.write(http.assemble_request(request))
+        response = yield self.read(self.context.dest_stream)
+        self.context.interceptor.response(response)
+        self.resp_to_src(response)
+        self.context.interceptor.record(request, response)
+        logger.debug("end HttpLayer process")
 
-    def on_dest_close(self):
-        # fixme: better handling
-        if not self.target_src_stream.closed():
-            self.target_src_stream.close()
+    @tornado.gen.coroutine
+    def read(self, stream):
+        logger.debug("start read")
+        http_message_builder = HttpMessageBuilder()
+        while not http_message_builder.is_done:
+            data = yield stream.read_bytes(sys.maxsize, partial=True)
+            http_message_builder.parse(data)
+        logger.debug("end read")
+        raise tornado.gen.Return(http_message_builder.build())
 
-    def req_to_destination(self, request):
-        logger.debug("request out")
-        self.target_dest_stream.write(http.assemble_request(request))
-        self.request_builder = HttpMessageBuilder()
-        self.state = self.REQUEST_OUT
-
-    def res_to_source(self, response):
-        logger.debug("response out")
+    @tornado.gen.coroutine
+    def resp_to_src(self, response):
+        logger.debug("start resp_to_src")
         for chunk in http.assemble_responses(response):
-            try:
-                self.target_src_stream.write(chunk)
-            except tornado.iostream.StreamClosedError:
-                self.on_src_close()
-        self.response_builder = HttpMessageBuilder()
-        self.state = self.RESPONSE_OUT
+            yield self.context.src_stream.write(chunk)
+        logger.debug("end resp_to_src")
 
-    def on_request(self, data):
-        logger.debug("request in")
-        self.state = self.REQUEST_IN
-        self.request_builder.parse(data)
-        if self.request_builder.is_done and not self.target_dest_stream.closed():
-            logger.debug("request in complete")
-            http_message = self.request_builder.build()
-            self.current_result["request"] = http.serialize(http_message)
-            self.req_to_destination(http_message)
+    def closed(self):
+        return (
+            self.context.src_stream.closed() or
+            self.context.dest_stream.closed())
 
-    def on_response(self, data):
-        logger.debug("response in")
-        self.state = self.RESPONSE_IN
-        self.response_builder.parse(data)
-        if self.response_builder.is_done and not self.target_src_stream.closed():
-            logger.debug("request out complete")
-            http_message = self.response_builder.build()
-            self.current_result["response"] = http.serialize(http_message)
-            self.res_to_source(http_message)
-            self.record()
-
-    def record(self):
-        self.publisher.publish(self.current_result)
+    def close(self):
+        if not self.context.src_stream.closed():
+            self.context.src_stream.close()
+        if not self.context.dest_stream.closed():
+            self.context.dest_stream.close()
 
 
-class TLSLayer(AbstractServer):
+class TLSHandler(AbstractHandler):
+    def process(self, context):
+        ForwardLayer(context).process()
+
+
+class DirectHandler(AbstractHandler):
+    def process(self, context):
+        ForwardLayer(context).process()
+
+
+class ForwardLayer(object):
     '''
     TLSLayer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, target_src_stream, dest_stream):
-        super(TLSLayer, self).__init__(target_src_stream, dest_stream)
-        self.is_tls = None
+    def __init__(self, context):
+        super(ForwardLayer, self).__init__()
+        self.context = context
+
+    def process(self):
+        self.context.src_stream.read_until_close(streaming_callback=self.on_request)
+        self.context.src_stream.set_close_callback(self.on_src_close)
+        self.context.dest_stream.read_until_close(streaming_callback=self.on_response)
+        self.context.dest_stream.set_close_callback(self.on_dest_close)
 
     def is_tls_protocol(self, data):
         return (
@@ -129,40 +124,20 @@ class TLSLayer(AbstractServer):
         )
 
     def on_src_close(self):
-        self.is_src_close = True
+        if not self.context.dest_stream.closed():
+            self.context.dest_stream.close()
 
     def on_dest_close(self):
-        self.is_dest_close = True
+        if not self.context.src_stream.closed():
+            self.context.src_stream.close()
 
     def on_request(self, data):
-        if not self.is_dest_close:
-            self.target_dest_stream.write(data)
+        if not self.context.dest_stream.closed():
+            self.context.dest_stream.write(data)
 
     def on_response(self, data):
-        if not self.is_src_close:
-            self.target_src_stream.write(data)
-
-
-class DirectServer(AbstractServer):
-    '''
-    DirectServer: passing all the src data to destination. Will not intercept anything
-    '''
-    def __init__(self, target_src_stream, dest_stream):
-        super(DirectServer, self).__init__(target_src_stream, dest_stream)
-
-    def on_src_close(self):
-        self.is_src_close = True
-
-    def on_dest_close(self):
-        self.is_dest_close = True
-
-    def on_request(self, data):
-        if not self.is_dest_close:
-            self.target_dest_stream.write(data)
-
-    def on_response(self, data):
-        if not self.is_src_close:
-            self.target_src_stream.write(data)
+        if not self.context.src_stream.closed():
+            self.context.src_stream.write(data)
 
 
 class ProxyHandler(object):
@@ -316,30 +291,39 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         super(ProxyServer, self).__init__()
         self.host = host
         self.port = port
-        self.publisher = msg_publisher.create()
+        self.interceptor = Interceptor()
         self.proxy_mode = proxy_mode
 
     @tornado.gen.coroutine
     def handle_stream(self, stream, port):
-        if self.proxy_mode == "socks":
-            proxy_handler = SocksProxyHandler()
-        elif self.proxy_mode == "transparent":
-            proxy_handler = TranparentProxyHandler()
-        else:
-            logger.warning("Unsupport proxy mode : {0}".format(self.proxy_mode))
-
+        # fixme: expired time and timeout handler
+        proxy_handler = self.get_proxy_handler()
         dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
         dest_stream = yield self.create_dest_stream(dest_addr_info)
-        self.create_http_server(stream, dest_stream).start_server()
+        stream_handler = self.get_stream_handler(stream, dest_stream)
+        context = Context(
+            stream,
+            dest_stream,
+            self.interceptor)
+        stream_handler.process(context)
 
-    def create_http_server(self, src_stream, dest_stream):
+    def get_proxy_handler(self):
+        if self.proxy_mode == "socks":
+            return SocksProxyHandler()
+        elif self.proxy_mode == "transparent":
+            return TranparentProxyHandler()
+        else:
+            # fixme: due to fail fast, need raise exception here
+            logger.warning("Unsupport proxy mode : {0}".format(self.proxy_mode))
+
+    def get_stream_handler(self, src_stream, dest_stream):
         dest_port = dest_stream.socket.getpeername()[1]
         if dest_port == 5000 or dest_port == 80:
-            return HttpLayer(src_stream, dest_stream, self.publisher)
+            return HttpHandler()
         elif dest_port == 5001 or dest_port == 443:
-            return TLSLayer(src_stream, dest_stream)
+            return TLSHandler()
         else:
-            return DirectServer(src_stream, dest_stream)
+            return DirectHandler()
 
     def start_listener(self):
         self.listen(self.port, self.host)
