@@ -1,12 +1,14 @@
 import unittest
-import platform
+import tornado.testing
 
-from test_http import HttpTest
-from test_proxy import SocksProxyHandlerTest
+TEST_MODULES = [
+    "tests.test_proxy",
+    "tests.test_http"
+]
 
-# TransparentProxyHandler only implement for linux
-if platform.system() == "Linux":
-    from test_proxy import TranparentProxyHandlerTest
+
+def all():
+    return unittest.defaultTestLoader.loadTestsFromNames(TEST_MODULES)
 
 if __name__ == "__main__":
-    unittest.main()
+    tornado.testing.main()
