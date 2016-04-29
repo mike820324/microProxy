@@ -34,7 +34,7 @@ class MsgPublisherInterceptor(BaseInterceptor):
 
 
 def create_socket():
-    binding = config.prop("ZmqServer", "zmq.binding")
+    binding = config["ZmqServer"]["zmq.binding"]
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind(binding)

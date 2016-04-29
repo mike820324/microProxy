@@ -10,7 +10,7 @@ logger = get_logger(__name__)
 def start():
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    destination = config.prop("ZmqClient", "zmq.destination")
+    destination = config["ZmqClient"]["zmq.destination"]
     socket.connect(destination)
     socket.setsockopt(zmq.SUBSCRIBE, "")
     logger.info("zmq is listening at {0}".format(destination))
