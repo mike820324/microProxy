@@ -10,6 +10,7 @@ import tornado.gen
 
 import http
 from http import HttpMessageBuilder
+from config import config
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
 
@@ -318,9 +319,9 @@ class ProxyServer(tornado.tcpserver.TCPServer):
 
     def get_stream_handler(self, src_stream, dest_stream):
         dest_port = dest_stream.socket.getpeername()[1]
-        if dest_port == 5000 or dest_port == 80:
+        if (dest_port == 80 or str(dest_port) in config["Proxy"]["http.port"].split(",")):
             return HttpHandler()
-        elif dest_port == 5001 or dest_port == 443:
+        elif (dest_port == 443 or str(dest_port) in config["Proxy"]["http.port"].split(",")):
             return TLSHandler()
         else:
             return DirectHandler()
