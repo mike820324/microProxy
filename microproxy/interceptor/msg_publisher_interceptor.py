@@ -34,7 +34,7 @@ class MsgPublisherInterceptor(BaseInterceptor):
 
 
 def create_socket():
-    binding = config["ZmqServer"]["zmq.binding"]
+    binding = config["Proxy"]["viewer.channel"]
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind(binding)

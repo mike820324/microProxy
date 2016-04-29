@@ -9,5 +9,4 @@ class _Config(object):
     def __getitem__(self, key):
         return {k: v for k, v in self.parser.items(key)}
 
-
 config = _Config()
