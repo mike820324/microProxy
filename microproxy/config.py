@@ -6,7 +6,8 @@ class _Config(object):
         self.parser = ConfigParser.SafeConfigParser()
         self.parser.read("application.cfg")
 
-    def prop(self, catalog, key):
-        return self.parser.get(catalog, key)
+    def __getitem__(self, key):
+        return {k: v for k, v in self.parser.items(key)}
+
 
 config = _Config()
