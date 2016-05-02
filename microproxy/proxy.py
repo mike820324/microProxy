@@ -290,8 +290,8 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         self.port = config["port"]
         self.mode = config["mode"]
         self.additional_port = {
-            "http": [int(port) for port in config["http_port"].split(",")],
-            "https": [int(port) for port in config["http_port"].split(",")]
+            "http": config["http_port"],
+            "https": config["https_port"]
         }
         self.interceptor = Interceptor(config=config)
 

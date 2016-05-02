@@ -1,10 +1,10 @@
 from microproxy import proxy
 from microproxy.viewer import log as log_viewer
-from microproxy.config import ConfigBuilder
+from microproxy.config import parse_config
 
 
 if __name__ == "__main__":
-    config = ConfigBuilder().parse_config()
+    config = parse_config()
     if config["command_type"] == "proxy":
         proxy.start_proxy_server(config)
 
