@@ -23,20 +23,22 @@ class Config(object):
 
 class ConfigBuilder(object):
     def __init__(self):
-        self.file_parser = self.setup_file_parser()
+        self.ini_parser = self.setup_ini_parser()
         self.cmd_parser = self.setup_cmd_parser()
 
-    def setup_file_parser(self):
+    def setup_ini_parser(self):
         parser = ConfigParser.SafeConfigParser()
         return parser
 
     def setup_cmd_parser(self):
         parser = argparse.ArgumentParser(description="MicroProxy a http/https proxy interceptor.")
+
         parser.add_argument("--config-file",
                             default="./application.cfg",
                             help="Specify config file location")
         subparser = parser.add_subparsers(dest="command_type")
 
+        # Proxy service options
         proxy_parser = subparser.add_parser("proxy",
                                             help="Enable Proxy Server")
         proxy_parser.add_argument("--host",
@@ -54,6 +56,7 @@ class ConfigBuilder(object):
         proxy_parser.add_argument("--viewer-channel",
                                   help="Specify the viewer channel. ex. tcp://*:5581")
 
+        # Viewer Service options
         viewer_parser = subparser.add_parser("viewer",
                                              help="Open MircorProxy Viewer")
         viewer_parser.add_argument("--viewer-mode",
@@ -69,5 +72,5 @@ class ConfigBuilder(object):
         if not os.path.isfile(config_file):
             config_file = "./application.cfg"
 
-        self.file_parser.read(config_file)
-        return Config(self.file_parser, vars(cmd_config))
+        self.ini_parser.read(config_file)
+        return Config(self.ini_parser, vars(cmd_config))
