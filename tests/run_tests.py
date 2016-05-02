@@ -3,7 +3,8 @@ import tornado.testing
 
 TEST_MODULES = [
     "tests.test_proxy",
-    "tests.test_http"
+    "tests.test_http",
+    "tests.test_config"
 ]
 
 
