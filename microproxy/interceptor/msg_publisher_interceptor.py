@@ -4,16 +4,15 @@ from zmq.eventloop import zmqstream
 from base import BaseInterceptor
 from microproxy.http import serialize
 from microproxy.utils import get_logger
-from microproxy.config import config
 
 logger = get_logger(__name__)
 
 
 class MsgPublisherInterceptor(BaseInterceptor):
-    def __init__(self, zmq_socket=None):
+    def __init__(self, config, zmq_socket=None):
         super(MsgPublisherInterceptor, self).__init__()
         if zmq_socket is None:
-            zmq_socket = create_socket()
+            zmq_socket = create_socket(config["viewer_channel"])
         self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
 
     def request(self, request):
@@ -33,10 +32,9 @@ class MsgPublisherInterceptor(BaseInterceptor):
         self.zmq_stream.send_json(message)
 
 
-def create_socket():
-    binding = config["Proxy"]["viewer.channel"]
+def create_socket(viewer_channel):
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
-    socket.bind(binding)
-    logger.info("MsgPublisher is listening at {0}".format(binding))
+    socket.bind(viewer_channel)
+    logger.info("MsgPublisher is listening at {0}".format(viewer_channel))
     return socket
