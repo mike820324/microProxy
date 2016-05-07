@@ -283,16 +283,17 @@ class TranparentProxyHandler(ProxyHandler):
 
 
 class ProxyServer(tornado.tcpserver.TCPServer):
-    def __init__(self,
-                 host,
-                 port,
-                 proxy_mode="socks"):
+    def __init__(self, config):
 
         super(ProxyServer, self).__init__()
-        self.host = host
-        self.port = port
-        self.interceptor = Interceptor()
-        self.proxy_mode = proxy_mode
+        self.host = config["host"]
+        self.port = config["port"]
+        self.mode = config["mode"]
+        self.additional_port = {
+            "http": config["http_port"],
+            "https": config["https_port"]
+        }
+        self.interceptor = Interceptor(config=config)
 
     @tornado.gen.coroutine
     def handle_stream(self, stream, port):
@@ -308,19 +309,19 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         stream_handler.process(context)
 
     def get_proxy_handler(self):
-        if self.proxy_mode == "socks":
+        if self.mode == "socks":
             return SocksProxyHandler()
-        elif self.proxy_mode == "transparent":
+        elif self.mode == "transparent":
             return TranparentProxyHandler()
         else:
             # fixme: due to fail fast, need raise exception here
-            logger.warning("Unsupport proxy mode : {0}".format(self.proxy_mode))
+            logger.warning("Unsupport proxy mode : {0}".format(self.mode))
 
     def get_stream_handler(self, src_stream, dest_stream):
         dest_port = dest_stream.socket.getpeername()[1]
-        if dest_port == 5000 or dest_port == 80:
+        if (dest_port == 80 or dest_port in self.additional_port["http"]):
             return HttpHandler()
-        elif dest_port == 5001 or dest_port == 443:
+        elif (dest_port == 443 or dest_port in self.additional_port["https"]):
             return TLSHandler()
         else:
             return DirectHandler()
@@ -337,8 +338,8 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         raise tornado.gen.Return(dest_stream)
 
 
-def start_proxy_server(host, port, proxy_mode):
-    server = ProxyServer(host, port, proxy_mode)
+def start_proxy_server(config):
+    server = ProxyServer(config)
     server.start_listener()
 
     try:
