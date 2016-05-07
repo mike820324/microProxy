@@ -1,16 +1,15 @@
 import zmq
 import json
 
-from microproxy.config import config
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
 
 
-def start():
+def start(config):
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
-    destination = config["ZmqClient"]["zmq.destination"]
+    destination = config["viewer_channel"]
     socket.connect(destination)
     socket.setsockopt(zmq.SUBSCRIBE, "")
     logger.info("zmq is listening at {0}".format(destination))
