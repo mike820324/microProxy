@@ -1,0 +1,7 @@
+9 May 2016: MicroProxy 0.1.0
+
+Initial release for MicroProxy. Support the following features.
+
+* Support socks and transparent proxy(Linux Only).
+* Support HTTP protocal only.
+* Basic Log Viewer. 
