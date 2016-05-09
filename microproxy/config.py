@@ -72,7 +72,7 @@ class Config(object):
         tmp_config = {k: v for k, v in cmd_config.iteritems() if k != "command_type" and k != "config_file"}
         cmd_config.update(self.typeValidation(tmp_config, fieldInfos))
 
-        self.__config = file_config
+        self.__config = file_config.copy()
         self.__config.update(cmd_config)
 
     def typeValidation(self, config, fieldInfos):
@@ -91,12 +91,15 @@ class Config(object):
 
             if "is_list" in fieldInfos[field] and fieldInfos[field]["is_list"]:
                 if fieldInfos[field]["type"] == "int":
-                    new_config[field] = [int(value) for value in config[field].split(",")]
+                    new_config[field] = map(int, config[field].split(","))
                 else:
                     new_config[field] = config[field].split(",")
-
             else:
-                new_config[field] = config[field]
+                if fieldInfos[field]["type"] == "int":
+                    new_config[field] = int(config[field])
+                else:
+                    new_config[field] = config[field]
+
         return new_config
 
     def __getitem__(self, key):

@@ -42,7 +42,7 @@ class ConfigTest(unittest.TestCase):
         cmd_options = {
             "command_type": "proxy",
             "host": "127.0.0.1",
-            "port": 8080,
+            "port": "8080",
             "mode": "socks",
             "http_port": "5000,5001",
             "https_port": "5002,5003",
@@ -65,7 +65,7 @@ class ConfigTest(unittest.TestCase):
         }
         ini_options = [
             ("host", "127.0.0.1"),
-            ("port", 8080),
+            ("port", "8080"),
             ("mode", "socks"),
             ("http.port", "5000,5001"),
             ("https.port", "5002,5003"),
@@ -87,13 +87,13 @@ class ConfigTest(unittest.TestCase):
         cmd_options = {
             "command_type": "proxy",
             "host": "127.0.0.1",
-            "port": 8080,
+            "port": "8080",
             "mode": "socks",
             "viewer_channel": "tcp://*:5581"
         }
         ini_options = [
             ("host", "0.0.0.0"),
-            ("port", 8000),
+            ("port", "8000"),
             ("mode", "transparent"),
             ("http.port", "5000,5001"),
             ("https.port", "5002,5003"),
