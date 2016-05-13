@@ -1,5 +1,3 @@
-from http_parser.parser import HttpParser
-from http_parser.util import status_reasons
 from tornado import httputil
 import logging
 logging.basicConfig()

@@ -53,20 +53,20 @@ class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
         http_server_connection.start_serving(self)
 
     def start_request(self, server_conn, request_conn):
-        return _HttpReqToDest(self.context, request_conn)
+        return HttpReqToDest(self.context, request_conn)
 
     def on_close(self, server_conn):
         logger.debug("http layer done")
         _close_all_stream(self.context)
 
 
-class _HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
+class HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, src_conn):
-        super(_HttpReqToDest, self).__init__()
+        super(HttpReqToDest, self).__init__()
         self.context = context
         self.src_conn = src_conn
         self._chunks = []
-        self.interceptor = _HttpInterceptor(context, src_conn)
+        self.interceptor = HttpInterceptor(context, src_conn)
 
     def headers_received(self, start_line, headers):
         logger.debug("source request headers recieved")
@@ -92,9 +92,9 @@ class _HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
         _close_all_stream(self.context)
 
 
-class _HttpInterceptor(object):
+class HttpInterceptor(object):
     def __init__(self, context, src_conn):
-        super(_HttpInterceptor, self).__init__()
+        super(HttpInterceptor, self).__init__()
         self.context = context
         self.src_conn = src_conn
         self.dest_conn = tornado.http1connection.HTTP1Connection(
@@ -111,34 +111,33 @@ class _HttpInterceptor(object):
             tornado.httputil.RequestStartLine(req.method, req.path, req.version),
             req.headers)
         self.dest_conn.write(req.body)
-        self.dest_conn.read_response(_HttpRespToSrc(self.context, self))
+        self.dest_conn.read_response(HttpRespToSrc(self.context, self))
         logger.debug("destination request done")
 
     def resp_done(self, resp):
-        try:
-            logger.debug("destination response done")
-            self.resp = resp
-            self.context.interceptor.response(resp)
-            self.context.interceptor.record(self.req, self.resp)
-         
-            headers = resp.headers.copy()
-            if headers.get("Transfer-Encoding"):
-                del headers["Transfer-Encoding"]
-            self.src_conn.write_headers(
-                tornado.httputil.ResponseStartLine(resp.version, resp.code, resp.reason),
-                headers)
-            for chunk in resp.chunks:
-                logger.debug("write chunk with length {0}".format(len(chunk)))
-                self.src_conn.write(chunk)
-            self.src_conn.finish()
-            logger.debug("source response done")
-        except Exception as e:
-            logger.exception(e)
+        logger.debug("destination response done")
+        self.resp = resp
+        self.context.interceptor.response(resp)
+        self.context.interceptor.record(self.req, self.resp)
+
+        headers = resp.headers.copy()
+        # restriction on using tornado http connection
+        # pass Transfer-Encoding in header will let the source cannot receive chunks response correctly
+        if headers.get("Transfer-Encoding"):
+            del headers["Transfer-Encoding"]
+        self.src_conn.write_headers(
+            tornado.httputil.ResponseStartLine(resp.version, resp.code, resp.reason),
+            headers)
+        for chunk in resp.chunks:
+            logger.debug("write chunk with length {0}".format(len(chunk)))
+            self.src_conn.write(chunk)
+        self.src_conn.finish()
+        logger.debug("source response done")
 
 
-class _HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
+class HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, interceptor):
-        super(_HttpRespToSrc, self).__init__()
+        super(HttpRespToSrc, self).__init__()
         self.context = context
         self.interceptor = interceptor
         self._chunks = []
@@ -168,6 +167,9 @@ class _HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
 
 
 class TLSHandler(AbstractHandler):
+    '''
+    TLSHandler: handle tls connection
+    '''
     def process(self, context):
         ForwardLayer(context).process()
 
@@ -179,7 +181,7 @@ class DirectHandler(AbstractHandler):
 
 class ForwardLayer(object):
     '''
-    TLSLayer: passing all the src data to destination. Will not intercept anything
+    ForwardLayer: passing all the src data to destination. Will not intercept anything
     '''
     def __init__(self, context):
         super(ForwardLayer, self).__init__()
