@@ -1,16 +1,16 @@
 import struct
 import socket
 import platform
-import sys
 import datetime
 
 import tornado.tcpserver
 import tornado.iostream
 import tornado.netutil
 import tornado.gen
+import tornado.httputil
+import tornado.http1connection
 
 import http
-from http import HttpMessageBuilder
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
 
@@ -30,67 +30,141 @@ class AbstractHandler(object):
 
 
 class HttpHandler(AbstractHandler):
-    @tornado.gen.coroutine
     def process(self, context):
-        logger.debug("start HttpHandler process")
         http_layer = HttpLayer(context)
-        try:
-            while not http_layer.closed():
-                yield http_layer.process()
-        except tornado.iostream.StreamClosedError:
-            logger.warning("stream closed")
-        except:
-            logger.exception("http handle failed")
-        http_layer.close()
-        logger.debug("end HttpHandler process")
+        http_layer.process()
 
 
-class HttpLayer(object):
-    '''
-    HTTPServer: HTTPServer will handle http trafic.
-    '''
+def _close_all_stream(context):
+    logger.debug("stream close")
+    if not context.src_stream.closed():
+        context.src_stream.close()
+    if not context.dest_stream.closed():
+        context.dest_stream.close()
+
+
+class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
     def __init__(self, context):
+        super(HttpLayer, self).__init__()
         self.context = context
 
-    @tornado.gen.coroutine
     def process(self):
-        logger.debug("start HttpLayer process")
-        request = yield self.read(self.context.src_stream)
-        self.context.interceptor.request(request)
-        yield self.context.dest_stream.write(http.assemble_request(request))
-        response = yield self.read(self.context.dest_stream)
-        self.context.interceptor.response(response)
-        self.resp_to_src(response)
-        self.context.interceptor.record(request, response)
-        logger.debug("end HttpLayer process")
+        http_server_connection = tornado.http1connection.HTTP1ServerConnection(self.context.src_stream)
+        http_server_connection.start_serving(self)
 
-    @tornado.gen.coroutine
-    def read(self, stream):
-        logger.debug("start read")
-        http_message_builder = HttpMessageBuilder()
-        while not http_message_builder.is_done:
-            data = yield stream.read_bytes(sys.maxsize, partial=True)
-            http_message_builder.parse(data)
-        logger.debug("end read")
-        raise tornado.gen.Return(http_message_builder.build())
+    def start_request(self, server_conn, request_conn):
+        return _HttpReqToDest(self.context, request_conn)
 
-    @tornado.gen.coroutine
-    def resp_to_src(self, response):
-        logger.debug("start resp_to_src")
-        for chunk in http.assemble_responses(response):
-            yield self.context.src_stream.write(chunk)
-        logger.debug("end resp_to_src")
+    def on_close(self, server_conn):
+        logger.debug("http layer done")
+        _close_all_stream(self.context)
 
-    def closed(self):
-        return (
-            self.context.src_stream.closed() or
-            self.context.dest_stream.closed())
 
-    def close(self):
-        if not self.context.src_stream.closed():
-            self.context.src_stream.close()
-        if not self.context.dest_stream.closed():
-            self.context.dest_stream.close()
+class _HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
+    def __init__(self, context, src_conn):
+        super(_HttpReqToDest, self).__init__()
+        self.context = context
+        self.src_conn = src_conn
+        self._chunks = []
+        self.interceptor = _HttpInterceptor(context, src_conn)
+
+    def headers_received(self, start_line, headers):
+        logger.debug("source request headers recieved")
+        self.req = http.HttpRequest(
+            version=start_line.version,
+            method=start_line.method,
+            path=start_line.path,
+            headers=headers)
+
+    def data_received(self, chunk):
+        logger.debug("source request recieved")
+        self._chunks.append(chunk)
+
+    def finish(self):
+        self.req.body = b"".join(self._chunks)
+        try:
+            self.interceptor.req_done(self.req)
+        except Exception as e:
+            logger.exception(e)
+
+    def on_connection_close(self):
+        logger.debug("source connection close")
+        _close_all_stream(self.context)
+
+
+class _HttpInterceptor(object):
+    def __init__(self, context, src_conn):
+        super(_HttpInterceptor, self).__init__()
+        self.context = context
+        self.src_conn = src_conn
+        self.dest_conn = tornado.http1connection.HTTP1Connection(
+            context.dest_stream, True)
+        self.req = None
+        self.resp = None
+
+    def req_done(self, req):
+        logger.debug("source request done")
+        self.req = req
+        self.context.interceptor.request(req)
+
+        self.dest_conn.write_headers(
+            tornado.httputil.RequestStartLine(req.method, req.path, req.version),
+            req.headers)
+        self.dest_conn.write(req.body)
+        self.dest_conn.read_response(_HttpRespToSrc(self.context, self))
+        logger.debug("destination request done")
+
+    def resp_done(self, resp):
+        try:
+            logger.debug("destination response done")
+            self.resp = resp
+            self.context.interceptor.response(resp)
+            self.context.interceptor.record(self.req, self.resp)
+         
+            headers = resp.headers.copy()
+            if headers.get("Transfer-Encoding"):
+                del headers["Transfer-Encoding"]
+            self.src_conn.write_headers(
+                tornado.httputil.ResponseStartLine(resp.version, resp.code, resp.reason),
+                headers)
+            for chunk in resp.chunks:
+                logger.debug("write chunk with length {0}".format(len(chunk)))
+                self.src_conn.write(chunk)
+            self.src_conn.finish()
+            logger.debug("source response done")
+        except Exception as e:
+            logger.exception(e)
+
+
+class _HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
+    def __init__(self, context, interceptor):
+        super(_HttpRespToSrc, self).__init__()
+        self.context = context
+        self.interceptor = interceptor
+        self._chunks = []
+
+    def headers_received(self, start_line, headers):
+        logger.debug("destination response headers received")
+        self.resp = http.HttpResponse(
+            code=start_line.code,
+            reason=start_line.reason,
+            version=start_line.version,
+            headers=headers)
+
+    def data_received(self, chunk):
+        logger.debug("destination response data received")
+        self._chunks.append(chunk)
+
+    def finish(self):
+        try:
+            self.resp.parse_body(self._chunks)
+            self.interceptor.resp_done(self.resp)
+        except Exception as e:
+            logger.exception(e)
+
+    def on_connection_close(self):
+        logger.debug("destination connection closed")
+        _close_all_stream(self.context)
 
 
 class TLSHandler(AbstractHandler):
@@ -116,13 +190,6 @@ class ForwardLayer(object):
         self.context.src_stream.set_close_callback(self.on_src_close)
         self.context.dest_stream.read_until_close(streaming_callback=self.on_response)
         self.context.dest_stream.set_close_callback(self.on_dest_close)
-
-    def is_tls_protocol(self, data):
-        return (
-            data[0] == '\x16' and
-            data[1] == '\x03' and
-            data[2] in ('\x00', '\x01', '\x02', '\x03')
-        )
 
     def on_src_close(self):
         if not self.context.dest_stream.closed():
@@ -267,7 +334,7 @@ class TranparentProxyHandler(ProxyHandler):
     def __init__(self):
         super(TranparentProxyHandler, self).__init__()
 
-    def _get_dst_addr(self, src_stream):
+    def _get_dest_addr(self, src_stream):
         # Currently, we only support Linux
         if platform.system() != "Linux":
             raise NotImplementedError
@@ -282,12 +349,11 @@ class TranparentProxyHandler(ProxyHandler):
 
     @tornado.gen.coroutine
     def read_and_return_addr(self, src_stream):
-        raise tornado.gen.Return(self._get_dst_addr(src_stream))
+        raise tornado.gen.Return(self._get_dest_addr(src_stream))
 
 
 class ProxyServer(tornado.tcpserver.TCPServer):
     def __init__(self, config):
-
         super(ProxyServer, self).__init__()
         self.host = config["host"]
         self.port = config["port"]
@@ -305,7 +371,7 @@ class ProxyServer(tornado.tcpserver.TCPServer):
         try:
             dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
             dest_stream = yield self.create_dest_stream(dest_addr_info)
-            stream_handler = self.get_stream_handler(stream, dest_stream)
+            stream_handler = self._get_stream_handler(dest_addr_info[1])
             context = Context(stream,
                               dest_stream,
                               self.interceptor)
@@ -322,11 +388,10 @@ class ProxyServer(tornado.tcpserver.TCPServer):
             # fixme: due to fail fast, need raise exception here
             logger.warning("Unsupport proxy mode : {0}".format(self.mode))
 
-    def get_stream_handler(self, src_stream, dest_stream):
-        dest_port = dest_stream.socket.getpeername()[1]
-        if (dest_port == 80 or dest_port in self.additional_port["http"]):
+    def _get_stream_handler(self, port):
+        if (port == 80 or port in self.additional_port["http"]):
             return HttpHandler()
-        elif (dest_port == 443 or dest_port in self.additional_port["https"]):
+        elif (port == 443 or port in self.additional_port["https"]):
             return TLSHandler()
         else:
             return DirectHandler()
