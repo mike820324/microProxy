@@ -5,7 +5,6 @@ import datetime
 
 import tornado.tcpserver
 import tornado.iostream
-import tornado.netutil
 import tornado.gen
 import tornado.httputil
 import tornado.http1connection
@@ -261,7 +260,7 @@ class SocksProxyHandler(ProxyHandler):
 
     @tornado.gen.coroutine
     def socks_greeting(self, src_stream, data):
-        logger.info("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
+        logger.debug("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
         socks_init_data = struct.unpack('BBB', data)
         socks_version = socks_init_data[0]
         socks_nmethod = socks_init_data[1]
@@ -325,7 +324,7 @@ class SocksProxyHandler(ProxyHandler):
                                    host_length,
                                    *dest_addr_info)
 
-        logger.info("socks request to {0}:{1}".format(*dest_addr_info))
+        logger.debug("socks request to {0}:{1}".format(*dest_addr_info))
         yield src_stream.write(response)
         raise tornado.gen.Return(dest_addr_info)
 
@@ -368,7 +367,6 @@ class ProxyServer(tornado.tcpserver.TCPServer):
 
     @tornado.gen.coroutine
     def handle_stream(self, stream, port):
-        # fixme: expired time and timeout handler
         proxy_handler = self.get_proxy_handler()
         try:
             dest_addr_info = yield proxy_handler.read_and_return_addr(stream)
@@ -421,4 +419,5 @@ def start_proxy_server(config):
     try:
         curr_loop().start()
     except KeyboardInterrupt:
+        # fixme: gracefully stop everything
         logger.info("bye")
