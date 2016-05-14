@@ -22,8 +22,8 @@ class MsgPublisherInterceptor(BaseInterceptor):
 
     def record(self, request, response):
         message = {
-            "request": request.to_json(),
-            "response": response.to_json()
+            "request": request.serialize(),
+            "response": response.serialize()
         }
         self._publish(message)
 
