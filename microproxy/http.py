@@ -49,20 +49,8 @@ class HttpResponse(object):
         else:
             self.headers = headers
 
-    def parse_body(self, chunks):
-        self.body = b"".join(chunks)
-        if self._is_chunk():
-            self._chunks = chunks
-
-    def _is_chunk(self):
-        return self.headers.get("Transfer-Encoding") == "chunked"
-
-    @property
-    def chunks(self):
-        if self._is_chunk():
-            return self._chunks
-        else:
-            return [self.body]
+    def append_body(self, chunk):
+        self.body += bytes(chunk)
 
     def to_json(self):
         json = {}
