@@ -106,9 +106,10 @@ class HttpInterceptor(object):
         self.req = req
         self.context.interceptor.request(req)
 
-        self.dest_conn.write_headers(
-            tornado.httputil.RequestStartLine(req.method, req.path, req.version),
-            req.headers)
+        status_line = tornado.httputil.RequestStartLine(req.method,
+                                                        req.path,
+                                                        req.version)
+        self.dest_conn.write_headers(status_line, req.headers)
         self.dest_conn.write(req.body)
         self.dest_conn.read_response(HttpRespToSrc(self.context, self))
         logger.debug("destination request done")
@@ -124,12 +125,12 @@ class HttpInterceptor(object):
         # pass Transfer-Encoding in header will let the source cannot receive chunks response correctly
         if headers.get("Transfer-Encoding"):
             del headers["Transfer-Encoding"]
-        self.src_conn.write_headers(
-            tornado.httputil.ResponseStartLine(resp.version, resp.code, resp.reason),
-            headers)
-        for chunk in resp.chunks:
-            logger.debug("write chunk with length {0}".format(len(chunk)))
-            self.src_conn.write(chunk)
+
+        status_line = tornado.httputil.ResponseStartLine(resp.version,
+                                                         resp.code,
+                                                         resp.reason)
+        self.src_conn.write_headers(status_line, headers)
+        self.src_conn.write(resp.body)
         self.src_conn.finish()
         logger.debug("source response done")
 
@@ -139,23 +140,20 @@ class HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
         super(HttpRespToSrc, self).__init__()
         self.context = context
         self.interceptor = interceptor
-        self._chunks = []
 
     def headers_received(self, start_line, headers):
         logger.debug("destination response headers received")
-        self.resp = http.HttpResponse(
-            code=start_line.code,
-            reason=start_line.reason,
-            version=start_line.version,
-            headers=headers)
+        self.resp = http.HttpResponse(code=start_line.code,
+                                      reason=start_line.reason,
+                                      version=start_line.version,
+                                      headers=headers)
 
     def data_received(self, chunk):
         logger.debug("destination response data received")
-        self._chunks.append(chunk)
+        self.resp.append_body(chunk)
 
     def finish(self):
         try:
-            self.resp.parse_body(self._chunks)
             self.interceptor.resp_done(self.resp)
         except Exception as e:
             logger.exception(e)
