@@ -31,7 +31,8 @@ class AbstractHandler(object):
 class HttpHandler(AbstractHandler):
     def process(self, context):
         http_layer = HttpLayer(context)
-        http_layer.process()
+        http_server_connection = tornado.http1connection.HTTP1ServerConnection(context.src_stream)
+        http_server_connection.start_serving(http_layer)
 
 
 def _close_all_stream(context):
@@ -47,21 +48,17 @@ class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
         super(HttpLayer, self).__init__()
         self.context = context
 
-    def process(self):
-        http_server_connection = tornado.http1connection.HTTP1ServerConnection(self.context.src_stream)
-        http_server_connection.start_serving(self)
-
     def start_request(self, server_conn, request_conn):
-        return HttpReqToDest(self.context, request_conn)
+        return ProxyReqMessageDelegate(self.context, request_conn)
 
     def on_close(self, server_conn):
         logger.debug("http layer done")
         _close_all_stream(self.context)
 
 
-class HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
+class ProxyReqMessageDelegate(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, src_conn):
-        super(HttpReqToDest, self).__init__()
+        super(ProxyReqMessageDelegate, self).__init__()
         self.context = context
         self.src_conn = src_conn
         self._chunks = []
@@ -69,11 +66,10 @@ class HttpReqToDest(tornado.httputil.HTTPMessageDelegate):
 
     def headers_received(self, start_line, headers):
         logger.debug("source request headers recieved")
-        self.req = http.HttpRequest(
-            version=start_line.version,
-            method=start_line.method,
-            path=start_line.path,
-            headers=headers)
+        self.req = http.HttpRequest(version=start_line.version,
+                                    method=start_line.method,
+                                    path=start_line.path,
+                                    headers=headers)
 
     def data_received(self, chunk):
         logger.debug("source request recieved")
@@ -111,7 +107,7 @@ class HttpInterceptor(object):
                                                         req.version)
         self.dest_conn.write_headers(status_line, req.headers)
         self.dest_conn.write(req.body)
-        self.dest_conn.read_response(HttpRespToSrc(self.context, self))
+        self.dest_conn.read_response(ProxyRespMessageDelegate(self.context, self))
         logger.debug("destination request done")
 
     def resp_done(self, resp):
@@ -135,9 +131,9 @@ class HttpInterceptor(object):
         logger.debug("source response done")
 
 
-class HttpRespToSrc(tornado.httputil.HTTPMessageDelegate):
+class ProxyRespMessageDelegate(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, interceptor):
-        super(HttpRespToSrc, self).__init__()
+        super(ProxyRespMessageDelegate, self).__init__()
         self.context = context
         self.interceptor = interceptor
 
