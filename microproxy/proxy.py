@@ -97,6 +97,7 @@ class HttpInterceptor(object):
         self.req = None
         self.resp = None
 
+    @tornado.gen.coroutine
     def req_done(self, req):
         logger.debug("source request done")
         self.req = req
@@ -105,11 +106,16 @@ class HttpInterceptor(object):
         status_line = tornado.httputil.RequestStartLine(req.method,
                                                         req.path,
                                                         req.version)
-        self.dest_conn.write_headers(status_line, req.headers)
-        self.dest_conn.write(req.body)
-        self.dest_conn.read_response(ProxyRespMessageDelegate(self.context, self))
-        logger.debug("destination request done")
+        try:
+            yield self.dest_conn.write_headers(status_line, req.headers)
+            yield self.dest_conn.write(req.body)
+            yield self.dest_conn.read_response(ProxyRespMessageDelegate(self.context, self))
+            logger.debug("destination request done")
+        except tornado.iostream.StreamClosedError:
+            logger.debug("destination closed while writing/reading")
+            _close_all_stream(self.context)
 
+    @tornado.gen.coroutine
     def resp_done(self, resp):
         logger.debug("destination response done")
         self.resp = resp
@@ -125,10 +131,14 @@ class HttpInterceptor(object):
         status_line = tornado.httputil.ResponseStartLine(resp.version,
                                                          resp.code,
                                                          resp.reason)
-        self.src_conn.write_headers(status_line, headers)
-        self.src_conn.write(resp.body)
-        self.src_conn.finish()
-        logger.debug("source response done")
+        try:
+            yield self.src_conn.write_headers(status_line, headers)
+            yield self.src_conn.write(resp.body)
+            self.src_conn.finish()
+            logger.debug("source response done")
+        except tornado.iostream.StreamClosedError:
+            logger.debug("source stream closed while writing")
+            _close_all_stream(self.context)
 
 
 class ProxyRespMessageDelegate(tornado.httputil.HTTPMessageDelegate):
