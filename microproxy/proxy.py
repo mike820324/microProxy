@@ -53,7 +53,7 @@ class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
         return http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
-        self.dest_stream.close()
+        self.context.dest_stream.close()
         logger.debug("http layer done")
 
 
@@ -107,7 +107,8 @@ class HttpForwarder(object):
     def req_done(self, req):
         logger.debug("source request done")
         self.req = req
-        self.context.interceptor.request(req)
+        if self.context.interceptor:
+            self.context.interceptor.request(req)
 
         status_line = tornado.httputil.RequestStartLine(req.method,
                                                         req.path,
@@ -120,13 +121,16 @@ class HttpForwarder(object):
         except tornado.iostream.StreamClosedError:
             logger.debug("destination closed while writing/reading")
             self.close_src_conn()
+        except Exception as e:
+            logger.exception(e)
 
     @tornado.gen.coroutine
     def resp_done(self, resp):
         logger.debug("destination response done")
         self.resp = resp
-        self.context.interceptor.response(resp)
-        self.context.interceptor.record(self.req, self.resp)
+        if self.context.interceptor:
+            self.context.interceptor.response(resp)
+            self.context.interceptor.record(self.req, self.resp)
 
         headers = resp.headers.copy()
         # restriction on using tornado http connection
@@ -145,6 +149,8 @@ class HttpForwarder(object):
         except tornado.iostream.StreamClosedError:
             logger.debug("source stream closed while writing")
             self.close_dest_conn()
+        except Exception as e:
+            logger.exception(e)
 
     def close_src_conn(self):
         self.src_conn.close()
@@ -158,6 +164,7 @@ class HttpRespReader(tornado.httputil.HTTPMessageDelegate):
         super(HttpRespReader, self).__init__()
         self.context = context
         self.http_forwarder = http_forwarder
+        self._chunks = []
 
     def headers_received(self, start_line, headers):
         logger.debug("destination response headers received")
@@ -168,9 +175,10 @@ class HttpRespReader(tornado.httputil.HTTPMessageDelegate):
 
     def data_received(self, chunk):
         logger.debug("destination response data received")
-        self.resp.append_body(chunk)
+        self._chunks.append(chunk)
 
     def finish(self):
+        self.resp.body = b"".join(self._chunks)
         self.http_forwarder.resp_done(self.resp)
 
     def on_connection_close(self):

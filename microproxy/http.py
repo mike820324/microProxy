@@ -49,9 +49,6 @@ class HttpResponse(object):
         else:
             self.headers = headers
 
-    def append_body(self, chunk):
-        self.body += bytes(chunk)
-
     def serialize(self):
         json = {}
         json["version"] = self.version
