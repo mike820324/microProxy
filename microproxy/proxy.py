@@ -35,34 +35,31 @@ class HttpHandler(AbstractHandler):
         http_server_connection.start_serving(http_layer)
 
 
-def _close_all_stream(context):
-    logger.debug("stream close")
-    if not context.src_stream.closed():
-        context.src_stream.close()
-    if not context.dest_stream.closed():
-        context.dest_stream.close()
-
-
 class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
     def __init__(self, context):
         super(HttpLayer, self).__init__()
         self.context = context
 
     def start_request(self, server_conn, request_conn):
-        return ProxyReqMessageDelegate(self.context, request_conn)
+        dest_conn = tornado.http1connection.HTTP1Connection(
+            self.context.dest_stream, True)
+        http_forwarder = HttpForwarder(
+            self.context,
+            request_conn,
+            dest_conn)
+        return ProxyReqMessageDelegate(self.context, http_forwarder)
 
     def on_close(self, server_conn):
+        self.dest_stream.close()
         logger.debug("http layer done")
-        _close_all_stream(self.context)
 
 
 class ProxyReqMessageDelegate(tornado.httputil.HTTPMessageDelegate):
-    def __init__(self, context, src_conn):
+    def __init__(self, context, http_forwarder):
         super(ProxyReqMessageDelegate, self).__init__()
         self.context = context
-        self.src_conn = src_conn
+        self.http_forwarder = http_forwarder
         self._chunks = []
-        self.interceptor = HttpInterceptor(context, src_conn)
 
     def headers_received(self, start_line, headers):
         logger.debug("source request headers recieved")
@@ -77,23 +74,19 @@ class ProxyReqMessageDelegate(tornado.httputil.HTTPMessageDelegate):
 
     def finish(self):
         self.req.body = b"".join(self._chunks)
-        try:
-            self.interceptor.req_done(self.req)
-        except Exception as e:
-            logger.exception(e)
+        self.http_forwarder.req_done(self.req)
 
     def on_connection_close(self):
         logger.debug("source connection close")
-        _close_all_stream(self.context)
+        self.http_forwarder.close_dest_conn()
 
 
-class HttpInterceptor(object):
-    def __init__(self, context, src_conn):
-        super(HttpInterceptor, self).__init__()
+class HttpForwarder(object):
+    def __init__(self, context, src_conn, dest_conn):
+        super(HttpForwarder, self).__init__()
         self.context = context
         self.src_conn = src_conn
-        self.dest_conn = tornado.http1connection.HTTP1Connection(
-            context.dest_stream, True)
+        self.dest_conn = dest_conn
         self.req = None
         self.resp = None
 
@@ -113,7 +106,7 @@ class HttpInterceptor(object):
             logger.debug("destination request done")
         except tornado.iostream.StreamClosedError:
             logger.debug("destination closed while writing/reading")
-            _close_all_stream(self.context)
+            self.close_src_conn()
 
     @tornado.gen.coroutine
     def resp_done(self, resp):
@@ -138,14 +131,20 @@ class HttpInterceptor(object):
             logger.debug("source response done")
         except tornado.iostream.StreamClosedError:
             logger.debug("source stream closed while writing")
-            _close_all_stream(self.context)
+            self.close_dest_conn()
+
+    def close_src_conn(self):
+        self.src_conn.close()
+
+    def close_dest_conn(self):
+        self.dest_conn.close()
 
 
 class ProxyRespMessageDelegate(tornado.httputil.HTTPMessageDelegate):
-    def __init__(self, context, interceptor):
+    def __init__(self, context, http_forwarder):
         super(ProxyRespMessageDelegate, self).__init__()
         self.context = context
-        self.interceptor = interceptor
+        self.http_forwarder = http_forwarder
 
     def headers_received(self, start_line, headers):
         logger.debug("destination response headers received")
@@ -159,14 +158,11 @@ class ProxyRespMessageDelegate(tornado.httputil.HTTPMessageDelegate):
         self.resp.append_body(chunk)
 
     def finish(self):
-        try:
-            self.interceptor.resp_done(self.resp)
-        except Exception as e:
-            logger.exception(e)
+        self.http_forwarder.resp_done(self.resp)
 
     def on_connection_close(self):
         logger.debug("destination connection closed")
-        _close_all_stream(self.context)
+        self.http_forwarder.close_src_conn()
 
 
 class TLSHandler(AbstractHandler):
