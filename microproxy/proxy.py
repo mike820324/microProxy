@@ -31,14 +31,17 @@ class AbstractHandler(object):
 class HttpHandler(AbstractHandler):
     def process(self, context):
         http_layer = HttpLayer(context)
-        http_server_connection = tornado.http1connection.HTTP1ServerConnection(context.src_stream)
-        http_server_connection.start_serving(http_layer)
+        http_layer.process()
 
 
 class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
     def __init__(self, context):
         super(HttpLayer, self).__init__()
         self.context = context
+
+    def process(self):
+        http_server_connection = tornado.http1connection.HTTP1ServerConnection(self.context.src_stream)
+        http_server_connection.start_serving(self)
 
     def start_request(self, server_conn, request_conn):
         dest_conn = tornado.http1connection.HTTP1Connection(
@@ -47,16 +50,16 @@ class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
             self.context,
             request_conn,
             dest_conn)
-        return ProxyReqMessageDelegate(self.context, http_forwarder)
+        return http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
         self.dest_stream.close()
         logger.debug("http layer done")
 
 
-class ProxyReqMessageDelegate(tornado.httputil.HTTPMessageDelegate):
+class HttpReqReader(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, http_forwarder):
-        super(ProxyReqMessageDelegate, self).__init__()
+        super(HttpReqReader, self).__init__()
         self.context = context
         self.http_forwarder = http_forwarder
         self._chunks = []
@@ -90,6 +93,16 @@ class HttpForwarder(object):
         self.req = None
         self.resp = None
 
+    def create_req_reader(self):
+        return HttpReqReader(
+            self.context,
+            self)
+
+    def create_resp_reader(self):
+        return HttpRespReader(
+            self.context,
+            self)
+
     @tornado.gen.coroutine
     def req_done(self, req):
         logger.debug("source request done")
@@ -102,7 +115,7 @@ class HttpForwarder(object):
         try:
             yield self.dest_conn.write_headers(status_line, req.headers)
             yield self.dest_conn.write(req.body)
-            yield self.dest_conn.read_response(ProxyRespMessageDelegate(self.context, self))
+            yield self.dest_conn.read_response(self.create_resp_reader())
             logger.debug("destination request done")
         except tornado.iostream.StreamClosedError:
             logger.debug("destination closed while writing/reading")
@@ -140,9 +153,9 @@ class HttpForwarder(object):
         self.dest_conn.close()
 
 
-class ProxyRespMessageDelegate(tornado.httputil.HTTPMessageDelegate):
+class HttpRespReader(tornado.httputil.HTTPMessageDelegate):
     def __init__(self, context, http_forwarder):
-        super(ProxyRespMessageDelegate, self).__init__()
+        super(HttpRespReader, self).__init__()
         self.context = context
         self.http_forwarder = http_forwarder
 
