@@ -2,9 +2,10 @@ import unittest
 import tornado.testing
 
 TEST_MODULES = [
-    "tests.test_proxy",
     "tests.test_http",
     "tests.test_config",
+    "tests.test_proxy",
+    "tests.layer.test_http1",
     "tests.mode.test_transparent",
     "tests.mode.test_socks"
 ]

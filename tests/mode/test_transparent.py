@@ -6,13 +6,13 @@ from tornado.locks import Event
 from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
-from microproxy.mode import TranparentProxyHandler
+from microproxy.mode import TransparentProxyHandler
 
 
 class TranparentProxyHandlerTest(AsyncTestCase):
     def setUp(self):
         super(TranparentProxyHandlerTest, self).setUp()
-        self.handler = TranparentProxyHandler()
+        self.handler = TransparentProxyHandler()
         self.asyncSetUp()
 
     @gen_test
