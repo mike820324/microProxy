@@ -37,7 +37,6 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
     def __init__(self, context):
         super(HttpReqReader, self).__init__()
         self.context = context
-        self._chunks = []
 
     def headers_received(self, start_line, headers):
         logger.debug("source request headers recieved")
@@ -48,10 +47,9 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
 
     def data_received(self, chunk):
         logger.debug("source request recieved")
-        self._chunks.append(chunk)
+        self.req.body += bytes(chunk)
 
     def finish(self):
-        self.req.body = b"".join(self._chunks)
         signal("request_done").send(self)
 
     def on_connection_close(self):
@@ -146,7 +144,6 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
     def __init__(self, context):
         super(HttpRespReader, self).__init__()
         self.context = context
-        self._chunks = []
 
     def headers_received(self, start_line, headers):
         logger.debug("destination response headers received")
@@ -157,10 +154,9 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
 
     def data_received(self, chunk):
         logger.debug("destination response data received")
-        self._chunks.append(chunk)
+        self.resp.body += bytes(chunk)
 
     def finish(self):
-        self.resp.body = b"".join(self._chunks)
         signal("response_done").send(self)
 
     def on_connection_close(self):
