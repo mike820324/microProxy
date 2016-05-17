@@ -5,6 +5,9 @@ from microproxy.config import parse_config
 
 if __name__ == "__main__":
     config = parse_config()
+    if config is None:
+        exit(0)
+
     if config["command_type"] == "proxy":
         proxy.start_proxy_server(config)
 
