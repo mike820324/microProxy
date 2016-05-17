@@ -2,7 +2,6 @@ import zmq
 from zmq.eventloop import zmqstream
 
 from base import BaseInterceptor
-from microproxy.http import serialize
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
@@ -23,8 +22,8 @@ class MsgPublisherInterceptor(BaseInterceptor):
 
     def record(self, request, response):
         message = {
-            "request": serialize(request),
-            "response": serialize(response)
+            "request": request.serialize(),
+            "response": response.serialize()
         }
         self._publish(message)
 

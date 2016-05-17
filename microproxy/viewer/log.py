@@ -18,8 +18,8 @@ def start(config):
         logger.debug("waiting for next message")
         data = socket.recv()
         message = json.loads(data)
-        host = message["request"]["header"]["Host"]
-        status = message["response"]["status"]
+        host = message["request"]["headers"]["Host"]
+        status = message["response"]["code"]
         method = message["request"]["method"]
-        url = message["request"]["url"]
+        url = message["request"]["path"]
         logger.info("{0} {1} {2} {3}".format(host, status, method, url))
