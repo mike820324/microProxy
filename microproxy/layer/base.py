@@ -13,12 +13,10 @@ class ForwardLayer(object):
         self.context.dest_stream.set_close_callback(self.on_dest_close)
 
     def on_src_close(self):
-        if not self.context.dest_stream.closed():
-            self.context.dest_stream.close()
+        self.context.dest_stream.close()
 
     def on_dest_close(self):
-        if not self.context.src_stream.closed():
-            self.context.src_stream.close()
+        self.context.src_stream.close()
 
     def on_request(self, data):
         if not self.context.dest_stream.closed():
