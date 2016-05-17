@@ -44,12 +44,11 @@ class HttpLayer(tornado.httputil.HTTPServerConnectionDelegate):
         http_server_connection.start_serving(self)
 
     def start_request(self, server_conn, request_conn):
-        dest_conn = tornado.http1connection.HTTP1Connection(
-            self.context.dest_stream, True)
-        http_forwarder = HttpForwarder(
-            self.context,
-            request_conn,
-            dest_conn)
+        dest_conn = tornado.http1connection.HTTP1Connection(self.context.dest_stream,
+                                                            True)
+        http_forwarder = HttpForwarder(self.context,
+                                       request_conn,
+                                       dest_conn)
         return http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
@@ -94,14 +93,12 @@ class HttpForwarder(object):
         self.resp = None
 
     def create_req_reader(self):
-        return HttpReqReader(
-            self.context,
-            self)
+        return HttpReqReader(self.context,
+                             self)
 
     def create_resp_reader(self):
-        return HttpRespReader(
-            self.context,
-            self)
+        return HttpRespReader(self.context,
+                              self)
 
     @tornado.gen.coroutine
     def req_done(self, req):
