@@ -1,109 +1,175 @@
 import platform
 import struct
-import datetime
-import sys
-from mock import Mock, PropertyMock, call
-from tornado.concurrent import Future
-import tornado.testing
-from tornado.testing import AsyncTestCase
-import tornado.gen
+import socket
 
-from microproxy import proxy
+from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
+from tornado.locks import Event, Semaphore
+from tornado.iostream import IOStream
+from tornado.netutil import add_accept_handler
+
+from microproxy.proxy import SocksProxyHandler, TranparentProxyHandler, Context, HttpLayer
 
 
 class SocksProxyHandlerTest(AsyncTestCase):
     def setUp(self):
         super(SocksProxyHandlerTest, self).setUp()
-        self.handler = proxy.SocksProxyHandler()
+        self.handler = SocksProxyHandler()
+        self.asyncSetUp()
 
-    @tornado.testing.gen_test
-    def test_read_and_return_addr(self):
-        stream_source = Mock()
-        stream_source.side_effect = [
-            _create_future(struct.pack("BBB", 0x05, 0x01, 0x00)),
-            _create_future(struct.pack("!BBxB", 0x05, 0x01, 0x01)),
-            _create_future(struct.pack("!IH", 0x7F000001, 80))]
-        stream = Mock()
-        stream.read_bytes = stream_source
-        socket = Mock()
-        socket.getpeername = Mock(return_value=["127.0.0.1"])
-        type(stream).socket = PropertyMock(return_value=socket)
-        stream.write = Mock(return_value=_create_future(None))
+    @gen_test
+    def asyncSetUp(self):
+        listener, port = bind_unused_port()
+        event = Event()
 
-        addr_host, addr_port = yield self.handler.read_and_return_addr(stream)
+        def accept_callback(conn, addr):
+            self.server_stream = IOStream(conn)
+            self.addCleanup(self.server_stream.close)
+            event.set()
 
-        assert addr_host == "127.0.0.1"
-        assert addr_port == 80
+        add_accept_handler(listener, accept_callback)
+        self.client_stream = IOStream(socket.socket())
+        self.addCleanup(self.client_stream.close)
+        yield [self.client_stream.connect(('127.0.0.1', port)),
+               event.wait()]
+        self.io_loop.remove_handler(listener)
+        listener.close()
 
-        stream_source.assert_has_calls([
-            call(3),
-            call(4),
-            call(6)
-        ])
-        stream.write.assert_has_calls([
-            call(struct.pack("BB", 0x05, 0)),
-            call(struct.pack("!BBxBIH", 0x05, 0x00, 0x01, 0x7F000001, 80))
-        ])
+    @gen_test
+    def test_read_and_return_ipv4_addr(self):
+        addr_future = self.handler.read_and_return_addr(self.server_stream)
+        yield self.client_stream.write(struct.pack("BBB", 0x05, 0x01, 0x00))
+        data = yield self.client_stream.read_bytes(2)
+        socks_version, _ = struct.unpack("BB", data)
+        assert socks_version == 5
+
+        yield self.client_stream.write(struct.pack("!BBxBIH", 0x05, 0x01, 0x01, 0x7F000001, 80))
+        data = yield self.client_stream.read_bytes(10)
+        socks_version, resp_status, addr_type, host, port = struct.unpack("!BBxBIH", data)
+        assert socks_version == 5
+        assert resp_status == 0
+        assert addr_type == 1
+        assert host == 0x7F000001
+        assert port == 80
+
+        host, port = yield addr_future
+        self.server_stream.close()
+        assert host == "127.0.0.1"
+        assert port == 80
+
+    @gen_test
+    def test_read_and_return_host_addr(self):
+        addr_future = self.handler.read_and_return_addr(self.server_stream)
+        yield self.client_stream.write(struct.pack("BBB", 0x05, 0x01, 0x00))
+        data = yield self.client_stream.read_bytes(2)
+        socks_version, _ = struct.unpack("BB", data)
+        assert socks_version == 5
+
+        yield self.client_stream.write(struct.pack("!BBxBB21sH", 0x05, 0x01, 0x03, 0x15, "mike820324.github.com", 80))
+        data = yield self.client_stream.read_bytes(28)
+        socks_version, resp_status, addr_type, host, port = struct.unpack("!BBxBx21sH", data)
+        assert socks_version == 5
+        assert resp_status == 0
+        assert addr_type == 3
+        assert host == "mike820324.github.com"
+        assert port == 80
+
+        host, port = yield addr_future
+        self.server_stream.close()
+        assert host == "mike820324.github.com"
+        assert port == 80
 
 
 class TranparentProxyHandlerTest(AsyncTestCase):
     def setUp(self):
         super(TranparentProxyHandlerTest, self).setUp()
-        self.handler = proxy.TranparentProxyHandler()
+        self.handler = TranparentProxyHandler()
+        self.asyncSetUp()
 
-    @tornado.testing.gen_test
+    @gen_test
+    def asyncSetUp(self):
+        listener, port = bind_unused_port()
+        self.port = port
+        event = Event()
+
+        def accept_callback(conn, addr):
+            self.server_stream = IOStream(conn)
+            self.addCleanup(self.server_stream.close)
+            event.set()
+
+        add_accept_handler(listener, accept_callback)
+        self.client_stream = IOStream(socket.socket())
+        self.addCleanup(self.client_stream.close)
+        yield [self.client_stream.connect(('127.0.0.1', port)),
+               event.wait()]
+        self.io_loop.remove_handler(listener)
+        listener.close()
+
+    @gen_test
     def test_read_and_return_addr(self):
         if platform.system() == "Linux":
-            socket = Mock()
-            socket.getsockopt = Mock(return_value=struct.pack(
-                "!HHBBBBxxxxxxxx",
-                0,
-                80,
-                0x7F,
-                0x00,
-                0x00,
-                0x01))
-            stream = Mock()
-            type(stream).socket = PropertyMock(return_value=socket)
-            addr_host, addr_port = yield self.handler.read_and_return_addr(stream)
-            assert addr_host == "127.0.0.1"
-            assert addr_port == 80
+            addr_future = self.handler.read_and_return_addr(self.server_stream)
+
+            host, port = yield addr_future
+            assert host == "127.0.0.1"
+            assert port == self.port
+        self.server_stream.close()
 
 
 class HttpLayerTest(AsyncTestCase):
     def setUp(self):
         super(HttpLayerTest, self).setUp()
-        self.context = proxy.Context(Mock(), Mock(), Mock())
-        self.http_layer = proxy.HttpLayer(self.context)
+        self.asyncSetUp()
 
-    @tornado.testing.gen_test
-    def test_process_success(self):
-        self.context.src_stream.read_bytes = Mock(return_value=_create_future(
-            b"GET / HTTP/1.1\r\n" +
-            b"host: github.com\r\n\r\n"))
-        self.context.src_stream.write = Mock(return_value=_create_future(None))
-        self.context.dest_stream.read_bytes = Mock(side_effect=[
-            _create_future(
-                b"HTTP/1.1 200 OK\r\n" +
-                b"Content-Type: text/html\r\n\r\n" +
-                b"<html></html>"),
-            _create_future(b"")
-        ])
-        self.context.dest_stream.write = Mock(return_value=_create_future(None))
+    @gen_test
+    def asyncSetUp(self):
+        listener, port = bind_unused_port()
+        semaphore = Semaphore(0)
+        server_streams = []
 
-        self.context.interceptor.request = Mock()
-        self.context.interceptor.response = Mock()
-        self.context.interceptor.record = Mock()
+        def accept_callback(conn, addr):
+            server_stream = IOStream(conn)
+            server_streams.append(server_stream)
+            self.addCleanup(server_stream.close)
+            semaphore.release()
 
-        yield tornado.gen.with_timeout(datetime.timedelta(seconds=1), self.http_layer.process())
-        self.context.src_stream.read_bytes.assert_called_with(sys.maxsize, partial=True)
-        self.context.dest_stream.read_bytes.assert_called_with(sys.maxsize, partial=True)
-        assert self.context.interceptor.request.called
-        assert self.context.interceptor.response.called
-        assert self.context.interceptor.record.called
+        add_accept_handler(listener, accept_callback)
+        client_streams = [IOStream(socket.socket()), IOStream(socket.socket())]
+        for client_stream in client_streams:
+            self.addCleanup(client_stream.close)
+            yield [client_stream.connect(('127.0.0.1', port)),
+                   semaphore.acquire()]
+        self.io_loop.remove_handler(listener)
+        listener.close()
 
+        self.context = Context(server_streams[0], client_streams[1], None)
+        self.src_stream = client_streams[0]
+        self.dest_stream = server_streams[1]
+        self.http_layer = HttpLayer(self.context)
 
-def _create_future(result):
-    future = Future()
-    future.set_result(result)
-    return future
+    @gen_test
+    def test_process_normal(self):
+        self.http_layer.process()
+        self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                            b"\r\n"]))
+        req_header = yield self.dest_stream.read_until("\r\n\r\n")
+        assert req_header == b"\r\n".join([b"GET /index HTTP/1.1",
+                                           b"\r\n"])
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
+                                                   b"Transfer-Encoding: chunked\r\n",
+                                                   b"4",
+                                                   b"Body",
+                                                   b"0",
+                                                   b"\r\n"]))
+
+        resp = yield self.src_stream.read_until(b"0\r\n\r\n")
+        assert resp == b"\r\n".join([b"HTTP/1.1 200 OK",
+                                     b"Transfer-Encoding: chunked\r\n",
+                                     b"4",
+                                     b"Body",
+                                     b"0",
+                                     b"\r\n"])
+
+        self.dest_stream.close()
+        self.context.dest_stream.close()
+        self.context.src_stream.close()
+        self.src_stream.close()
