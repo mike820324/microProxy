@@ -152,31 +152,25 @@ class ConfigParserBuilder(object):
         return parser
 
 
-def is_config_correct(config):
+def verify_config_or_raise_error(config):
     fieldInfos = ConfigSections[config["command_type"]]
     require_fields = [k for k, v in fieldInfos.iteritems() if v["is_require"]]
     missing_fields = [field for field in require_fields if field not in config]
-    unknown_fields = [field for field in config if field not in fieldInfos]
+    if missing_fields:
+        raise KeyError("missing config field: [{0}]".format(",".join(missing_fields)))
 
-    error_fields = []
     for field in config:
         try:
             if config[field] not in fieldInfos[field]["choices"]:
-                error_fields.append((field, config[field]))
+                raise ValueError("illgeal value: {0} at field: {1}".format(config[field], field))
         except KeyError:
             pass
 
+    unknown_fields = [field for field in config if field not in fieldInfos]
     for field in unknown_fields:
         if field == "command_type":
             continue
         logger.warning("Unknonw Field Name {0}".format(field))
-
-    for missing_field in missing_fields:
-        logger.error("Missing Require Field {0}".format(missing_field))
-    for error_field in error_fields:
-        logger.error("Incorect Value {1} for Field {0}".format(*error_field))
-
-    return (len(missing_fields) + len(error_fields)) == 0
 
 
 def parse_config():
@@ -192,7 +186,5 @@ def parse_config():
 
     config = Config(ini_parser, vars(cmd_config))
 
-    if is_config_correct(config):
-        return config
-    else:
-        return None
+    verify_config_or_raise_error(config)
+    return config

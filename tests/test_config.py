@@ -1,6 +1,6 @@
 import unittest
 from mock import Mock
-from microproxy.config import Config, ConfigParserBuilder, is_config_correct
+from microproxy.config import Config, ConfigParserBuilder, verify_config_or_raise_error
 
 
 class ConfigTest(unittest.TestCase):
@@ -124,7 +124,8 @@ class ConfigTest(unittest.TestCase):
 
         config = Config(ini_parser, cmd_options)
 
-        assert is_config_correct(config) is False
+        with self.assertRaises(KeyError):
+            verify_config_or_raise_error(config)
 
     def test_incorect_value(self):
         cmd_options = {
@@ -141,4 +142,5 @@ class ConfigTest(unittest.TestCase):
 
         config = Config(ini_parser, cmd_options)
 
-        assert is_config_correct(config) is False
+        with self.assertRaises(ValueError):
+            verify_config_or_raise_error(config)
