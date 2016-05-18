@@ -133,7 +133,9 @@ class ConfigTest(unittest.TestCase):
             "host": "127.0.0.1",
             "port": "5580",
             "mode": "not_exist",
-            "viewer_channel": "tcp://*:5581"
+            "viewer_channel": "tcp://*:5581",
+            "certfile": "/tmp/abc",
+            "keyfile": "/tmp/abc"
         }
 
         ini_options = []

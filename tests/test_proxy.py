@@ -15,7 +15,9 @@ class ProxyServerHandlerTest(AsyncTestCase):
         config = {
             "mode": "socks",
             "http_port": [],
-            "https_port": []
+            "https_port": [],
+            "certfile": None,
+            "keyfile": None
         }
         proxy_handler = ProxyServerHandler(config, interceptor=Mock()).get_proxy_handler()
         assert isinstance(proxy_handler, SocksProxyHandler)
@@ -24,7 +26,9 @@ class ProxyServerHandlerTest(AsyncTestCase):
         config = {
             "mode": "transparent",
             "http_port": [],
-            "https_port": []
+            "https_port": [],
+            "certfile": None,
+            "keyfile": None
         }
         proxy_handler = ProxyServerHandler(config, interceptor=Mock()).get_proxy_handler()
         assert isinstance(proxy_handler, TransparentProxyHandler)
