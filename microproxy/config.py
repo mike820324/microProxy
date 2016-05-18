@@ -79,7 +79,7 @@ class Config(object):
         cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
         self.__config = file_config.copy()
         self.__config.update(cmd_config)
-        self.typeTransform(self.__config, fieldInfos)
+        self.__config.update(self.typeTransform(self.__config, fieldInfos))
 
     def typeTransform(self, config, fieldInfos):
         new_config = {}
