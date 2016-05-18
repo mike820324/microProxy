@@ -28,16 +28,16 @@ ConfigProxyFields = {
     "http_port": {
         "cmd_flags": ["--http-port"],
         "help": "Add additional http port",
-        "type": "int",
-        "is_list": True,
+        "type": "list",
+        "list_type": "int",
         "is_require": False
 
     },
     "https_port": {
         "cmd_flags": ["--https-port"],
         "help": "Add additional https port",
-        "type": "int",
-        "is_list": True,
+        "type": "list",
+        "list_type": "int",
         "is_require": False
     },
     "viewer_channel": {
@@ -87,16 +87,17 @@ class Config(object):
             if field not in fieldInfos:
                 continue
 
-            if "is_list" in fieldInfos[field] and fieldInfos[field]["is_list"]:
-                if fieldInfos[field]["type"] == "int":
+            if fieldInfos[field]["type"] == "int":
+                new_config[field] = int(config[field])
+
+            elif fieldInfos[field]["type"] == "list":
+                if fieldInfos[field]["list_type"] == "int":
                     new_config[field] = map(int, config[field].split(","))
                 else:
                     new_config[field] = config[field].split(",")
+
             else:
-                if fieldInfos[field]["type"] == "int":
-                    new_config[field] = int(config[field])
-                else:
-                    new_config[field] = config[field]
+                new_config[field] = config[field]
 
         return new_config
 
