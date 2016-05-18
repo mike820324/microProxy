@@ -54,6 +54,9 @@ class ProxyServerHandler(object):
             self.https_ports = config["https_port"]
         except KeyError:
             self.http_ports = []
+        self.cert_file = config["certfile"]
+        self.key_file = config["keyfile"]
+
         if interceptor is None:
             interceptor = self.create_interceptor(config)
         self.interceptor = interceptor
@@ -90,7 +93,8 @@ class ProxyServerHandler(object):
         if (port == 443 or port in self.https_ports):
             try:
                 src_ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-                src_ssl_context.load_cert_chain(certfile="/tmp/cert.crt", keyfile="/tmp/cert.key")
+                src_ssl_context.load_cert_chain(certfile=self.cert_file,
+                                                keyfile=self.key_file)
                 src_stream = yield src_stream.start_tls(server_side=True, ssl_options=src_ssl_context)
 
                 # Will not verify the server side
