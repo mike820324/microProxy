@@ -1,4 +1,5 @@
 import socket
+import ssl
 import datetime
 
 from tornado import tcpserver
@@ -28,7 +29,7 @@ class ProxyServer(tcpserver.TCPServer):
         try:
             host, port = yield self.proxy_server_handler.read_and_return_addr(stream)
             dest_stream = yield self.proxy_server_handler.create_dest_stream(host, port)
-            self.proxy_server_handler.run_next_layer(stream, dest_stream, host, port)
+            yield self.proxy_server_handler.run_next_layer(stream, dest_stream, host, port)
         except gen.TimeoutError:
             stream.close()
         except Exception as e:
@@ -84,7 +85,23 @@ class ProxyServerHandler(object):
             logger.warning("Connect to Destination Timeout")
             raise
 
+    @gen.coroutine
     def run_next_layer(self, src_stream, dest_stream, host, port):
+        if (port == 443 or port in self.https_ports):
+            try:
+                src_ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                src_ssl_context.load_cert_chain(certfile="/tmp/cert.crt", keyfile="/tmp/cert.key")
+                src_stream = yield src_stream.start_tls(server_side=True, ssl_options=src_ssl_context)
+
+                # Will not verify the server side
+                dest_ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+                dest_ssl_context.check_hostname = False
+                dest_ssl_context.verify_mode = ssl.CERT_NONE
+
+                dest_stream = yield dest_stream.start_tls(server_side=False, ssl_options=dest_ssl_context)
+            except Exception as e:
+                logger.exception(e)
+
         context = Context(src_stream=src_stream,
                           dest_stream=dest_stream,
                           interceptor=self.interceptor,
@@ -93,11 +110,11 @@ class ProxyServerHandler(object):
         self.get_layer(context).process()
 
     def get_layer(self, context):
-        if (context.port == 80 or context.port in self.http_ports):
+        http_ports = [80, 443]
+        http_ports.extend(self.http_ports)
+        http_ports.extend(self.https_ports)
+        if context.port in http_ports:
             return Http1Layer(context)
-        elif (context.port == 443 or context.port in self.https_ports):
-            # tls not implement, so it process with forward layer
-            return ForwardLayer(context)
         else:
             return ForwardLayer(context)
 
