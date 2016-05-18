@@ -1,5 +1,4 @@
 import socket
-import ssl
 import datetime
 
 from tornado import tcpserver
@@ -9,7 +8,7 @@ from tornado import gen
 from mode import SocksProxyHandler, TransparentProxyHandler
 from context import Context
 from utils import curr_loop, get_logger
-from layer import Http1Layer, ForwardLayer
+from layer import Http1Layer, ForwardLayer, TlsLayer
 from interceptor import MsgPublisherInterceptor as Interceptor
 
 logger = get_logger(__name__)
@@ -45,6 +44,7 @@ class ProxyServer(tcpserver.TCPServer):
 class ProxyServerHandler(object):
     def __init__(self, config, interceptor=None):
         super(ProxyServerHandler, self).__init__()
+        self.config = config
         self.mode = config["mode"]
         try:
             self.http_ports = config["http_port"]
@@ -54,8 +54,6 @@ class ProxyServerHandler(object):
             self.https_ports = config["https_port"]
         except KeyError:
             self.http_ports = []
-        self.cert_file = config["certfile"]
-        self.key_file = config["keyfile"]
 
         if interceptor is None:
             interceptor = self.create_interceptor(config)
@@ -90,35 +88,19 @@ class ProxyServerHandler(object):
 
     @gen.coroutine
     def run_next_layer(self, src_stream, dest_stream, host, port):
-        if (port == 443 or port in self.https_ports):
-            try:
-                src_ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-                src_ssl_context.load_cert_chain(certfile=self.cert_file,
-                                                keyfile=self.key_file)
-                src_stream = yield src_stream.start_tls(server_side=True, ssl_options=src_ssl_context)
-
-                # Will not verify the server side
-                dest_ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-                dest_ssl_context.check_hostname = False
-                dest_ssl_context.verify_mode = ssl.CERT_NONE
-
-                dest_stream = yield dest_stream.start_tls(server_side=False, ssl_options=dest_ssl_context)
-            except Exception as e:
-                logger.exception(e)
-
         context = Context(src_stream=src_stream,
                           dest_stream=dest_stream,
                           interceptor=self.interceptor,
                           host=host,
-                          port=port)
+                          port=port,
+                          config=self.config)
         self.get_layer(context).process()
 
     def get_layer(self, context):
-        http_ports = [80, 443]
-        http_ports.extend(self.http_ports)
-        http_ports.extend(self.https_ports)
-        if context.port in http_ports:
+        if context.port == 80 or context.port in self.http_ports:
             return Http1Layer(context)
+        elif context.port == 443 or context.port in self.https_ports:
+            return TlsLayer(context)
         else:
             return ForwardLayer(context)
 
