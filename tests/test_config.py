@@ -1,6 +1,6 @@
 import unittest
 from mock import Mock
-from microproxy.config import Config, ConfigParserBuilder
+from microproxy.config import Config, ConfigParserBuilder, verify_config_or_raise_error
 
 
 class ConfigTest(unittest.TestCase):
@@ -109,3 +109,38 @@ class ConfigTest(unittest.TestCase):
         assert config["http_port"] == [5000, 5001]
         assert config["https_port"] == [5002, 5003]
         assert config["viewer_channel"] == "tcp://*:5581"
+
+    def test_missing_requre_field(self):
+        cmd_options = {
+            "command_type": "proxy",
+            "host": "127.0.0.1",
+            "mode": "socks",
+            "viewer_channel": "tcp://*:5581"
+        }
+
+        ini_options = []
+        ini_parser = Mock()
+        ini_parser.items = Mock(return_value=ini_options)
+
+        config = Config(ini_parser, cmd_options)
+
+        with self.assertRaises(KeyError):
+            verify_config_or_raise_error(config)
+
+    def test_incorect_value(self):
+        cmd_options = {
+            "command_type": "proxy",
+            "host": "127.0.0.1",
+            "port": "5580",
+            "mode": "not_exist",
+            "viewer_channel": "tcp://*:5581"
+        }
+
+        ini_options = []
+        ini_parser = Mock()
+        ini_parser.items = Mock(return_value=ini_options)
+
+        config = Config(ini_parser, cmd_options)
+
+        with self.assertRaises(ValueError):
+            verify_config_or_raise_error(config)

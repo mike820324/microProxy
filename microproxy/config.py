@@ -9,35 +9,42 @@ ConfigProxyFields = {
     "host": {
         "cmd_flags": ["--host"],
         "help": "Specify the proxy host",
-        "type": "string"
+        "type": "string",
+        "is_require": True
     },
     "port": {
         "cmd_flags": ["--port"],
         "help": "Specify the proxy listening port",
-        "type": "int"
+        "type": "int",
+        "is_require": True
     },
     "mode": {
         "cmd_flags": ["--mode"],
         "help": "Speficy the proxy mode, currently support socks proxy and transparent proxy",
         "choices": ["socks", "transparent"],
-        "type": "string"
+        "type": "string",
+        "is_require": True
     },
     "http_port": {
         "cmd_flags": ["--http-port"],
         "help": "Add additional http port",
-        "type": "int",
-        "is_list": True
+        "type": "list",
+        "list_type": "int",
+        "is_require": False
+
     },
     "https_port": {
         "cmd_flags": ["--https-port"],
         "help": "Add additional https port",
-        "type": "int",
-        "is_list": True
+        "type": "list",
+        "list_type": "int",
+        "is_require": False
     },
     "viewer_channel": {
         "cmd_flags": ["--viewer-channel"],
         "help": "Specify the viewer channel. ex. tcp://*:5581",
-        "type": "string"
+        "type": "string",
+        "is_require": True
     },
 }
 
@@ -46,12 +53,14 @@ ConfigViewerFields = {
         "cmd_flags": ["--mode"],
         "help": "Sepcify the viewer type",
         "choices": ["log"],
-        "type": "string"
+        "type": "string",
+        "is_require": True
     },
     "viewer_channel": {
         "cmd_flags": ["--viewer-channel"],
         "help": "Specify the viewer channel. ex. tcp://127.0.0.1:5581",
-        "type": "string"
+        "type": "string",
+        "is_require": True
     }
 }
 
@@ -65,40 +74,30 @@ class Config(object):
     def __init__(self, file_config, cmd_config):
         command_type = cmd_config["command_type"]
         fieldInfos = ConfigSections[command_type]
+
         file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
-        file_config.update(self.typeValidation(file_config, fieldInfos))
-
-        cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None}
-        tmp_config = {k: v for k, v in cmd_config.iteritems() if k != "command_type" and k != "config_file"}
-        cmd_config.update(self.typeValidation(tmp_config, fieldInfos))
-
+        cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
         self.__config = file_config.copy()
         self.__config.update(cmd_config)
+        self.__config.update(self.typeTransform(self.__config, fieldInfos))
 
-    def typeValidation(self, config, fieldInfos):
+    def typeTransform(self, config, fieldInfos):
         new_config = {}
         for field in config:
             if field not in fieldInfos:
-                logger.warning("Unknonw Config Field {0}".format(field))
                 continue
 
-            try:
-                if config[field] not in fieldInfos[field]["choices"]:
-                    logger.error("Unknonw Config Value {0} For Field {1}".format(config[field], field))
-                    continue
-            except KeyError:
-                pass
+            if fieldInfos[field]["type"] == "int":
+                new_config[field] = int(config[field])
 
-            if "is_list" in fieldInfos[field] and fieldInfos[field]["is_list"]:
-                if fieldInfos[field]["type"] == "int":
+            elif fieldInfos[field]["type"] == "list":
+                if fieldInfos[field]["list_type"] == "int":
                     new_config[field] = map(int, config[field].split(","))
                 else:
                     new_config[field] = config[field].split(",")
+
             else:
-                if fieldInfos[field]["type"] == "int":
-                    new_config[field] = int(config[field])
-                else:
-                    new_config[field] = config[field]
+                new_config[field] = config[field]
 
         return new_config
 
@@ -107,6 +106,9 @@ class Config(object):
             return self.__config[key]
         except KeyError:
             raise
+
+    def __iter__(self):
+        return iter(self.__config)
 
 
 class ConfigParserBuilder(object):
@@ -150,6 +152,27 @@ class ConfigParserBuilder(object):
         return parser
 
 
+def verify_config_or_raise_error(config):
+    fieldInfos = ConfigSections[config["command_type"]]
+    require_fields = [k for k, v in fieldInfos.iteritems() if v["is_require"]]
+    missing_fields = [field for field in require_fields if field not in config]
+    if missing_fields:
+        raise KeyError("missing config field: [{0}]".format(",".join(missing_fields)))
+
+    for field in config:
+        try:
+            if config[field] not in fieldInfos[field]["choices"]:
+                raise ValueError("illgeal value: {0} at field: {1}".format(config[field], field))
+        except KeyError:
+            pass
+
+    unknown_fields = [field for field in config if field not in fieldInfos]
+    for field in unknown_fields:
+        if field == "command_type":
+            continue
+        logger.warning("Unknonw Field Name {0}".format(field))
+
+
 def parse_config():
     cmd_parser = ConfigParserBuilder.setup_cmd_parser()
     cmd_config = cmd_parser.parse_args()
@@ -160,4 +183,8 @@ def parse_config():
 
     ini_parser = ConfigParserBuilder.setup_ini_parser()
     ini_parser.read(config_file)
-    return Config(ini_parser, vars(cmd_config))
+
+    config = Config(ini_parser, vars(cmd_config))
+
+    verify_config_or_raise_error(config)
+    return config
