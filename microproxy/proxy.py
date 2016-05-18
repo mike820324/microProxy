@@ -45,10 +45,14 @@ class ProxyServerHandler(object):
     def __init__(self, config, interceptor=None):
         super(ProxyServerHandler, self).__init__()
         self.mode = config["mode"]
-        self.additional_port = {
-            "http": config["http_port"],
-            "https": config["https_port"]
-        }
+        try:
+            self.http_ports = config["http_port"]
+        except KeyError:
+            self.http_ports = []
+        try:
+            self.https_ports = config["https_port"]
+        except KeyError:
+            self.http_ports = []
         if interceptor is None:
             interceptor = self.create_interceptor(config)
         self.interceptor = interceptor
@@ -89,9 +93,9 @@ class ProxyServerHandler(object):
         self.get_layer(context).process()
 
     def get_layer(self, context):
-        if (context.port == 80 or context.port in self.additional_port["http"]):
+        if (context.port == 80 or context.port in self.http_ports):
             return Http1Layer(context)
-        elif (context.port == 443 or context.port in self.additional_port["https"]):
+        elif (context.port == 443 or context.port in self.https_ports):
             # tls not implement, so it process with forward layer
             return ForwardLayer(context)
         else:
