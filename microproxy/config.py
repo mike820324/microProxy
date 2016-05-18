@@ -46,6 +46,18 @@ ConfigProxyFields = {
         "type": "string",
         "is_require": True
     },
+    "certfile": {
+        "cmd_flags": ["--cert-file"],
+        "help": "Specify the certificate file",
+        "type": "string",
+        "is_require": True
+    },
+    "keyfile": {
+        "cmd_flags": ["--key-file"],
+        "help": "Specify the private key file",
+        "type": "string",
+        "is_require": True
+    }
 }
 
 ConfigViewerFields = {
