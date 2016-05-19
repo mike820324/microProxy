@@ -1,10 +1,7 @@
 import ssl
-
 from tornado import gen
 
-from http1 import Http1Layer
 from microproxy.utils import get_logger
-
 logger = get_logger(__name__)
 
 
@@ -25,6 +22,6 @@ class TlsLayer(object):
                                                                    ssl_options=dict(cert_reqs=ssl.CERT_NONE))
             new_context = self.context.new_context(src_stream=src_stream,
                                                    dest_stream=dest_stream)
-            Http1Layer(new_context).process()
+            self.context.layer_manager.next_layer(self, new_context).process()
         except Exception as e:
             logger.exception(e)

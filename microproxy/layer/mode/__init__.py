@@ -1,2 +1,2 @@
-from socks import SocksProxyHandler
+from socks import SocksProxyLayer
 from transparent import TransparentProxyHandler

@@ -1,16 +1,18 @@
 import struct
 import socket
+import datetime
 
 from tornado import gen
 from tornado import iostream
 
 import base
 from microproxy.utils import get_logger
+from microproxy.context import Context
 
 logger = get_logger(__name__)
 
 
-class SocksProxyHandler(base.ProxyHandler):
+class SocksProxyLayer(base.ProxyHandler):
     SOCKS_VERSION = 0x05
 
     SOCKS_REQ_COMMAND = {
@@ -37,17 +39,25 @@ class SocksProxyHandler(base.ProxyHandler):
         "IPV6": 0x04
     }
 
-    def __init__(self):
-        super(SocksProxyHandler, self).__init__()
+    def __init__(self, context):
+        super(SocksProxyLayer, self).__init__()
+        self.context = context
 
     @gen.coroutine
-    def read_and_return_addr(self, src_stream):
+    def process(self):
         try:
+            src_stream = self.context.src_stream
+
             data = yield src_stream.read_bytes(3)
             yield self.socks_greeting(src_stream, data)
             data = yield src_stream.read_bytes(4)
-            dest_addr_info = yield self.socks_request(src_stream, data)
-            raise gen.Return(dest_addr_info)
+            dest_stream, host, port = yield self.socks_request(src_stream, data)
+            context = Context(src_stream=src_stream,
+                              dest_stream=dest_stream,
+                              host=host,
+                              port=port,
+                              config=self.context.config)
+            raise gen.Return(context)
         except iostream.StreamClosedError:
             logger.warning("Source Stream Closed")
 
@@ -117,6 +127,18 @@ class SocksProxyHandler(base.ProxyHandler):
                                    host_length,
                                    *dest_addr_info)
 
+        dest_stream = yield self.create_dest_stream(*dest_addr_info)
         logger.debug("socks request to {0}:{1}".format(*dest_addr_info))
         yield src_stream.write(response)
-        raise gen.Return(dest_addr_info)
+        raise gen.Return((dest_stream, dest_addr_info[0], dest_addr_info[1]))
+
+    @gen.coroutine
+    def create_dest_stream(self, host, port):
+        dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        dest_stream = iostream.IOStream(dest_socket)
+        try:
+            yield gen.with_timeout(datetime.timedelta(5), dest_stream.connect((host, port)))
+            raise gen.Return(dest_stream)
+        except gen.TimeoutError:
+            logger.warning("Connect to Destination Timeout")
+            raise

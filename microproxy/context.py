@@ -5,13 +5,15 @@ class Context(object):
                  interceptor=None,
                  host=None,
                  port=None,
-                 config=None):
+                 config=None,
+                 layer_manager=None):
         self.src_stream = src_stream
         self.dest_stream = dest_stream
         self.interceptor = interceptor
         self.host = host
         self.port = port
         self.config = config
+        self.layer_manager = layer_manager
 
     def new_context(self,
                     src_stream=None,
@@ -25,4 +27,5 @@ class Context(object):
                        interceptor=self.interceptor,
                        host=self.host,
                        port=self.port,
-                       config=self.config)
+                       config=self.config,
+                       layer_manager=self.layer_manager)
