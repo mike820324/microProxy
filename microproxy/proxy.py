@@ -8,7 +8,7 @@ from tornado import gen
 from mode import SocksProxyHandler, TransparentProxyHandler
 from context import Context
 from utils import curr_loop, get_logger
-from layer import Http1Layer, ForwardLayer
+from layer import Http1Layer, ForwardLayer, TlsLayer
 from interceptor import MsgPublisherInterceptor as Interceptor
 
 logger = get_logger(__name__)
@@ -28,7 +28,7 @@ class ProxyServer(tcpserver.TCPServer):
         try:
             host, port = yield self.proxy_server_handler.read_and_return_addr(stream)
             dest_stream = yield self.proxy_server_handler.create_dest_stream(host, port)
-            self.proxy_server_handler.run_next_layer(stream, dest_stream, host, port)
+            yield self.proxy_server_handler.run_next_layer(stream, dest_stream, host, port)
         except gen.TimeoutError:
             stream.close()
         except Exception as e:
@@ -44,6 +44,7 @@ class ProxyServer(tcpserver.TCPServer):
 class ProxyServerHandler(object):
     def __init__(self, config, interceptor=None):
         super(ProxyServerHandler, self).__init__()
+        self.config = config
         self.mode = config["mode"]
         try:
             self.http_ports = config["http_port"]
@@ -53,6 +54,7 @@ class ProxyServerHandler(object):
             self.https_ports = config["https_port"]
         except KeyError:
             self.http_ports = []
+
         if interceptor is None:
             interceptor = self.create_interceptor(config)
         self.interceptor = interceptor
@@ -84,20 +86,21 @@ class ProxyServerHandler(object):
             logger.warning("Connect to Destination Timeout")
             raise
 
+    @gen.coroutine
     def run_next_layer(self, src_stream, dest_stream, host, port):
         context = Context(src_stream=src_stream,
                           dest_stream=dest_stream,
                           interceptor=self.interceptor,
                           host=host,
-                          port=port)
+                          port=port,
+                          config=self.config)
         self.get_layer(context).process()
 
     def get_layer(self, context):
-        if (context.port == 80 or context.port in self.http_ports):
+        if context.port == 80 or context.port in self.http_ports:
             return Http1Layer(context)
-        elif (context.port == 443 or context.port in self.https_ports):
-            # tls not implement, so it process with forward layer
-            return ForwardLayer(context)
+        elif context.port == 443 or context.port in self.https_ports:
+            return TlsLayer(context)
         else:
             return ForwardLayer(context)
 

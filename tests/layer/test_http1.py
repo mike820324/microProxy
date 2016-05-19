@@ -35,7 +35,8 @@ class Http1LayerTest(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = Context(server_streams[0], client_streams[1], None)
+        self.context = Context(src_stream=server_streams[0],
+                               dest_stream=client_streams[1])
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
         self.http_layer = Http1Layer(self.context)
