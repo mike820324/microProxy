@@ -1,7 +1,7 @@
 # MicroProxy
 
 MicroProxy is a http/https traffic interceptor. 
-Currently, we only support HTTP traffic. (TLS part is not support yet)
+Currently, we only support HTTP traffic.
 
 This project is highly inspired by [mitmproxy](https://github.com/mitmproxy/mitmproxy),
 but we take some different approach compare to mitmproxy.
@@ -89,6 +89,8 @@ The following are the command line options for Proxy service.
 * --mode: specify the proxy mode. Currently we have supported two diffenty mode, **socks proxy** and **transparent proxy**.
 * --http-port: specify the additional http port.
 * --https-port: specify the additional https port.
+* --cert-file: specify the certificate file.
+* --key-file: specify the private key file.
 * --viewer-channel: specify the viewer channel. For example, tcp://*:5580
 
 For example,
@@ -119,6 +121,8 @@ port=5580
 mode=socks
 http.port=5581,5582,5583
 https.port=5584
+certfile=/tmp/cert.crt
+keyfile=/tmp/cert.key
 viewer.channel=tcp://*:5585
 
 [viewer]
