@@ -1,3 +1,2 @@
-from base import ForwardLayer
-from http1 import Http1Layer
-from tls import TlsLayer
+from application import Http1Layer, TlsLayer, ForwardLayer
+from proxy import SocksLayer, TransparentLayer

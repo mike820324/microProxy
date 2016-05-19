@@ -10,8 +10,9 @@ import base
 class TransparentProxyHandler(base.ProxyHandler):
     SO_ORIGINAL_DST = 80
 
-    def __init__(self):
+    def __init__(self, context):
         super(TransparentProxyHandler, self).__init__()
+        self.context = context
 
     def _get_dest_addr(self, src_stream):
         # Currently, we only support Linux
@@ -27,5 +28,6 @@ class TransparentProxyHandler(base.ProxyHandler):
         return address, port
 
     @gen.coroutine
-    def read_and_return_addr(self, src_stream):
+    def process(self):
+        src_stream = self.context.src_stream
         raise gen.Return(self._get_dest_addr(src_stream))
