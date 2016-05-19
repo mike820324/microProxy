@@ -16,17 +16,13 @@ class TlsLayer(object):
     @gen.coroutine
     def process(self):
         try:
-            src_ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            src_ssl_context.load_cert_chain(certfile=self.context.config["certfile"],
-                                            keyfile=self.context.config["keyfile"])
-            src_stream = yield self.context.src_stream.start_tls(server_side=True, ssl_options=src_ssl_context)
+            server_ssl_options = dict(certfile=self.context.config["certfile"],
+                                      keyfile=self.context.config["keyfile"],)
+            src_stream = yield self.context.src_stream.start_tls(server_side=True,
+                                                                 ssl_options=server_ssl_options)
 
-            # Will not verify the server side
-            dest_ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-            dest_ssl_context.check_hostname = False
-            dest_ssl_context.verify_mode = ssl.CERT_NONE
-
-            dest_stream = yield self.context.dest_stream.start_tls(server_side=False, ssl_options=dest_ssl_context)
+            dest_stream = yield self.context.dest_stream.start_tls(server_side=False,
+                                                                   ssl_options=dict(cert_reqs=ssl.CERT_NONE))
             new_context = self.context.new_context(src_stream=src_stream,
                                                    dest_stream=dest_stream)
             Http1Layer(new_context).process()
