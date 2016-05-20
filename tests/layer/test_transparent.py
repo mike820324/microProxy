@@ -61,7 +61,8 @@ class TranparentProxyHandlerTest(AsyncTestCase):
             addr_future = self.layer._get_dest_addr(self.src_stream)
 
             dest_stream, host, port = yield addr_future
+            assert isinstance(dest_stream, IOStream)
             assert host == "127.0.0.1"
             assert port == self.port
-        self.server.close()
+        self.server.stop()
         self.server_stream.close()
