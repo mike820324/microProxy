@@ -11,38 +11,35 @@ logger = get_logger(__name__)
 
 
 class LayerManager(object):
-    def __init__(self, config):
-        super(LayerManager, self).__init__()
-        try:
-            self.http_ports = config["http_port"]
-        except KeyError:
-            self.http_ports = []
-        try:
-            self.https_ports = config["https_port"]
-        except KeyError:
-            self.http_ports = []
+    def start_layer(self, context):
+        mode = context.config["mode"]
+        if mode == "socks":
+            return SocksLayer(context)
+        elif mode == "transparent":
+            return TransparentLayer(context)
+        else:
+            # fixme: due to fail fast, need raise exception here
+            logger.warning("Unsupport proxy mode : {0}".format(mode))
 
     def next_layer(self, current_layer, context):
-        if current_layer is None:
-            mode = context.config["mode"]
-            if mode == "socks":
-                return SocksLayer(context)
-            elif mode == "transparent":
-                return TransparentLayer(context)
-            else:
-                # fixme: due to fail fast, need raise exception here
-                logger.warning("Unsupport proxy mode : {0}".format(mode))
+        try:
+            http_ports = [80]
+            http_ports.extend(context.config["http_port"])
+            https_ports = [443]
+            https_ports.extend(context.config["https_port"])
+        except KeyError:
+            pass
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
-            if context.port == 80 or context.port in self.http_ports:
+            if context.port in http_ports:
                 return Http1Layer(context)
-            elif context.port == 443 or context.port in self.https_ports:
+            elif context.port in https_ports:
                 return TlsLayer(context)
             else:
                 return ForwardLayer(context)
 
         if isinstance(current_layer, TlsLayer):
-            if context.port == 443 or context.port in self.https_ports:
+            if context.port in https_ports:
                 return Http1Layer(context)
 
 
@@ -53,7 +50,7 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
-        self.layer_manager = LayerManager(self.config)
+        self.layer_manager = LayerManager()
 
     @gen.coroutine
     def handle_stream(self, stream, port):
@@ -63,7 +60,7 @@ class ProxyServer(tcpserver.TCPServer):
                               config=self.config,
                               layer_manager=self.layer_manager)
 
-            self.layer_manager.next_layer(None, context).process()
+            self.layer_manager.start_layer(context).process()
         except gen.TimeoutError:
             stream.close()
         except Exception as e:
