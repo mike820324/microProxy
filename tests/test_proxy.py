@@ -1,11 +1,10 @@
 from mock import Mock
 
-from tornado.concurrent import Future
 from tornado.testing import AsyncTestCase
 
 from microproxy.proxy import LayerManager
 from microproxy.context import Context
-from microproxy.layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer
+from microproxy.layer import SocksLayer, TransparentLayer, Http1Layer, TlsLayer
 
 
 class LayerManagerTest(AsyncTestCase):
