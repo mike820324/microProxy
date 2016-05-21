@@ -8,6 +8,7 @@ from tornado.netutil import add_accept_handler
 
 from microproxy.context import Context
 from microproxy.layer import SocksLayer
+from microproxy.exception import ProtocolError
 
 
 class SocksProxyHandlerTest(AsyncTestCase):
@@ -118,5 +119,37 @@ class SocksProxyHandlerTest(AsyncTestCase):
 
         dest_stream.close()
         self.dest_server_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_greeting_with_wrong_socks_version(self):
+        self.client_stream.write(struct.pack("BBx", 4, 1))
+        with self.assertRaises(ProtocolError):
+            yield self.layer.socks_greeting()
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_greeting_with_auth(self):
+        self.client_stream.write(struct.pack("BBx", 5, 0))
+        with self.assertRaises(ProtocolError):
+            yield self.layer.socks_greeting()
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_request_with_wrong_socks_version(self):
+        self.client_stream.write(struct.pack("!BBxB", 4, 1, 1))
+        with self.assertRaises(ProtocolError):
+            yield self.layer.socks_greeting()
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_request_with_wrong_socks_command(self):
+        self.client_stream.write(struct.pack("!BBxB", 5, 0, 1))
+        with self.assertRaises(ProtocolError):
+            yield self.layer.socks_greeting()
         self.client_stream.close()
         self.server_stream.close()

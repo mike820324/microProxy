@@ -1,5 +1,4 @@
 import struct
-import socket
 import ipaddress
 
 from copy import copy
@@ -9,6 +8,7 @@ from tornado import iostream
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
+from microproxy.exception import ProtocolError
 
 logger = get_logger(__name__)
 
@@ -68,17 +68,13 @@ class SocksLayer(ProxyLayer):
         socks_version, socks_nmethod, _ = struct.unpack('BBB', data)
 
         if socks_version != self.SOCKS_VERSION:
-            logger.warning("Socks Version incorrent : {}".format(socks_version))
-            # fixme: response with error
-            src_stream.close()
+            raise ProtocolError("not support socks version {0}".format(socks_version))
 
         if socks_nmethod == 1:
             response = struct.pack('BB', self.SOCKS_VERSION, 0)
             yield src_stream.write(response)
         else:
-            logger.warning("SOCKS5 Auth not supported")
-            # fixme: response with error
-            src_stream.close()
+            raise ProtocolError("socks5 auth not supported")
 
     @gen.coroutine
     def socks_request(self):
@@ -91,14 +87,10 @@ class SocksLayer(ProxyLayer):
         socks_atyp = request_header_data[2]
 
         if socks_version != self.SOCKS_VERSION:
-            logger.warning("Socks Version incorrent : {}".format(socks_version))
-            # fixme: response with error
-            src_stream.close()
+            raise ProtocolError("not support socks version {0}".format(socks_version))
 
         if socks_cmd != self.SOCKS_REQ_COMMAND["CONNECT"]:
-            logger.warning("Socks Command Not Supported : {}".format(socks_cmd))
-            # fixme: response with error
-            src_stream.close()
+            raise ProtocolError("not support socks command {0}".format(socks_cmd))
 
         if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
             host_data = yield src_stream.read_bytes(4)
@@ -112,8 +104,7 @@ class SocksLayer(ProxyLayer):
             host_data = yield src_stream.read_bytes(16)
             host = ipaddress.IPv6Address(host_data).compressed
         else:
-            # fixme: not legal address type
-            src_stream.close()
+            raise ProtocolError("not support socks address type")
 
         port_data = yield src_stream.read_bytes(2)
         port, = struct.unpack("!H", port_data)
@@ -127,21 +118,24 @@ class SocksLayer(ProxyLayer):
     def socks_response_with_dest_stream_creation(self, host, port, addr_type):
         src_stream = self.context.src_stream
         dest_stream = yield self.create_dest_stream((host, port))
-        yield src_stream.write(struct.pack("!BBx",
-                                           self.SOCKS_VERSION,
-                                           self.SOCKS_RESP_STATUS["SUCCESS"]))
+        try:
+            yield src_stream.write(struct.pack("!BBx",
+                                               self.SOCKS_VERSION,
+                                               self.SOCKS_RESP_STATUS["SUCCESS"]))
+            if addr_type == self.SOCKS_ADDR_TYPE["IPV4"]:
+                yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV4"]))
+                yield src_stream.write(ipaddress.IPv4Address(host).packed)
+            elif addr_type == self.SOCKS_ADDR_TYPE["IPV6"]:
+                yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV6"]))
+                yield src_stream.write(ipaddress.IPv6Address(host).packed)
+            elif addr_type == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
+                yield src_stream.write(struct.pack("!BB",
+                                                   self.SOCKS_ADDR_TYPE["DOMAINNAME"],
+                                                   len(host)))
+                yield src_stream.write(host.encode("idna"))
 
-        if addr_type == self.SOCKS_ADDR_TYPE["IPV4"]:
-            yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV4"]))
-            yield src_stream.write(ipaddress.IPv4Address(host).packed)
-        elif addr_type == self.SOCKS_ADDR_TYPE["IPV6"]:
-            yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV6"]))
-            yield src_stream.write(ipaddress.IPv6Address(host).packed)
-        elif addr_type == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
-            yield src_stream.write(struct.pack("!BB",
-                                               self.SOCKS_ADDR_TYPE["DOMAINNAME"],
-                                               len(host)))
-            yield src_stream.write(host.encode("idna"))
-
-        yield src_stream.write(struct.pack("!H", port))
-        raise gen.Return(dest_stream)
+            yield src_stream.write(struct.pack("!H", port))
+            raise gen.Return(dest_stream)
+        except Exception:
+            dest_stream.close()
+            raise

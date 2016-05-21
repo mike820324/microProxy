@@ -37,4 +37,8 @@ class TransparentLayer(ProxyLayer):
         new_context.host = host
         new_context.port = port
 
-        self.context.layer_manager.next_layer(self, new_context).process()
+        try:
+            self.context.layer_manager.next_layer(self, new_context).process()
+        except:
+            dest_stream.close()
+            raise
