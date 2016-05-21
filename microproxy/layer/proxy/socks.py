@@ -132,13 +132,11 @@ class SocksLayer(ProxyLayer):
                                            self.SOCKS_RESP_STATUS["SUCCESS"]))
 
         if addr_type == self.SOCKS_ADDR_TYPE["IPV4"]:
-            yield src_stream.write(struct.pack('!BI',
-                                               self.SOCKS_ADDR_TYPE["IPV4"],
-                                               ipaddress.IPv4Address(host).packed))
+            yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV4"]))
+            yield src_stream.write(ipaddress.IPv4Address(host).packed)
         elif addr_type == self.SOCKS_ADDR_TYPE["IPV6"]:
-            yield src_stream.write(struct.pack('!BI',
-                                               self.SOCKS_ADDR_TYPE["IPV6"],
-                                               ipaddress.IPv6Address(host).packed))
+            yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV6"]))
+            yield src_stream.write(ipaddress.IPv6Address(host).packed)
         elif addr_type == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
             yield src_stream.write(struct.pack("!BB",
                                                self.SOCKS_ADDR_TYPE["DOMAINNAME"],
