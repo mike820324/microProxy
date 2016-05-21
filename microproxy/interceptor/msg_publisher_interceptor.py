@@ -14,13 +14,15 @@ class MsgPublisherInterceptor(BaseInterceptor):
             zmq_socket = create_socket(config["viewer_channel"])
         self.zmq_stream = zmqstream.ZMQStream(zmq_socket)
 
-    def request(self, request):
+    def request(self, sender, **kargs):
         pass
 
-    def response(self, response):
+    def response(self, sender, **kargs):
         pass
 
-    def record(self, request, response):
+    def record(self, sender, **kargs):
+        request = kargs["request"]
+        response = kargs["response"]
         message = {
             "request": request.serialize(),
             "response": response.serialize()
