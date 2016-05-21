@@ -2,14 +2,12 @@ class Context(object):
     def __init__(self,
                  src_stream=None,
                  dest_stream=None,
-                 interceptor=None,
                  host=None,
                  port=None,
                  config=None,
                  layer_manager=None):
         self.src_stream = src_stream
         self.dest_stream = dest_stream
-        self.interceptor = interceptor
         self.host = host
         self.port = port
         self.config = config
@@ -24,7 +22,6 @@ class Context(object):
             dest_stream = self.dest_stream
         return Context(src_stream=src_stream,
                        dest_stream=dest_stream,
-                       interceptor=self.interceptor,
                        host=self.host,
                        port=self.port,
                        config=self.config,

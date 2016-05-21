@@ -53,7 +53,6 @@ class SocksLayer(ProxyLayer):
                               host=host,
                               port=port,
                               config=self.context.config,
-                              interceptor=self.context.interceptor,
                               layer_manager=self.context.layer_manager)
             context.layer_manager.next_layer(self, context).process()
         except iostream.StreamClosedError:

@@ -56,7 +56,6 @@ class ProxyServer(tcpserver.TCPServer):
     def handle_stream(self, stream, port):
         try:
             context = Context(src_stream=stream,
-                              interceptor=self.interceptor,
                               config=self.config,
                               layer_manager=self.layer_manager)
 

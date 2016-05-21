@@ -88,8 +88,7 @@ class HttpForwarder(object):
     def req_done(self, sender):
         logger.debug("source request done")
         self.req = sender.req
-        if self.context.interceptor:
-            self.context.interceptor.request(self.req)
+        signal("interceptor_request").send(self, request=self.req)
 
         status_line = httputil.RequestStartLine(self.req.method,
                                                 self.req.path,
@@ -109,9 +108,10 @@ class HttpForwarder(object):
     def resp_done(self, sender):
         logger.debug("destination response done")
         self.resp = sender.resp
-        if self.context.interceptor:
-            self.context.interceptor.response(self.resp)
-            self.context.interceptor.record(self.req, self.resp)
+        signal("interceptor_response").send(self, response=self.resp)
+        signal("interceptor_record").send(self,
+                                          request=self.req,
+                                          response=self.resp)
 
         headers = self.resp.headers.copy()
         # restriction on using tornado http connection
