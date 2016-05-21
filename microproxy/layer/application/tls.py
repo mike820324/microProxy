@@ -1,4 +1,5 @@
 import ssl
+from copy import copy
 from tornado import gen
 
 from microproxy.utils import get_logger
@@ -20,8 +21,10 @@ class TlsLayer(object):
 
             dest_stream = yield self.context.dest_stream.start_tls(server_side=False,
                                                                    ssl_options=dict(cert_reqs=ssl.CERT_NONE))
-            new_context = self.context.new_context(src_stream=src_stream,
-                                                   dest_stream=dest_stream)
+
+            new_context = copy(self.context)
+            new_context.src_stream = src_stream
+            new_context.dest_stream = dest_stream
             self.context.layer_manager.next_layer(self, new_context).process()
         except Exception as e:
             logger.exception(e)

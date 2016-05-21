@@ -1,11 +1,11 @@
 import platform
 import socket
 import struct
+from copy import copy
 
 from tornado import gen
 
 from base import ProxyLayer
-from microproxy.context import Context
 
 
 class TransparentLayer(ProxyLayer):
@@ -35,12 +35,9 @@ class TransparentLayer(ProxyLayer):
         src_stream = self.context.src_stream
 
         dest_stream, host, port = yield self._get_dest_addr(src_stream)
-        context = Context(src_stream=self.context.src_stream,
-                          dest_stream=dest_stream,
-                          host=host,
-                          port=port,
-                          config=self.context.config,
-                          layer_manager=self.context.layer_manager)
+        new_context = copy(self.context)
+        new_context.dest_stream = dest_stream
+        new_context.host = host
+        new_context.port = port
 
-        self.context.layer_manager.next_layer(self, context).process()
-        raise gen.Return(context)
+        self.context.layer_manager.next_layer(self, new_context).process()

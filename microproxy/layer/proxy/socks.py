@@ -1,13 +1,13 @@
 import struct
 import socket
 
+from copy import copy
 from tornado import gen
 from tornado import iostream
 
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.context import Context
 
 logger = get_logger(__name__)
 
@@ -48,13 +48,12 @@ class SocksLayer(ProxyLayer):
             yield self.socks_greeting()
             dest_stream, host, port = yield self.socks_request()
 
-            context = Context(src_stream=self.context.src_stream,
-                              dest_stream=dest_stream,
-                              host=host,
-                              port=port,
-                              config=self.context.config,
-                              layer_manager=self.context.layer_manager)
-            context.layer_manager.next_layer(self, context).process()
+            new_context = copy(self.context)
+            new_context.dest_stream = dest_stream
+            new_context.host = host
+            new_context.port = port
+
+            self.context.layer_manager.next_layer(self, new_context).process()
         except iostream.StreamClosedError:
             logger.warning("Source Stream Closed")
 
