@@ -14,8 +14,8 @@ class TransparentLayer(ProxyLayer):
     def __init__(self, context):
         super(TransparentLayer, self).__init__(context)
 
-    @gen.coroutine
-    def _get_dest_addr(self, src_stream):
+    def _get_dest_addr(self):
+        src_stream = self.context.src_stream
         # Currently, we only support Linux
         if platform.system() != "Linux":
             raise NotImplementedError
@@ -26,15 +26,12 @@ class TransparentLayer(ProxyLayer):
 
         _, port, a1, a2, a3, a4 = struct.unpack("!HHBBBBxxxxxxxx", sock_opt)
         address = "%d.%d.%d.%d" % (a1, a2, a3, a4)
-
-        dest_stream = yield self.create_dest_stream(address, port)
-        raise gen.Return((dest_stream, address, port))
+        return (address, port)
 
     @gen.coroutine
     def process(self):
-        src_stream = self.context.src_stream
-
-        dest_stream, host, port = yield self._get_dest_addr(src_stream)
+        host, port = self._get_dest_addr()
+        dest_stream = yield self.create_dest_stream((host, port))
         new_context = copy(self.context)
         new_context.dest_stream = dest_stream
         new_context.host = host

@@ -4,3 +4,4 @@ blinker==1.4
 mock==2.0.0
 coverage==4.0.3
 coveralls==1.1
+ipaddress==1.0.16

@@ -17,11 +17,11 @@ class ProxyLayer(object):
         raise NotImplementedError
 
     @gen.coroutine
-    def create_dest_stream(self, host, port):
+    def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_stream = iostream.IOStream(dest_socket)
         try:
-            yield gen.with_timeout(datetime.timedelta(5), dest_stream.connect((host, port)))
+            yield gen.with_timeout(datetime.timedelta(5), dest_stream.connect(dest_addr_info))
             raise gen.Return(dest_stream)
         except gen.TimeoutError:
             logger.warning("Connect to Destination Timeout")

@@ -1,5 +1,6 @@
 import struct
 import socket
+import ipaddress
 
 from copy import copy
 from tornado import gen
@@ -46,7 +47,8 @@ class SocksLayer(ProxyLayer):
     def process(self):
         try:
             yield self.socks_greeting()
-            dest_stream, host, port = yield self.socks_request()
+            host, port, addr_type = yield self.socks_request()
+            dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
 
             new_context = copy(self.context)
             new_context.dest_stream = dest_stream
@@ -63,22 +65,20 @@ class SocksLayer(ProxyLayer):
         data = yield src_stream.read_bytes(3)
 
         logger.debug("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
-        socks_init_data = struct.unpack('BBB', data)
-        socks_version = socks_init_data[0]
-        socks_nmethod = socks_init_data[1]
+        socks_version, socks_nmethod, _ = struct.unpack('BBB', data)
 
         if socks_version != self.SOCKS_VERSION:
             logger.warning("Socks Version incorrent : {}".format(socks_version))
             # fixme: response with error
             src_stream.close()
 
-        if socks_nmethod != 1:
+        if socks_nmethod == 1:
+            response = struct.pack('BB', self.SOCKS_VERSION, 0)
+            yield src_stream.write(response)
+        else:
             logger.warning("SOCKS5 Auth not supported")
             # fixme: response with error
             src_stream.close()
-        else:
-            response = struct.pack('BB', self.SOCKS_VERSION, 0)
-            yield src_stream.write(response)
 
     @gen.coroutine
     def socks_request(self):
@@ -100,37 +100,50 @@ class SocksLayer(ProxyLayer):
             # fixme: response with error
             src_stream.close()
 
-        if socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
-            logger.warning("Socks Address Type Not Supported : {}".format(socks_atyp))
-            # fixme: response with error
+        if socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
+            host_data = yield src_stream.read_bytes(4)
+            host = ipaddress.IPv4Address(host_data).compressed
+        elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
+            host_length_data = yield src_stream.read_bytes(1)
+            host_length = struct.unpack("!B", host_length_data)[0]
+            host_data = yield src_stream.read_bytes(host_length)
+            host = host_data.decode("idna")
+        elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV6"]:
+            host_data = yield src_stream.read_bytes(16)
+            host = ipaddress.IPv6Address(host_data).compressed
+        else:
+            # fixme: not legal address type
             src_stream.close()
 
-        elif socks_atyp == self.SOCKS_ADDR_TYPE["IPV4"]:
-            data = yield src_stream.read_bytes(6)
-            request_info = struct.unpack("!IH", data)
-            dest_addr_info = (socket.inet_ntoa(struct.pack('!I', request_info[0])),
-                              request_info[1])
-            response = struct.pack('!BBxBIH',
-                                   self.SOCKS_VERSION,
-                                   self.SOCKS_RESP_STATUS["SUCCESS"],
-                                   self.SOCKS_ADDR_TYPE["IPV4"],
-                                   *request_info)
+        port_data = yield src_stream.read_bytes(2)
+        port, = struct.unpack("!H", port_data)
+        logger.debug("socks request to {0}:{1}".format(host, port))
 
-        elif socks_atyp == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
-            data = yield src_stream.read_bytes(1)
-            host_length = struct.unpack("!B", data)[0]
+        raise gen.Return((host,
+                         port,
+                         socks_atyp))
 
-            data = yield src_stream.read_bytes(host_length + 2)
-            dest_addr_info = struct.unpack("!{0}sH".format(host_length), data)
-            response = struct.pack("!BBxBB{0}sH".format(host_length),
-                                   self.SOCKS_VERSION,
-                                   self.SOCKS_RESP_STATUS["SUCCESS"],
-                                   self.SOCKS_ADDR_TYPE["DOMAINNAME"],
-                                   host_length,
-                                   *dest_addr_info)
+    @gen.coroutine
+    def socks_response_with_dest_stream_creation(self, host, port, addr_type):
+        src_stream = self.context.src_stream
+        dest_stream = yield self.create_dest_stream((host, port))
+        yield src_stream.write(struct.pack("!BBx",
+                                           self.SOCKS_VERSION,
+                                           self.SOCKS_RESP_STATUS["SUCCESS"]))
 
-        logger.debug("socks request to {0}:{1}".format(*dest_addr_info))
-        dest_stream = yield self.create_dest_stream(*dest_addr_info)
-        yield src_stream.write(response)
+        if addr_type == self.SOCKS_ADDR_TYPE["IPV4"]:
+            yield src_stream.write(struct.pack('!BI',
+                                               self.SOCKS_ADDR_TYPE["IPV4"],
+                                               ipaddress.IPv4Address(host).packed))
+        elif addr_type == self.SOCKS_ADDR_TYPE["IPV6"]:
+            yield src_stream.write(struct.pack('!BI',
+                                               self.SOCKS_ADDR_TYPE["IPV6"],
+                                               ipaddress.IPv6Address(host).packed))
+        elif addr_type == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
+            yield src_stream.write(struct.pack("!BB",
+                                               self.SOCKS_ADDR_TYPE["DOMAINNAME"],
+                                               len(host)))
+            yield src_stream.write(host.encode("idna"))
 
-        raise gen.Return((dest_stream, dest_addr_info[0], dest_addr_info[1]))
+        yield src_stream.write(struct.pack("!H", port))
+        raise gen.Return(dest_stream)
