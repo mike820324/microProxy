@@ -8,23 +8,20 @@ def create_options():
     define_option(option_info=proxy_option_info,
                   option_name="host",
                   help_str="Specify the proxy host",
-                  is_require=False,
-                  default_value="127.0.0.1",
+                  default="127.0.0.1",
                   option_type="string",
                   cmd_flags="--host")
 
     define_option(option_info=proxy_option_info,
                   option_name="port",
                   help_str="Specify the proxy listening port",
-                  is_require=False,
-                  default_value="5580",
+                  default="5580",
                   option_type="int",
                   cmd_flags="--port")
 
     define_option(option_info=proxy_option_info,
                   option_name="mode",
                   help_str="Speficy the proxy mode, currently support socks proxy and transparent proxy",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--mode",
                   choices=["socks", "transparent"])
@@ -32,8 +29,7 @@ def create_options():
     define_option(option_info=proxy_option_info,
                   option_name="http_port",
                   help_str="Add additional http port",
-                  is_require=False,
-                  default_value="",
+                  default="",
                   option_type="list",
                   cmd_flags="--http-port",
                   list_type="int")
@@ -41,8 +37,7 @@ def create_options():
     define_option(option_info=proxy_option_info,
                   option_name="https_port",
                   help_str="Add additional https port",
-                  is_require=False,
-                  default_value="",
+                  default="",
                   option_type="list",
                   cmd_flags="--https-port",
                   list_type="int")
@@ -50,21 +45,18 @@ def create_options():
     define_option(option_info=proxy_option_info,
                   option_name="viewer_channel",
                   help_str="Specify the viewer channel. ex. tcp://*:5581",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--viewer-channel")
 
     define_option(option_info=proxy_option_info,
                   option_name="certfile",
                   help_str="Specify the certificate file",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--cert-file")
 
     define_option(option_info=proxy_option_info,
                   option_name="keyfile",
                   help_str="Specify the private key file",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--key-file")
 
@@ -72,7 +64,6 @@ def create_options():
     define_option(option_info=viewer_option_info,
                   option_name="mode",
                   help_str="Specify the viewer type",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--mode",
                   choices=["--mode"])
@@ -80,7 +71,6 @@ def create_options():
     define_option(option_info=viewer_option_info,
                   option_name="viewer_channel",
                   help_str="Specify the viewer channel",
-                  is_require=True,
                   option_type="string",
                   cmd_flags="--viewer-channel")
 

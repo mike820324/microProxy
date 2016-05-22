@@ -6,72 +6,6 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-def define_section(config_field_info,
-                   section,
-                   help_str,
-                   option_info):
-    if not isinstance(option_info, dict):
-        raise ValueError("Expect option_info as a dictionary")
-    if not isinstance(config_field_info, dict):
-        raise ValueError("Expect config_field_info as a dictionary")
-
-    config_field_info[section] = option_info
-
-
-def define_option(option_info,
-                  option_name,
-                  help_str,
-                  is_require,
-                  option_type,
-                  cmd_flags=None,
-                  choices=None,
-                  list_type=None,
-                  default_value=None
-                  ):
-
-    if not isinstance(option_info, dict):
-        raise ValueError("Expect option_info as a dictionary")
-
-    if option_type not in ["string", "boolean", "int", "list"]:
-        raise ValueError("Unsupport type : {0}".format(option_type))
-
-    if choices is not None and not isinstance(choices, list):
-        raise ValueError("choices should be a list object")
-
-    if not is_require and default_value is None:
-        raise ValueError("must specify default value when it is not require {0}".format(option_name))
-
-    option = {
-        option_name: {
-            "help": help_str,
-            "type": option_type,
-            "is_require": is_require
-        }
-    }
-
-    if cmd_flags:
-        if isinstance(cmd_flags, str):
-            option[option_name]["cmd_flags"] = [cmd_flags]
-        elif isinstance(cmd_flags, list):
-            option[option_name]["cmd_flags"] = cmd_flags
-
-    if choices:
-        option[option_name]["choices"] = choices
-
-    if option_type == "list":
-        if not list_type:
-            raise ValueError("Require list_type for option_type list")
-        if list_type not in ["string", "boolean", "int"]:
-            raise ValueError("Unsupport list type : {0}".format(list_type))
-
-        option[option_name]["list_type"] = list_type
-
-    if default_value:
-        option[option_name]["default"] = default_value
-
-    option_info.update(option)
-
-
 class Config(object):
     def __init__(self, config_field_info, file_config, cmd_config):
         command_type = cmd_config["command_type"]
@@ -99,10 +33,13 @@ class Config(object):
                 new_config[field] = int(config[field])
 
             elif optionInfo[field]["type"] == "list":
-                if optionInfo[field]["list_type"] == "int":
-                    new_config[field] = map(int, config[field].split(","))
-                else:
-                    new_config[field] = config[field].split(",")
+                value = config[field].split(",")
+                if len(value) == 1:
+                    new_config[field] = value
+                elif optionInfo[field]["list_type"] == "int":
+                    new_config[field] = map(int, value)
+                elif optionInfo[field]["list_type"] == "string":
+                    new_config[field] = value
 
             else:
                 new_config[field] = config[field]
@@ -147,7 +84,72 @@ class ConfigParserBuilder(object):
         return parser
 
 
-def verify_config_or_raise_error(config_field_info, config):
+def define_section(config_field_info,
+                   section,
+                   help_str,
+                   option_info):
+    if not isinstance(option_info, dict):
+        raise ValueError("Expect option_info as a dictionary")
+    if not isinstance(config_field_info, dict):
+        raise ValueError("Expect config_field_info as a dictionary")
+
+    config_field_info[section] = option_info
+
+
+def define_option(option_info,
+                  option_name,
+                  help_str,
+                  option_type,
+                  default=None,
+                  cmd_flags=None,
+                  choices=None,
+                  list_type=None
+                  ):
+
+    if not isinstance(option_info, dict):
+        raise ValueError("Expect option_info as a dictionary")
+
+    if option_type not in ["string", "boolean", "int", "list"]:
+        raise ValueError("Unsupport type : {0}".format(option_type))
+
+    if choices is not None and not isinstance(choices, list):
+        raise ValueError("choices should be a list object")
+
+    option = {
+        option_name: {
+            "help": help_str,
+            "type": option_type
+        }
+    }
+
+    if default is not None:
+        option[option_name]["is_require"] = False
+        option[option_name]["default"] = default
+    else:
+        option[option_name]["is_require"] = True
+
+    if cmd_flags:
+        if isinstance(cmd_flags, str):
+            option[option_name]["cmd_flags"] = [cmd_flags]
+        elif isinstance(cmd_flags, list):
+            option[option_name]["cmd_flags"] = cmd_flags
+
+    if choices:
+        option[option_name]["choices"] = choices
+
+    if option_type == "list":
+        if not list_type:
+            raise ValueError("Require list_type for option_type list")
+        if list_type not in ["string", "boolean", "int"]:
+            raise ValueError("Unsupport list type : {0}".format(list_type))
+
+        option[option_name]["list_type"] = list_type
+
+
+    option_info.update(option)
+
+
+def verify_config(config_field_info, config):
     fieldInfos = config_field_info[config["command_type"]]
     require_fields = [k for k, v in fieldInfos.iteritems() if v["is_require"]]
     missing_fields = [field for field in require_fields if field not in config]
@@ -181,5 +183,5 @@ def parse_config(config_field_info):
 
     config = Config(config_field_info, ini_parser, vars(cmd_config))
 
-    verify_config_or_raise_error(config_field_info, config)
+    verify_config(config_field_info, config)
     return config
