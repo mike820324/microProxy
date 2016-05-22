@@ -1,5 +1,6 @@
 from tornado import tcpserver
 from tornado import gen
+from tornado import concurrent
 
 from context import Context
 from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer
@@ -59,7 +60,9 @@ class ProxyServer(tcpserver.TCPServer):
                               config=self.config,
                               layer_manager=self.layer_manager)
 
-            self.layer_manager.start_layer(context).process()
+            process_result = self.layer_manager.start_layer(context).process()
+            if isinstance(process_result, concurrent.Future):
+                yield process_result
         except gen.TimeoutError:
             stream.close()
         except Exception as e:
