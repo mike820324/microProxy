@@ -20,7 +20,8 @@ class TlsLayer(object):
                                                              ssl_options=server_ssl_options)
 
         dest_stream = yield self.context.dest_stream.start_tls(server_side=False,
-                                                               ssl_options=dict(cert_reqs=ssl.CERT_NONE))
+                                                               ssl_options=dict(cert_reqs=ssl.CERT_NONE),
+                                                               server_hostname=self.context.host)
 
         new_context = copy(self.context)
         new_context.src_stream = src_stream
