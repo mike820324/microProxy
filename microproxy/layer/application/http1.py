@@ -2,6 +2,7 @@ from tornado import iostream
 from tornado import gen
 from tornado import httputil
 from tornado import http1connection
+from tornado import concurrent
 from blinker import signal
 
 from microproxy.utils import get_logger
@@ -16,9 +17,12 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         self.context = context
         self.http_forwarder = None
 
+    @gen.coroutine
     def process(self):
         http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
         http_server_connection.start_serving(self)
+        self._future = concurrent.Future()
+        yield self._future
 
     def start_request(self, server_conn, request_conn):
         dest_conn = http1connection.HTTP1Connection(self.context.dest_stream,
@@ -31,6 +35,7 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
     def on_close(self, server_conn):
         self.context.dest_stream.close()
         logger.debug("http layer done")
+        self._future.set_result(None)
 
 
 class HttpReqReader(httputil.HTTPMessageDelegate):

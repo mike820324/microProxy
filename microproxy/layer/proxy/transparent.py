@@ -4,6 +4,7 @@ import struct
 from copy import copy
 
 from tornado import gen
+from tornado import concurrent
 
 from base import ProxyLayer
 
@@ -37,8 +38,7 @@ class TransparentLayer(ProxyLayer):
         new_context.host = host
         new_context.port = port
 
-        try:
-            self.context.layer_manager.next_layer(self, new_context).process()
-        except:
-            dest_stream.close()
-            raise
+        process_result = self.context.layer_manager.next_layer(self, new_context).process()
+        if isinstance(process_result, concurrent.Future):
+            yield process_result
+        raise gen.Return(None)

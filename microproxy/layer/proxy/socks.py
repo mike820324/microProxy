@@ -4,6 +4,7 @@ import ipaddress
 from copy import copy
 from tornado import gen
 from tornado import iostream
+from tornado import concurrent
 
 from base import ProxyLayer
 
@@ -45,19 +46,19 @@ class SocksLayer(ProxyLayer):
 
     @gen.coroutine
     def process(self):
-        try:
-            yield self.socks_greeting()
-            host, port, addr_type = yield self.socks_request()
-            dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
+        yield self.socks_greeting()
+        host, port, addr_type = yield self.socks_request()
+        dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
 
-            new_context = copy(self.context)
-            new_context.dest_stream = dest_stream
-            new_context.host = host
-            new_context.port = port
+        new_context = copy(self.context)
+        new_context.dest_stream = dest_stream
+        new_context.host = host
+        new_context.port = port
 
-            self.context.layer_manager.next_layer(self, new_context).process()
-        except iostream.StreamClosedError:
-            logger.warning("Source Stream Closed")
+        process_result = self.context.layer_manager.next_layer(self, new_context).process()
+        if isinstance(process_result, concurrent.Future):
+            yield process_result
+        raise gen.Return(None)
 
     @gen.coroutine
     def socks_greeting(self):
@@ -136,6 +137,6 @@ class SocksLayer(ProxyLayer):
 
             yield src_stream.write(struct.pack("!H", port))
             raise gen.Return(dest_stream)
-        except Exception:
+        except iostream.StreamClosedError:
             dest_stream.close()
             raise
