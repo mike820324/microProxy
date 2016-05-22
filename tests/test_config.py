@@ -1,8 +1,8 @@
 import unittest
 from mock import Mock
 
-from microproxy.config import Config, ConfigParserBuilder, verify_config_or_raise_error
-from microproxy.config import define_option, define_section
+from microproxy.config import Config, ConfigParserBuilder
+from microproxy.config import define_option, define_section, verify_config
 
 
 class DefineSectionTest(unittest.TestCase):
@@ -35,25 +35,35 @@ class DefineSectionTest(unittest.TestCase):
 
 
 class DefineOptionTest(unittest.TestCase):
-    def test_non_list_type_option(self):
+    def test_non_list_type_option_without_default(self):
         config_info = {}
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      is_require=True,
                       option_type="string")
 
         self.assertIn("test", config_info)
         self.assertEqual(config_info["test"]["help"], "test is a help")
         self.assertTrue(config_info["test"]["is_require"])
         self.assertEqual(config_info["test"]["type"], "string")
+        self.assertTrue(config_info["test"]["is_require"])
+
+    def test_default_option(self):
+        config_info = {}
+        define_option(option_info=config_info,
+                      option_name="test",
+                      help_str="test is a help",
+                      option_type="string",
+                      default="test1")
+
+        self.assertFalse(config_info["test"]["is_require"])
+        self.assertIs(config_info["test"]["default"], "test1")
 
     def test_cmd_flags_option(self):
         config_info = {}
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      is_require=True,
                       option_type="string",
                       cmd_flags="--test")
 
@@ -64,7 +74,6 @@ class DefineOptionTest(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      is_require=True,
                       option_type="string",
                       cmd_flags=["--test", "-t"])
 
@@ -77,7 +86,6 @@ class DefineOptionTest(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      is_require=True,
                       option_type="string",
                       choices=["socks", "proxy"])
 
@@ -90,7 +98,6 @@ class DefineOptionTest(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      is_require=True,
                       option_type="list",
                       list_type="string")
 
@@ -100,23 +107,12 @@ class DefineOptionTest(unittest.TestCase):
         self.assertEqual(config_info["test"]["type"], "list")
         self.assertEqual(config_info["test"]["list_type"], "string")
 
-    def test_default_option(self):
-        config_info = {}
-        define_option(option_info=config_info,
-                      option_name="test",
-                      help_str="test is a help",
-                      is_require=False,
-                      option_type="string",
-                      default_value="test1")
-
-        self.assertIs(config_info["test"]["default"], "test1")
 
     def test_incorrect_option_info(self):
         with self.assertRaises(ValueError):
             define_option(option_info=None,
                           option_name="test",
                           help_str="test is a help",
-                          is_require=True,
                           option_type="string")
 
     def test_incorrect_option_type(self):
@@ -125,7 +121,6 @@ class DefineOptionTest(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          is_require=True,
                           option_type="not_a_type")
 
     def test_incorrect_list_type(self):
@@ -134,7 +129,6 @@ class DefineOptionTest(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          is_require=True,
                           option_type="list",
                           list_type="not_a_type")
 
@@ -144,7 +138,6 @@ class DefineOptionTest(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          is_require=True,
                           option_type="list")
 
     def test_incorrect_choices_type(self):
@@ -153,19 +146,8 @@ class DefineOptionTest(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          is_require=True,
                           option_type="string",
                           choices="hello")
-
-    def test_missing_default_value(self):
-        config_info = {}
-        with self.assertRaises(ValueError):
-            define_option(option_info=config_info,
-                          option_name="test",
-                          help_str="test is a help",
-                          is_require=False,
-                          option_type="list",
-                          list_type="not_a_type")
 
 
 class ConfigTest(unittest.TestCase):
@@ -174,23 +156,20 @@ class ConfigTest(unittest.TestCase):
         define_option(option_info=proxy_option_info,
                       option_name="host",
                       help_str="Specify the proxy host",
-                      is_require=False,
-                      default_value="127.0.0.1",
+                      default="127.0.0.1",
                       option_type="string",
                       cmd_flags="--host")
 
         define_option(option_info=proxy_option_info,
                       option_name="port",
                       help_str="Specify the proxy listening port",
-                      is_require=True,
                       option_type="int",
                       cmd_flags="--port")
 
         define_option(option_info=proxy_option_info,
                       option_name="http_port",
                       help_str="Add additional http port",
-                      is_require=False,
-                      default_value="",
+                      default="",
                       option_type="list",
                       cmd_flags="--http-port",
                       list_type="int")
@@ -199,7 +178,6 @@ class ConfigTest(unittest.TestCase):
         define_option(option_info=viewer_option_info,
                       option_name="mode",
                       help_str="Specify the viewer type",
-                      is_require=True,
                       option_type="string",
                       cmd_flags="--mode",
                       choices=["--mode"])
@@ -309,7 +287,7 @@ class ConfigTest(unittest.TestCase):
         config = Config(self.config_field_info, ini_parser, cmd_options)
 
         with self.assertRaises(KeyError):
-            verify_config_or_raise_error(self.config_field_info, config)
+            verify_config(self.config_field_info, config)
 
     def test_incorect_value(self):
         cmd_options = {
@@ -324,4 +302,4 @@ class ConfigTest(unittest.TestCase):
         config = Config(self.config_field_info, ini_parser, cmd_options)
 
         with self.assertRaises(ValueError):
-            verify_config_or_raise_error(self.config_field_info, config)
+            verify_config(self.config_field_info, config)
