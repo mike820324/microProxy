@@ -43,7 +43,7 @@ class Http1LayerTest(AsyncTestCase):
 
     @gen_test
     def test_process_normal(self):
-        self.http_layer.process()
+        http_layer_future = self.http_layer.process()
         self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                             b"\r\n"]))
         req_header = yield self.dest_stream.read_until("\r\n\r\n")
@@ -63,8 +63,53 @@ class Http1LayerTest(AsyncTestCase):
                                      b"Body",
                                      b"0",
                                      b"\r\n"])
+        self.src_stream.close()
+
+        yield http_layer_future
+
+        assert self.dest_stream.closed()
+        assert self.context.dest_stream.closed()
+        assert self.context.src_stream.closed()
+
+    @gen_test
+    def test_write_req_to_dest_failed(self):
+        http_layer_future = self.http_layer.process()
+        self.dest_stream.close()
+        yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                    b"\r\n"]))
+        yield http_layer_future
+        assert self.context.dest_stream.closed()
+        assert self.context.src_stream.closed()
+        assert self.src_stream.closed()
+
+    @gen_test
+    def test_read_res_from_dest_failed(self):
+        http_layer_future = self.http_layer.process()
+        yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                    b"\r\n"]))
 
         self.dest_stream.close()
-        self.context.dest_stream.close()
-        self.context.src_stream.close()
+        yield http_layer_future
+        assert self.context.dest_stream.closed()
+        assert self.context.src_stream.closed()
+        assert self.src_stream.closed()
+
+    @gen_test
+    def test_write_res_to_src_failed(self):
+        http_layer_future = self.http_layer.process()
+        yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                    b"\r\n"]))
+
         self.src_stream.close()
+        yield self.dest_stream.read_until("\r\n\r\n")
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
+                                                   b"Transfer-Encoding: chunked\r\n",
+                                                   b"4",
+                                                   b"Body",
+                                                   b"0",
+                                                   b"\r\n"]))
+
+        yield http_layer_future
+        assert self.context.dest_stream.closed()
+        assert self.context.src_stream.closed()
+        assert self.src_stream.closed()
