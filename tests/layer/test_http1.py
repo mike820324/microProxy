@@ -7,6 +7,7 @@ from tornado.netutil import add_accept_handler
 
 from microproxy.context import Context
 from microproxy.layer import Http1Layer
+from microproxy.exception import SrcStreamClosedError
 
 
 class Http1LayerTest(AsyncTestCase):
@@ -57,19 +58,17 @@ class Http1LayerTest(AsyncTestCase):
                                                    b"\r\n"]))
 
         resp = yield self.src_stream.read_until(b"0\r\n\r\n")
+        self.src_stream.close()
+        self.dest_stream.close()
+        self.context.src_stream.close()
+        self.context.dest_stream.close()
+        yield http_layer_future
         assert resp == b"\r\n".join([b"HTTP/1.1 200 OK",
                                      b"Transfer-Encoding: chunked\r\n",
                                      b"4",
                                      b"Body",
                                      b"0",
                                      b"\r\n"])
-        self.src_stream.close()
-
-        yield http_layer_future
-
-        assert self.dest_stream.closed()
-        assert self.context.dest_stream.closed()
-        assert self.context.src_stream.closed()
 
     @gen_test
     def test_write_req_to_dest_failed(self):
@@ -77,29 +76,27 @@ class Http1LayerTest(AsyncTestCase):
         self.dest_stream.close()
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                     b"\r\n"]))
+        self.src_stream.close()
+        self.context.src_stream.close()
+        self.context.dest_stream.close()
         yield http_layer_future
-        assert self.context.dest_stream.closed()
-        assert self.context.src_stream.closed()
-        assert self.src_stream.closed()
 
     @gen_test
-    def test_read_res_from_dest_failed(self):
+    def test_read_resp_from_dest_failed(self):
         http_layer_future = self.http_layer.process()
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                     b"\r\n"]))
-
         self.dest_stream.close()
+        self.src_stream.close()
+        self.context.src_stream.close()
+        self.context.dest_stream.close()
         yield http_layer_future
-        assert self.context.dest_stream.closed()
-        assert self.context.src_stream.closed()
-        assert self.src_stream.closed()
 
     @gen_test
-    def test_write_res_to_src_failed(self):
+    def test_write_resp_to_src_failed(self):
         http_layer_future = self.http_layer.process()
-        yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
-                                    b"\r\n"]))
-
+        self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                            b"\r\n"]))
         self.src_stream.close()
         yield self.dest_stream.read_until("\r\n\r\n")
         yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
@@ -108,8 +105,9 @@ class Http1LayerTest(AsyncTestCase):
                                                    b"Body",
                                                    b"0",
                                                    b"\r\n"]))
+        with self.assertRaises(SrcStreamClosedError):
+            yield http_layer_future
 
-        yield http_layer_future
-        assert self.context.dest_stream.closed()
-        assert self.context.src_stream.closed()
-        assert self.src_stream.closed()
+        self.dest_stream.close()
+        self.context.src_stream.close()
+        self.context.dest_stream.close()

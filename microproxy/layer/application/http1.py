@@ -6,6 +6,7 @@ from tornado import concurrent
 from blinker import signal
 
 from microproxy.utils import get_logger
+from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy import http
 
 logger = get_logger(__name__)
@@ -30,17 +31,18 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
                                                     True)
         self.http_forwarder = HttpForwarder(self.context,
                                             request_conn,
-                                            dest_conn)
+                                            dest_conn,
+                                            self)
         return self.http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
-        self.context.dest_stream.close()
         logger.debug("http layer done")
         if self._future.running():
             self._future.set_result(None)
 
-    def on_error(self, sender, exception=None):
-        self._future.set_exception(exception)
+    def on_error(self, sender, exe_info=None):
+        logger.debug("http layer error")
+        self._future.set_exception(exe_info)
 
 
 class HttpReqReader(httputil.HTTPMessageDelegate):
@@ -64,15 +66,15 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
 
     def on_connection_close(self):
         logger.debug("source connection close")
-        signal("disconnect").send(self)
 
 
 class HttpForwarder(object):
-    def __init__(self, context, src_conn, dest_conn):
+    def __init__(self, context, src_conn, dest_conn, http1_layer):
         super(HttpForwarder, self).__init__()
         self.context = context
         self.src_conn = src_conn
         self.dest_conn = dest_conn
+        self.http1_layer = http1_layer
         self.req = None
         self.resp = None
 
@@ -80,14 +82,12 @@ class HttpForwarder(object):
         reader = HttpReqReader(self.context)
 
         signal("request_done").connect(self.req_done, sender=reader)
-        signal("disconnect").connect(self.dest_conn.close, sender=reader)
         return reader
 
     def create_resp_reader(self):
         reader = HttpRespReader(self.context)
 
         signal("response_done").connect(self.resp_done, sender=reader)
-        signal("disconnect").connect(self.src_conn.close, sender=reader)
         return reader
 
     @gen.coroutine
@@ -104,11 +104,12 @@ class HttpForwarder(object):
             yield self.dest_conn.write(self.req.body)
             yield self.dest_conn.read_response(self.create_resp_reader())
             logger.debug("destination request done")
-        except iostream.StreamClosedError:
+        except iostream.StreamClosedError as e:
             logger.debug("destination closed while writing/reading")
-            self.src_conn.close()
+            signal("http1layer_error").send(self.http1_layer,
+                                            exe_info=DestStreamClosedError(e))
         except Exception as e:
-            signal("http1layer_error").send(self.http1_layer, e)
+            signal("http1layer_error").send(self.http1_layer, exe_info=e)
 
     @gen.coroutine
     def resp_done(self, sender):
@@ -133,11 +134,12 @@ class HttpForwarder(object):
             yield self.src_conn.write(self.resp.body)
             self.src_conn.finish()
             logger.debug("source response done")
-        except iostream.StreamClosedError:
+        except iostream.StreamClosedError as e:
             logger.debug("source stream closed while writing")
-            self.dest_conn.close()
+            signal("http1layer_error").send(self.http1_layer,
+                                            exe_info=SrcStreamClosedError(e))
         except Exception as e:
-            signal("http1layer_error").send(self.http1_layer, e)
+            signal("http1layer_error").send(self.http1_layer, exe_info=e)
 
 
 class HttpRespReader(httputil.HTTPMessageDelegate):
@@ -161,4 +163,3 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
 
     def on_connection_close(self):
         logger.debug("destination connection closed")
-        signal("disconnect").send(self)
