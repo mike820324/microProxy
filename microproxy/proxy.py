@@ -8,6 +8,7 @@ from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLay
 
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
+from exception import DestStreamClosedError, SrcStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -66,6 +67,11 @@ class ProxyServer(tcpserver.TCPServer):
                 yield process_result
         except gen.TimeoutError:
             stream.close()
+        except DestStreamClosedError:
+            logger.error("destination stream closed unexceptedly")
+            stream.close()
+        except SrcStreamClosedError:
+            logger.error("source stream closed unexceptedly")
         except iostream.StreamClosedError:
             logger.error("stream closed")
             stream.close()
