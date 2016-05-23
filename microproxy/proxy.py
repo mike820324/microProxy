@@ -65,6 +65,9 @@ class ProxyServer(tcpserver.TCPServer):
                 yield process_result
         except gen.TimeoutError:
             stream.close()
+        except iostream.StreamClosedError:
+            logger.error("stream closed")
+            stream.close()
         except Exception as e:
             # not handle exception, log it and close the stream
             logger.exception(e)
