@@ -33,13 +33,11 @@ class Config(object):
                 new_config[field] = int(config[field])
 
             elif optionInfo[field]["type"] == "list":
-                value = config[field].split(",")
-                if len(value) == 1:
-                    new_config[field] = value
-                elif optionInfo[field]["list_type"] == "int":
-                    new_config[field] = map(int, value)
+                values = [value for value in config[field].split(",") if len(value) > 0]
+                if optionInfo[field]["list_type"] == "int":
+                    new_config[field] = map(int, values)
                 elif optionInfo[field]["list_type"] == "string":
-                    new_config[field] = value
+                    new_config[field] = values
 
             else:
                 new_config[field] = config[field]
