@@ -1,6 +1,7 @@
 from tornado import tcpserver
 from tornado import gen
 from tornado import concurrent
+from tornado import iostream
 
 from context import Context
 from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer
