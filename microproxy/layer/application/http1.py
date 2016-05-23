@@ -16,12 +16,13 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         super(Http1Layer, self).__init__()
         self.context = context
         self.http_forwarder = None
+        self._future = concurrent.Future()
+        signal("http1layer_error").connect(self.on_error, sender=self)
 
     @gen.coroutine
     def process(self):
         http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
         http_server_connection.start_serving(self)
-        self._future = concurrent.Future()
         yield self._future
 
     def start_request(self, server_conn, request_conn):
@@ -35,7 +36,11 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
     def on_close(self, server_conn):
         self.context.dest_stream.close()
         logger.debug("http layer done")
-        self._future.set_result(None)
+        if self._future.running():
+            self._future.set_result(None)
+
+    def on_error(self, sender, exception=None):
+        self._future.set_exception(exception)
 
 
 class HttpReqReader(httputil.HTTPMessageDelegate):
@@ -73,20 +78,16 @@ class HttpForwarder(object):
 
     def create_req_reader(self):
         reader = HttpReqReader(self.context)
-        done_signal = signal("request_done")
-        disconnect_signal = signal("disconnect")
 
-        done_signal.connect(self.req_done, sender=reader)
-        disconnect_signal.connect(self.close_dest_conn, sender=reader)
+        signal("request_done").connect(self.req_done, sender=reader)
+        signal("disconnect").connect(self.dest_conn.close, sender=reader)
         return reader
 
     def create_resp_reader(self):
         reader = HttpRespReader(self.context)
-        done_signal = signal("response_done")
-        disconnect_signal = signal("disconnect")
 
-        done_signal.connect(self.resp_done, sender=reader)
-        disconnect_signal.connect(self.close_src_conn, sender=reader)
+        signal("response_done").connect(self.resp_done, sender=reader)
+        signal("disconnect").connect(self.src_conn.close, sender=reader)
         return reader
 
     @gen.coroutine
@@ -105,9 +106,9 @@ class HttpForwarder(object):
             logger.debug("destination request done")
         except iostream.StreamClosedError:
             logger.debug("destination closed while writing/reading")
-            self.close_src_conn()
+            self.src_conn.close()
         except Exception as e:
-            logger.exception(e)
+            signal("http1layer_error").send(self.http1_layer, e)
 
     @gen.coroutine
     def resp_done(self, sender):
@@ -134,15 +135,9 @@ class HttpForwarder(object):
             logger.debug("source response done")
         except iostream.StreamClosedError:
             logger.debug("source stream closed while writing")
-            self.close_dest_conn()
+            self.dest_conn.close()
         except Exception as e:
-            logger.exception(e)
-
-    def close_src_conn(self):
-        self.src_conn.close()
-
-    def close_dest_conn(self):
-        self.dest_conn.close()
+            signal("http1layer_error").send(self.http1_layer, e)
 
 
 class HttpRespReader(httputil.HTTPMessageDelegate):
