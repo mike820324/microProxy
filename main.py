@@ -66,7 +66,7 @@ def create_options():
                   help_str="Specify the viewer type",
                   option_type="string",
                   cmd_flags="--mode",
-                  choices=["--mode"])
+                  choices=["log"])
 
     define_option(option_info=viewer_option_info,
                   option_name="viewer_channel",
