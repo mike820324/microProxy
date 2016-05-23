@@ -107,7 +107,6 @@ class DefineOptionTest(unittest.TestCase):
         self.assertEqual(config_info["test"]["type"], "list")
         self.assertEqual(config_info["test"]["list_type"], "string")
 
-
     def test_incorrect_option_info(self):
         with self.assertRaises(ValueError):
             define_option(option_info=None,
