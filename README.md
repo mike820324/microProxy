@@ -1,7 +1,6 @@
 # MicroProxy
 
 MicroProxy is a http/https traffic interceptor. 
-Currently, we only support HTTP traffic.
 
 This project is highly inspired by [mitmproxy](https://github.com/mitmproxy/mitmproxy),
 but we take some different approach compare to mitmproxy.
@@ -17,7 +16,7 @@ Moreover, we can also open multiple viewing process to listen to the same MicroP
 
 ## System Requirement:
 We have tested MicroProxy under **Linux** and **MacOS**.
-The python version we are using is version 2.7.6.
+The python version we are using is version 2.7.10.
 
 > Note: *transparent proxy mode* can only work in Linux machine.
 
