@@ -44,4 +44,7 @@ class TransparentLayer(ProxyLayer):
                 yield process_result
             raise gen.Return(None)
         finally:
-            dest_stream.close()
+            try:
+                dest_stream.close()
+            except:
+                pass

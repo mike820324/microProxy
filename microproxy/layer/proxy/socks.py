@@ -9,7 +9,7 @@ from tornado import concurrent
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import ProtocolError
+from microproxy.exception import ProtocolError, SrcStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -61,7 +61,10 @@ class SocksLayer(ProxyLayer):
                 yield process_result
             raise gen.Return(None)
         finally:
-            dest_stream.close()
+            try:
+                dest_stream.close()
+            except:
+                pass
 
     @gen.coroutine
     def socks_greeting(self):
@@ -140,6 +143,6 @@ class SocksLayer(ProxyLayer):
 
             yield src_stream.write(struct.pack("!H", port))
             raise gen.Return(dest_stream)
-        except iostream.StreamClosedError:
+        except iostream.StreamClosedError as e:
             dest_stream.close()
-            raise
+            raise SrcStreamClosedError(e)
