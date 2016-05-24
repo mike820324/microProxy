@@ -143,7 +143,6 @@ def define_option(option_info,
 
         option[option_name]["list_type"] = list_type
 
-
     option_info.update(option)
 
 
