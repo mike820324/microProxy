@@ -1,12 +1,14 @@
 from tornado import tcpserver
 from tornado import gen
 from tornado import concurrent
+from tornado import iostream
 
 from context import Context
 from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer
 
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
+from exception import DestStreamClosedError, SrcStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -64,6 +66,14 @@ class ProxyServer(tcpserver.TCPServer):
             if isinstance(process_result, concurrent.Future):
                 yield process_result
         except gen.TimeoutError:
+            stream.close()
+        except DestStreamClosedError:
+            logger.error("destination stream closed unexceptedly")
+            stream.close()
+        except SrcStreamClosedError:
+            logger.error("source stream closed unexceptedly")
+        except iostream.StreamClosedError:
+            logger.error("stream closed")
             stream.close()
         except Exception as e:
             # not handle exception, log it and close the stream
