@@ -38,7 +38,13 @@ class TransparentLayer(ProxyLayer):
         new_context.host = host
         new_context.port = port
 
-        process_result = self.context.layer_manager.next_layer(self, new_context).process()
-        if isinstance(process_result, concurrent.Future):
-            yield process_result
-        raise gen.Return(None)
+        try:
+            process_result = self.context.layer_manager.next_layer(self, new_context).process()
+            if isinstance(process_result, concurrent.Future):
+                yield process_result
+            raise gen.Return(None)
+        finally:
+            try:
+                dest_stream.close()
+            except:
+                pass
