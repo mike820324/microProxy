@@ -1,3 +1,4 @@
+from copy import copy
 from tornado import tcpserver
 from tornado import gen
 from tornado import concurrent
@@ -24,7 +25,7 @@ class LayerManager(object):
             # fixme: due to fail fast, need raise exception here
             logger.warning("Unsupport proxy mode : {0}".format(mode))
 
-    def next_layer(self, current_layer, context):
+    def next_layer(self, current_layer, context, alpn_info=None):
         try:
             http_ports = [80]
             http_ports.extend(context.config["http_port"])
@@ -35,7 +36,13 @@ class LayerManager(object):
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
-                return Http1Layer(context)
+                # we are not going through tls layer
+                # chage dest_stream to iostream
+                new_context = copy(context)
+                new_context.dest_stream.setblocking(False)
+                new_context.dest_stream = iostream.IOStream(new_context.dest_stream)
+                new_context.schema = "http"
+                return Http1Layer(new_context)
             elif context.port in https_ports:
                 return TlsLayer(context)
             else:
@@ -43,7 +50,10 @@ class LayerManager(object):
 
         if isinstance(current_layer, TlsLayer):
             if context.port in https_ports:
-                return Http1Layer(context)
+                if context.schema == "https":
+                    return Http1Layer(context)
+                elif context.schema == "h2":
+                    return ForwardLayer(context)
 
 
 class ProxyServer(tcpserver.TCPServer):
