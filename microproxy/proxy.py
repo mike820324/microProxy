@@ -7,7 +7,7 @@ from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLay
 from microproxy.iostream import MicroProxyIOStream
 
 from utils import curr_loop, get_logger
-from interceptor import MsgPublisherInterceptor as Interceptor
+from interceptor import Interceptor
 from exception import DestStreamClosedError, SrcStreamClosedError
 
 logger = get_logger(__name__)

@@ -43,6 +43,14 @@ def create_options():
                   list_type="int")
 
     define_option(option_info=proxy_option_info,
+                  option_name="plugins",
+                  help_str="Load plugins",
+                  default="",
+                  option_type="list",
+                  cmd_flags="--plugins",
+                  list_type="string")
+
+    define_option(option_info=proxy_option_info,
                   option_name="viewer_channel",
                   help_str="Specify the viewer channel. ex. tcp://*:5581",
                   option_type="string",

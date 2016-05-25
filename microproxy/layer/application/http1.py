@@ -9,6 +9,7 @@ from blinker import signal
 from microproxy.utils import get_logger
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy import http
+from microproxy.interceptor import signal_request, signal_response, signal_publish
 
 logger = get_logger(__name__)
 
@@ -95,9 +96,9 @@ class HttpForwarder(object):
     @gen.coroutine
     def req_done(self, sender):
         logger.debug("source request done")
-        self.req = sender.req
-        signal("interceptor_request").send(self, request=self.req)
+        _, new_request = signal_request.send(self, request=sender.req)[0]
 
+        self.req = new_request
         status_line = httputil.RequestStartLine(self.req.method,
                                                 self.req.path,
                                                 self.req.version)
@@ -116,11 +117,12 @@ class HttpForwarder(object):
     @gen.coroutine
     def resp_done(self, sender):
         logger.debug("destination response done")
-        self.resp = sender.resp
-        signal("interceptor_response").send(self, response=self.resp)
-        signal("interceptor_record").send(self,
-                                          request=self.req,
-                                          response=self.resp)
+        _, new_response = signal_response.send(self, response=sender.resp)[0]
+
+        self.resp = new_response
+        signal_publish.send(self,
+                            request=self.req,
+                            response=self.resp)
 
         headers = self.resp.headers.copy()
         # restriction on using tornado http connection
