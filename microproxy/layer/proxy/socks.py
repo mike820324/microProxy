@@ -124,7 +124,7 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def socks_response_with_dest_stream_creation(self, host, port, addr_type):
         src_stream = self.context.src_stream
-        dest_stream = yield self.create_dest_stream((host, port))
+        dest_stream = self.create_dest_stream((host, port))
         try:
             yield src_stream.write(struct.pack("!BBx",
                                                self.SOCKS_VERSION,
