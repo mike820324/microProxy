@@ -96,7 +96,16 @@ class HttpForwarder(object):
     @gen.coroutine
     def req_done(self, sender):
         logger.debug("source request done")
-        _, new_request = signal_request.send(self, request=sender.req)[0]
+        requests = signal_request.send(self, request=sender.req)
+        if len(requests) > 1:
+            print len(requests)
+            logger.error("More than one interceptor")
+
+        try:
+            _, new_request = requests[0]
+        except IndexError:
+            new_request = sender.req
+            logger.debug("No interceptor is listening")
 
         self.req = new_request
         status_line = httputil.RequestStartLine(self.req.method,
@@ -117,7 +126,14 @@ class HttpForwarder(object):
     @gen.coroutine
     def resp_done(self, sender):
         logger.debug("destination response done")
-        _, new_response = signal_response.send(self, response=sender.resp)[0]
+        responses = signal_response.send(self, response=sender.resp)
+        if len(responses) > 1:
+            logger.error("More than one interceptor")
+        try:
+            _, new_response = responses[0]
+        except IndexError:
+            new_response = sender.resp
+            logger.debug("No Interceptor is listening")
 
         self.resp = new_response
         signal_publish.send(self,
