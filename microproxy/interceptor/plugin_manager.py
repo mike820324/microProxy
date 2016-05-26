@@ -1,9 +1,25 @@
 import os
 import sys
 from copy import copy
-
+from watchdog.events import RegexMatchingEventHandler
 from microproxy.utils import get_logger
+
+if sys.platform == "darwin":
+    from watchdog.observers.polling import PollingObserver as Observer
+else:
+    from watchdog.observers import Observer
+
 logger = get_logger(__name__)
+
+
+class PluginEventHandler(RegexMatchingEventHandler):
+    def __init__(self, filename, callback):
+        super(PluginEventHandler, self).__init__(ignore_directories=True,
+                                                 regexes=['.*' + filename])
+        self.callback = callback
+
+    def on_modified(self, event):
+        self.callback()
 
 
 class Plugin(object):
@@ -11,7 +27,19 @@ class Plugin(object):
 
     def __init__(self, plugin_path):
         self.plugin_path = os.path.abspath(plugin_path)
+        self.plugin_name = os.path.basename(self.plugin_path)
+        self.plugin_dir = os.path.dirname(self.plugin_path)
+        self.namespace = None
         self._load_plugin()
+        self._register_watcher()
+
+    def _register_watcher(self):
+        logger.debug("Register File Watcher for {0}".format(self.plugin_name))
+        self.event_handler = PluginEventHandler(self.plugin_name,
+                                                self._reload_plugin)
+        self.observer = Observer()
+        self.observer.schedule(self.event_handler, self.plugin_dir)
+        self.observer.start()
 
     def _load_plugin(self):
         sys.path.append(os.path.dirname(self.plugin_path))
@@ -20,11 +48,16 @@ class Plugin(object):
                 self.namespace = {"__file__": self.plugin_path}
                 code = compile(fp.read(), self.plugin_path, "exec")
                 exec (code, self.namespace, self.namespace)
+
         except Exception as e:
             logger.exception(e)
 
         sys.path.pop()
-        logger.info("Load Plugin : {0}".format(self.plugin_path.split("/")[-1]))
+        logger.info("Load Plugin : {0}".format(self.plugin_name))
+
+    def _reload_plugin(self):
+        logger.info("Reload Plugin : {0}".format(self.plugin_name))
+        self._load_plugin()
 
     def __getattr__(self, attr):
         if attr not in self.PLUGIN_METHODS:
