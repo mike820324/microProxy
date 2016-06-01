@@ -1,7 +1,6 @@
 import ssl
 from copy import copy
 from tornado import gen
-from tornado import concurrent
 from tornado.iostream import SSLIOStream
 
 from microproxy.utils import get_logger
@@ -13,7 +12,7 @@ class TlsLayer(object):
 
     def __init__(self, context):
         super(TlsLayer, self).__init__()
-        self.context = context
+        self.context = copy(context)
         self.ssl_sock = None
         self.alpn_info = ""
 
@@ -62,18 +61,13 @@ class TlsLayer(object):
         self.ssl_sock.setblocking(False)
         dest_stream = SSLIOStream(self.ssl_sock)
 
-        new_context = copy(self.context)
-        new_context.src_stream = src_stream
-        new_context.dest_stream = dest_stream
+        self.context.src_stream = src_stream
+        self.context.dest_stream = dest_stream
 
         if self.alpn_info == "http/1.1":
-            new_context.schema = "https"
+            self.context.schema = "https"
         elif self.alpn_info == "h2":
-            new_context.schema = "h2"
+            self.context.schema = "h2"
         else:
-            new_context.schema = "https"
-
-        process_result = self.context.layer_manager.next_layer(self, new_context).process()
-        if isinstance(process_result, concurrent.Future):
-            yield process_result
-        raise gen.Return(None)
+            self.context.schema = "https"
+        raise gen.Return(self.context)
