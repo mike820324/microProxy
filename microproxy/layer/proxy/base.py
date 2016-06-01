@@ -1,4 +1,5 @@
 import socket
+from copy import copy
 
 from microproxy.utils import get_logger
 logger = get_logger(__name__)
@@ -7,7 +8,7 @@ logger = get_logger(__name__)
 class ProxyLayer(object):
     def __init__(self, context):
         super(ProxyLayer, self).__init__()
-        self.context = context
+        self.context = copy(context)
 
     def process(self):
         raise NotImplementedError

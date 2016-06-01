@@ -18,6 +18,7 @@ class ForwardLayer(object):
         self.context.dest_stream.read_until_close(streaming_callback=self.on_response)
         self.context.dest_stream.set_close_callback(self.on_dest_close)
         yield self._future
+        raise gen.Return(self.context)
 
     def on_src_close(self):
         self.context.dest_stream.close()
