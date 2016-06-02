@@ -4,6 +4,7 @@ from tornado import iostream
 
 from context import Context
 from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer, NonTlsLayer
+from microproxy.iostream import MicroProxyIOStream
 
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
@@ -87,6 +88,18 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
+
+    def _handle_connection(self, connection, address):
+        try:
+            stream = MicroProxyIOStream(connection,
+                                        io_loop=self.io_loop,
+                                        max_buffer_size=self.max_buffer_size,
+                                        read_chunk_size=self.read_chunk_size)
+            future = self.handle_stream(stream, address)
+            if future is not None:
+                self.io_loop.add_future(future, lambda f: f.result())
+        except Exception as e:
+            logger.exception(e)
 
     @gen.coroutine
     def handle_stream(self, stream, port):
