@@ -1,5 +1,6 @@
 import socket
 import errno
+from tornado import ioloop
 from tornado.iostream import IOStream, SSLIOStream, StreamClosedError
 from tornado.concurrent import TracebackFuture
 from OpenSSL import SSL
@@ -14,6 +15,15 @@ logger = get_logger(__name__)
 class MicroProxyIOStream(IOStream):
     def __init__(self, sock, **kwargs):
         super(MicroProxyIOStream, self).__init__(sock, **kwargs)
+
+    def pause(self):
+        self.socket.setblocking(True)
+        self.io_loop.remove_handler(self.socket)
+
+    def resume(self):
+        self.socket.setblocking(False)
+        self._add_io_state(ioloop.IOLoop.READ)
+        self._add_io_state(ioloop.IOLoop.WRITE)
 
     def start_tls(self, server_side, ssl_options, server_hostname=None):
         if (self._read_callback or self._read_future or

@@ -12,6 +12,7 @@ class NonTlsLayer(object):
     def process(self):
         # we are not going through tls layer
         # chage dest_stream to iostream
+        self.context.src_stream.resume()
         self.context.dest_stream.setblocking(False)
         self.context.dest_stream = iostream.IOStream(self.context.dest_stream)
         self.context.schema = "http"

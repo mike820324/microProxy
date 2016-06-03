@@ -48,6 +48,7 @@ class SocksLayer(ProxyLayer):
         host, port, addr_type = yield self.socks_request()
         dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
 
+        self.context.src_stream.pause()
         self.context.dest_stream = dest_stream
         self.context.host = host
         self.context.port = port
