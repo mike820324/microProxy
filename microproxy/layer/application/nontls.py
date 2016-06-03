@@ -15,5 +15,5 @@ class NonTlsLayer(object):
         self.context.src_stream.resume()
         self.context.dest_stream.setblocking(False)
         self.context.dest_stream = iostream.IOStream(self.context.dest_stream)
-        self.context.schema = "http"
+        self.context.scheme = "http"
         raise gen.Return(self.context)
