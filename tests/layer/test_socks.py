@@ -100,7 +100,6 @@ class SocksProxyHandlerTest(AsyncTestCase):
         assert port == self.port
 
         dest_stream.close()
-        self.dest_server_stream.close()
         self.client_stream.close()
         self.server_stream.close()
 
@@ -116,10 +115,8 @@ class SocksProxyHandlerTest(AsyncTestCase):
         assert addr_type == 3
         assert host == "localhost"
         assert port == self.port
-        assert not dest_stream.closed()
 
         dest_stream.close()
-        self.dest_server_stream.close()
         self.client_stream.close()
         self.server_stream.close()
 
