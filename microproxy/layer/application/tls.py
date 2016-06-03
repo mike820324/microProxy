@@ -73,6 +73,7 @@ class TlsLayer(object):
 
     @gen.coroutine
     def process(self):
+        self.context.src_stream.resume()
         src_ssl_ctx = self.create_src_sslcontext()
         try:
             src_stream = yield self.context.src_stream.start_tls(server_side=True,
