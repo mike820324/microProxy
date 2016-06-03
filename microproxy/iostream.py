@@ -1,10 +1,15 @@
+import socket
+import errno
 from tornado.iostream import IOStream, SSLIOStream, StreamClosedError
 from tornado.concurrent import TracebackFuture
-import socket
 from OpenSSL import SSL
+from service_identity import VerificationError
+from service_identity.pyopenssl import verify_hostname
 
-import errno
-_ERRNO_WOULDBLOCK = (errno.EWOULDBLOCK, errno.EAGAIN)
+from microproxy.utils import get_logger
+
+logger = get_logger(__name__)
+
 
 class MicroProxyIOStream(IOStream):
     def __init__(self, sock, **kwargs):
@@ -56,7 +61,6 @@ class MicroProxySSLIOStream(SSLIOStream):
         super(MicroProxySSLIOStream, self).__init__(sock, **kwargs)
 
     def _do_ssl_handshake(self):
-        # Based on code from test_ssl.py in the python stdlib
         try:
             self._handshake_reading = False
             self._handshake_writing = False
@@ -65,51 +69,40 @@ class MicroProxySSLIOStream(SSLIOStream):
         except SSL.WantReadError:
             self._handshake_reading = True
             return
+
         except SSL.WantWriteError:
             self._handshake_writing = True
             return
 
+        except SSL.Error as err:
+            try:
+                peer = self.socket.getpeername()
+            except Exception:
+                peer = '(not connected)'
+                logger.warning("SSL Error on %s %s: %s",
+                               self.socket.fileno(), peer, err)
+            return self.close(exc_info=True)
+
         except socket.error as err:
-            # Some port scans (e.g. nmap in -sT mode) have been known
-            # to cause do_handshake to raise EBADF and ENOTCONN, so make
-            # those errors quiet as well.
-            # https://groups.google.com/forum/?fromgroups#!topic/python-tornado/ApucKJat1_0
-            if (self._is_connreset(err) or
-                    err.args[0] in (errno.EBADF, errno.ENOTCONN)):
+            if (self._is_connreset(err) or err.args[0] in (errno.EBADF, errno.ENOTCONN)):
                 return self.close(exc_info=True)
             raise
+
         except AttributeError:
-            # On Linux, if the connection was reset before the call to
-            # wrap_socket, do_handshake will fail with an
-            # AttributeError.
             return self.close(exc_info=True)
         else:
             self._ssl_accepting = False
-            # if not self._verify_cert(self.socket.get_peer_cert()):
-            #     self.close()
-            #     return
-            self._run_ssl_connect_callback()
+            verify_mode = self.socket.get_context().get_verify_mode()
+            if (verify_mode is not SSL.VERIFY_NONE and
+                    self._server_hostname is not None):
+                try:
+                    verify_hostname(self.socket, self._server_hostname)
+                except VerificationError as e:
+                    logger.warning("Invalid SSL certificate: %s" % e)
+                    self.close()
+                    return
 
-    def _verify_cert(self, peercert):
-        pass
-        # if isinstance(self._ssl_options, dict):
-        #     verify_mode = self._ssl_options.get('cert_reqs', ssl.CERT_NONE)
-        # elif isinstance(self._ssl_options, ssl.SSLContext):
-        #     verify_mode = self._ssl_options.verify_mode
-        # assert verify_mode in (ssl.CERT_NONE, ssl.CERT_REQUIRED, ssl.CERT_OPTIONAL)
-        # if verify_mode == ssl.CERT_NONE or self._server_hostname is None:
-        #     return True
-        # cert = self.socket.getpeercert()
-        # if cert is None and verify_mode == ssl.CERT_REQUIRED:
-        #     gen_log.warning("No SSL certificate given")
-        #     return False
-        # try:
-        #     ssl_match_hostname(peercert, self._server_hostname)
-        # except SSLCertificateError as e:
-        #     gen_log.warning("Invalid SSL certificate: %s" % e)
-        #     return False
-        # else:
-        #     return True
+            self._run_ssl_connect_callback()
 
     def write_to_fd(self, data):
         try:
@@ -139,7 +132,7 @@ class MicroProxySSLIOStream(SSLIOStream):
                 raise
 
         except socket.error as e:
-            if e.args[0] in _ERRNO_WOULDBLOCK:
+            if e.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
                 return None
             else:
                 raise
