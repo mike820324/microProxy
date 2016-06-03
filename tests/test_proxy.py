@@ -56,14 +56,14 @@ class LayerManagerTest(AsyncTestCase):
                           config=self.config,
                           port=80)
 
-        context.schema = "http"
+        context.scheme = "http"
         nontls_layer = NonTlsLayer(context)
         layer_constructor = self.layer_manager.next_layer(nontls_layer,
                                                           context)
         layer = layer_constructor(context)
         assert isinstance(layer, Http1Layer)
 
-        context.schema = "https"
+        context.scheme = "https"
         tls_layer = TlsLayer(context)
         layer_constructor = self.layer_manager.next_layer(tls_layer, context)
         layer = layer_constructor(context)

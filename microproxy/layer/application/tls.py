@@ -35,11 +35,11 @@ class TlsLayer(object):
                 alpn_info = b"http/1.1"
 
             if alpn_info == "http/1.1":
-                self.context.schema = "https"
+                self.context.scheme = "https"
             elif alpn_info == "h2":
-                self.context.schema = "h2"
+                self.context.scheme = "h2"
             else:
-                self.context.schema = "https"
+                self.context.scheme = "https"
 
             logger.debug("Choose {0} as application protocol".format(alpn_info))
             return bytes(alpn_info)
