@@ -44,14 +44,18 @@ class LayerManager(object):
                     break
             except gen.TimeoutError:
                 self.src_stream.close()
+                break
             except DestStreamClosedError:
                 logger.error("destination stream closed unexceptedly")
                 self.src_stream.close()
+                break
             except SrcStreamClosedError:
                 logger.error("source stream closed unexceptedly")
+                break
             except iostream.StreamClosedError:
                 logger.error("stream closed")
                 self.src_stream.close()
+                break
             except Exception:
                 raise
 
@@ -75,9 +79,9 @@ class LayerManager(object):
                 return ForwardLayer
 
         if isinstance(current_layer, TlsLayer) or isinstance(current_layer, NonTlsLayer):
-            if context.schema == "http" or context.schema == "https":
+            if context.scheme == "http" or context.scheme == "https":
                 return Http1Layer
-            elif context.schema == "h2":
+            elif context.scheme == "h2":
                 return ForwardLayer
 
 
