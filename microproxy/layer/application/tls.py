@@ -15,9 +15,15 @@ class TlsLayer(object):
         self.context = copy(context)
         self.ssl_sock = None
 
-    def src_alpn_callback(self, src_ssl_conn, alpn):
+    def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
-            dest_context = self.create_dest_sslcontext(alpn)
+            support_alpn = [
+                protocol
+                for protocol in src_alpn
+                if protocol in self.SUPPORT_PROTOCOLS
+            ]
+
+            dest_context = self.create_dest_sslcontext(support_alpn)
             self.ssl_sock = SSL.Connection(dest_context,
                                            self.context.dest_stream)
             self.ssl_sock.set_tlsext_host_name(self.context.host)
@@ -25,6 +31,8 @@ class TlsLayer(object):
             self.ssl_sock.do_handshake()
 
             alpn_info = self.ssl_sock.get_alpn_proto_negotiated()
+            if len(alpn_info) == 0:
+                alpn_info = b"http/1.1"
 
             if alpn_info == "http/1.1":
                 self.context.schema = "https"
@@ -32,6 +40,8 @@ class TlsLayer(object):
                 self.context.schema = "h2"
             else:
                 self.context.schema = "https"
+
+            logger.debug("Choose {0} as application protocol".format(alpn_info))
             return bytes(alpn_info)
 
         except Exception as e:
@@ -43,26 +53,30 @@ class TlsLayer(object):
         self.context.host = src_ssl_conn.get_servername()
 
     def create_dest_sslcontext(self, alpn):
-        dest_ssl_context = SSL.Context(SSL.SSLv23_METHOD)
-        dest_ssl_context.set_alpn_protos(alpn)
+        ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
+        ssl_ctx.set_options(SSL.OP_NO_SSLv2)
+        ssl_ctx.set_verify(SSL.VERIFY_NONE,
+                           lambda conn, x509, err_num, err_depth, err_code: True)
+        ssl_ctx.set_alpn_protos(alpn)
 
-        return dest_ssl_context
+        return ssl_ctx
 
     def create_src_sslcontext(self):
-        context = SSL.Context(SSL.SSLv23_METHOD)
-        context.use_certificate_file(self.context.config["certfile"])
-        context.use_privatekey_file(self.context.config["keyfile"])
-        context.set_tlsext_servername_callback(self.src_sni_callback)
-        context.set_alpn_select_callback(self.src_alpn_callback)
+        ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
+        ssl_ctx.set_options(SSL.OP_NO_SSLv2)
+        ssl_ctx.use_certificate_file(self.context.config["certfile"])
+        ssl_ctx.use_privatekey_file(self.context.config["keyfile"])
+        ssl_ctx.set_tlsext_servername_callback(self.src_sni_callback)
+        ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
 
-        return context
+        return ssl_ctx
 
     @gen.coroutine
     def process(self):
-        src_ssl_context = self.create_src_sslcontext()
+        src_ssl_ctx = self.create_src_sslcontext()
         try:
             src_stream = yield self.context.src_stream.start_tls(server_side=True,
-                                                                 ssl_options=src_ssl_context)
+                                                                 ssl_options=src_ssl_ctx)
         except Exception as e:
             logger.exception(e)
             raise
