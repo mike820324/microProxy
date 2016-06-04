@@ -28,7 +28,7 @@ class TransparentLayer(ProxyLayer):
         return (address, port)
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         host, port = self._get_dest_addr()
         dest_stream = yield self.create_dest_stream((host, port))
         self.context.src_stream.pause()

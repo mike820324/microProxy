@@ -12,7 +12,7 @@ class ForwardLayer(object):
         self._future = concurrent.Future()
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         self.context.src_stream.read_until_close(streaming_callback=self.on_request)
         self.context.src_stream.set_close_callback(self.on_src_close)
         self.context.dest_stream.read_until_close(streaming_callback=self.on_response)

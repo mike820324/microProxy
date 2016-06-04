@@ -35,7 +35,7 @@ class LayerManager(object):
             try:
                 current_layer = layer_constructor(current_context)
                 logger.debug("Enter {0} Layer".format(current_layer))
-                current_context = yield current_layer.process()
+                current_context = yield current_layer.process_and_return_context()
                 logger.debug("Leave {0} Layer".format(current_layer))
                 layer_constructor = self.next_layer(current_layer, current_context)
 
@@ -104,6 +104,8 @@ class ProxyServer(tcpserver.TCPServer):
                 self.io_loop.add_future(future, lambda f: f.result())
         except Exception as e:
             logger.exception(e)
+            raise
+
 
     @gen.coroutine
     def handle_stream(self, stream, port):
@@ -115,6 +117,7 @@ class ProxyServer(tcpserver.TCPServer):
             # not handle exception, log it and close the stream
             logger.exception(e)
             stream.close()
+            raise
 
     def start_listener(self):
         self.listen(self.port, self.host)
