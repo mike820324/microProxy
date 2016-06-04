@@ -14,6 +14,7 @@ class TlsLayer(object):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
         self.ssl_sock = None
+        self.hostname = ""
 
     def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
@@ -26,7 +27,12 @@ class TlsLayer(object):
             dest_context = self.create_dest_sslcontext(support_alpn)
             self.ssl_sock = SSL.Connection(dest_context,
                                            self.context.dest_stream)
-            self.ssl_sock.set_tlsext_host_name(self.context.host)
+
+            # alpn callback is being called first
+            if not self.hostname:
+                self.hostname = src_ssl_conn.get_servername()
+
+            self.ssl_sock.set_tlsext_host_name(self.hostname)
             self.ssl_sock.set_connect_state()
             self.ssl_sock.do_handshake()
 
@@ -50,7 +56,8 @@ class TlsLayer(object):
         return None
 
     def src_sni_callback(self, src_ssl_conn):
-        self.context.host = src_ssl_conn.get_servername()
+        if not self.hostname:
+            self.hostname = src_ssl_conn.get_servername()
 
     def create_dest_sslcontext(self, alpn):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
@@ -72,7 +79,7 @@ class TlsLayer(object):
         return ssl_ctx
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         self.context.src_stream.resume()
         src_ssl_ctx = self.create_src_sslcontext()
         try:
@@ -84,8 +91,8 @@ class TlsLayer(object):
 
         self.ssl_sock.setblocking(False)
         dest_stream = MicroProxySSLIOStream(self.ssl_sock)
-
         self.context.src_stream = src_stream
         self.context.dest_stream = dest_stream
+        self.context.host = self.hostname
 
         raise gen.Return(self.context)

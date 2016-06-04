@@ -22,7 +22,7 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         signal("http1layer_error").connect(self.on_error, sender=self)
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
         http_server_connection.start_serving(self)
         yield self._future
