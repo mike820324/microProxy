@@ -18,6 +18,7 @@ class MicroProxyIOStream(IOStream):
 
     def pause(self):
         self.socket.setblocking(True)
+        self._state = None
         self.io_loop.remove_handler(self.socket)
 
     def resume(self):
