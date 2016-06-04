@@ -10,7 +10,7 @@ class ProxyLayer(object):
         super(ProxyLayer, self).__init__()
         self.context = copy(context)
 
-    def process(self):
+    def process_and_return_context(self):
         raise NotImplementedError
 
     def create_dest_stream(self, dest_addr_info):

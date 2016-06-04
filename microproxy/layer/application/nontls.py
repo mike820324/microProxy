@@ -9,7 +9,7 @@ class NonTlsLayer(object):
         self.context = copy(context)
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         # we are not going through tls layer
         # chage dest_stream to iostream
         self.context.src_stream.resume()
