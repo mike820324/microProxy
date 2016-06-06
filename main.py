@@ -1,5 +1,5 @@
 from microproxy import proxy
-from microproxy.viewer import log as log_viewer
+from microproxy.viewer import console as console_viewer
 from microproxy.config import parse_config, define_option, define_section
 
 
@@ -70,17 +70,18 @@ def create_options():
 
     viewer_option_info = {}
     define_option(option_info=viewer_option_info,
-                  option_name="mode",
-                  help_str="Specify the viewer type",
-                  option_type="string",
-                  cmd_flags="--mode",
-                  choices=["log"])
-
-    define_option(option_info=viewer_option_info,
                   option_name="viewer_channel",
                   help_str="Specify the viewer channel",
                   option_type="string",
                   cmd_flags="--viewer-channel")
+
+    define_option(option_info=viewer_option_info,
+                  option_name="verbose_level",
+                  help_str="Specify verbose level. (header, body, all)",
+                  option_type="string",
+                  cmd_flags="--verbose-level",
+                  default="status",
+                  choices=["status", "header", "body", "all"])
 
     config_field_info = {}
     define_section(config_field_info=config_field_info,
@@ -102,4 +103,4 @@ if __name__ == "__main__":
         proxy.start_proxy_server(config)
 
     elif config["command_type"] == "viewer":
-        log_viewer.start(config)
+        console_viewer.start(config)
