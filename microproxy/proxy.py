@@ -1,10 +1,10 @@
 from tornado import tcpserver
 from tornado import gen
-from tornado import concurrent
 from tornado import iostream
 
 from context import Context
-from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer
+from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer, NonTlsLayer
+from microproxy.iostream import MicroProxyIOStream
 
 from utils import curr_loop, get_logger
 from interceptor import MsgPublisherInterceptor as Interceptor
@@ -14,15 +14,52 @@ logger = get_logger(__name__)
 
 
 class LayerManager(object):
-    def start_layer(self, context):
-        mode = context.config["mode"]
+    def __init__(self, src_stream, config):
+        self.src_stream = src_stream
+        self.config = config
+
+    @gen.coroutine
+    def start_layer(self):
+        mode = self.config["mode"]
         if mode == "socks":
-            return SocksLayer(context)
+            layer_constructor = SocksLayer
         elif mode == "transparent":
-            return TransparentLayer(context)
+            layer_constructor = TransparentLayer
         else:
-            # fixme: due to fail fast, need raise exception here
-            logger.warning("Unsupport proxy mode : {0}".format(mode))
+            logger.error("Unsupport proxy mode : {0}".format(mode))
+            raise ValueError
+
+        current_context = Context(src_stream=self.src_stream,
+                                  config=self.config)
+        while True:
+            try:
+                current_layer = layer_constructor(current_context)
+                logger.debug("Enter {0} Layer".format(current_layer))
+                current_context = yield current_layer.process_and_return_context()
+                logger.debug("Leave {0} Layer".format(current_layer))
+                layer_constructor = self.next_layer(current_layer, current_context)
+
+                if not layer_constructor:
+                    logger.debug("Layer Loop Ended")
+                    break
+            except gen.TimeoutError:
+                self.src_stream.close()
+                break
+            except DestStreamClosedError:
+                logger.error("destination stream closed unexceptedly")
+                self.src_stream.close()
+                break
+            except SrcStreamClosedError:
+                logger.error("source stream closed unexceptedly")
+                break
+            except iostream.StreamClosedError:
+                logger.error("stream closed")
+                self.src_stream.close()
+                break
+            except Exception:
+                raise
+
+        raise gen.Return(None)
 
     def next_layer(self, current_layer, context):
         try:
@@ -35,15 +72,17 @@ class LayerManager(object):
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
-                return Http1Layer(context)
+                return NonTlsLayer
             elif context.port in https_ports:
-                return TlsLayer(context)
+                return TlsLayer
             else:
-                return ForwardLayer(context)
+                return ForwardLayer
 
-        if isinstance(current_layer, TlsLayer):
-            if context.port in https_ports:
-                return Http1Layer(context)
+        if isinstance(current_layer, TlsLayer) or isinstance(current_layer, NonTlsLayer):
+            if context.scheme == "http" or context.scheme == "https":
+                return Http1Layer
+            elif context.scheme == "h2":
+                return ForwardLayer
 
 
 class ProxyServer(tcpserver.TCPServer):
@@ -53,32 +92,32 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
-        self.layer_manager = LayerManager()
+
+    def _handle_connection(self, connection, address):
+        try:
+            stream = MicroProxyIOStream(connection,
+                                        io_loop=self.io_loop,
+                                        max_buffer_size=self.max_buffer_size,
+                                        read_chunk_size=self.read_chunk_size)
+            future = self.handle_stream(stream, address)
+            if future is not None:
+                self.io_loop.add_future(future, lambda f: f.result())
+        except Exception as e:
+            logger.exception(e)
+            raise
+
 
     @gen.coroutine
     def handle_stream(self, stream, port):
         try:
-            context = Context(src_stream=stream,
-                              config=self.config,
-                              layer_manager=self.layer_manager)
-
-            process_result = self.layer_manager.start_layer(context).process()
-            if isinstance(process_result, concurrent.Future):
-                yield process_result
-        except gen.TimeoutError:
-            stream.close()
-        except DestStreamClosedError:
-            logger.error("destination stream closed unexceptedly")
-            stream.close()
-        except SrcStreamClosedError:
-            logger.error("source stream closed unexceptedly")
-        except iostream.StreamClosedError:
-            logger.error("stream closed")
-            stream.close()
+            logger.debug("Start new layer manager")
+            layer_manager = LayerManager(stream, self.config)
+            yield layer_manager.start_layer()
         except Exception as e:
             # not handle exception, log it and close the stream
             logger.exception(e)
             stream.close()
+            raise
 
     def start_listener(self):
         self.listen(self.port, self.host)

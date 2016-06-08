@@ -1,10 +1,8 @@
 import struct
 import ipaddress
 
-from copy import copy
 from tornado import gen
 from tornado import iostream
-from tornado import concurrent
 
 from base import ProxyLayer
 
@@ -45,26 +43,19 @@ class SocksLayer(ProxyLayer):
         super(SocksLayer, self).__init__(context)
 
     @gen.coroutine
-    def process(self):
-        yield self.socks_greeting()
-        host, port, addr_type = yield self.socks_request()
-        dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
-
-        new_context = copy(self.context)
-        new_context.dest_stream = dest_stream
-        new_context.host = host
-        new_context.port = port
-
+    def process_and_return_context(self):
         try:
-            process_result = self.context.layer_manager.next_layer(self, new_context).process()
-            if isinstance(process_result, concurrent.Future):
-                yield process_result
-            raise gen.Return(None)
-        finally:
-            try:
-                dest_stream.close()
-            except:
-                pass
+            yield self.socks_greeting()
+            host, port, addr_type = yield self.socks_request()
+            dest_stream = yield self.socks_response_with_dest_stream_creation(host, port, addr_type)
+
+            self.context.src_stream.pause()
+            self.context.dest_stream = dest_stream
+            self.context.host = host
+            self.context.port = port
+            raise gen.Return(self.context)
+        except:
+            raise
 
     @gen.coroutine
     def socks_greeting(self):
@@ -124,7 +115,7 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def socks_response_with_dest_stream_creation(self, host, port, addr_type):
         src_stream = self.context.src_stream
-        dest_stream = yield self.create_dest_stream((host, port))
+        dest_stream = self.create_dest_stream((host, port))
         try:
             yield src_stream.write(struct.pack("!BBx",
                                                self.SOCKS_VERSION,
