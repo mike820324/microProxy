@@ -1,3 +1,4 @@
+from copy import copy
 from tornado import iostream
 from tornado import gen
 from tornado import httputil
@@ -15,16 +16,17 @@ logger = get_logger(__name__)
 class Http1Layer(httputil.HTTPServerConnectionDelegate):
     def __init__(self, context):
         super(Http1Layer, self).__init__()
-        self.context = context
+        self.context = copy(context)
         self.http_forwarder = None
         self._future = concurrent.Future()
         signal("http1layer_error").connect(self.on_error, sender=self)
 
     @gen.coroutine
-    def process(self):
+    def process_and_return_context(self):
         http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
         http_server_connection.start_serving(self)
         yield self._future
+        raise gen.Return(self.context)
 
     def start_request(self, server_conn, request_conn):
         dest_conn = http1connection.HTTP1Connection(self.context.dest_stream,

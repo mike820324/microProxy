@@ -43,8 +43,8 @@ class Http1LayerTest(AsyncTestCase):
         self.http_layer = Http1Layer(self.context)
 
     @gen_test
-    def test_process_normal(self):
-        http_layer_future = self.http_layer.process()
+    def test_process_and_return_context_normal(self):
+        http_layer_future = self.http_layer.process_and_return_context()
         self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                             b"\r\n"]))
         req_header = yield self.dest_stream.read_until("\r\n\r\n")
@@ -72,7 +72,7 @@ class Http1LayerTest(AsyncTestCase):
 
     @gen_test
     def test_write_req_to_dest_failed(self):
-        http_layer_future = self.http_layer.process()
+        http_layer_future = self.http_layer.process_and_return_context()
         self.dest_stream.close()
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                     b"\r\n"]))
@@ -83,7 +83,7 @@ class Http1LayerTest(AsyncTestCase):
 
     @gen_test
     def test_read_resp_from_dest_failed(self):
-        http_layer_future = self.http_layer.process()
+        http_layer_future = self.http_layer.process_and_return_context()
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                     b"\r\n"]))
         self.dest_stream.close()
@@ -94,7 +94,7 @@ class Http1LayerTest(AsyncTestCase):
 
     @gen_test
     def test_write_resp_to_src_failed(self):
-        http_layer_future = self.http_layer.process()
+        http_layer_future = self.http_layer.process_and_return_context()
         self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                             b"\r\n"]))
         self.src_stream.close()
