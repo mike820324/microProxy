@@ -14,6 +14,13 @@ from microproxy.interceptor import signal_request, signal_response, signal_publi
 logger = get_logger(__name__)
 
 
+def log_debug_with_http_info(context, msg):
+    logger.debug("{0}://{1}:{2} -> {3}".format(context.scheme,
+                                               context.host,
+                                               context.port,
+                                               msg))
+
+
 class Http1Layer(httputil.HTTPServerConnectionDelegate):
     def __init__(self, context):
         super(Http1Layer, self).__init__()
@@ -37,12 +44,12 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         return self.http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
-        logger.debug("http layer done")
+        log_debug_with_http_info(self.context, "http layer done")
         if self._future.running():
             self._future.set_result(self.context)
 
     def on_error(self, sender, exe_info=None):
-        logger.debug("http layer error")
+        log_debug_with_http_info(self.context, "http layer error")
         self._future.set_exception(exe_info)
 
 
@@ -52,21 +59,22 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
         self.context = context
 
     def headers_received(self, start_line, headers):
-        logger.debug("source request headers recieved")
+        log_debug_with_http_info(self.context,
+                                 "source request headers recieved")
         self.req = http.HttpRequest(version=start_line.version,
                                     method=start_line.method,
                                     path=start_line.path,
                                     headers=headers)
 
     def data_received(self, chunk):
-        logger.debug("source request recieved")
+        log_debug_with_http_info(self.context, "source request body recieved")
         self.req.body += bytes(chunk)
 
     def finish(self):
         signal("request_done").send(self)
 
     def on_connection_close(self):
-        logger.debug("source connection close")
+        log_debug_with_http_info(self.context, "source connection closed")
 
 
 class HttpForwarder(object):
@@ -93,10 +101,9 @@ class HttpForwarder(object):
 
     @gen.coroutine
     def req_done(self, sender):
-        logger.debug("source request done")
+        log_debug_with_http_info(self.context, "source request done")
         requests = signal_request.send(self, request=sender.req)
         if len(requests) > 1:
-            print len(requests)
             logger.error("More than one interceptor")
 
         try:
@@ -113,9 +120,9 @@ class HttpForwarder(object):
             yield self.dest_conn.write_headers(status_line, self.req.headers)
             yield self.dest_conn.write(self.req.body)
             yield self.dest_conn.read_response(self.create_resp_reader())
-            logger.debug("destination request done")
+            log_debug_with_http_info(self.context, "destination request done")
         except iostream.StreamClosedError as e:
-            logger.debug("destination closed while writing/reading")
+            log_debug_with_http_info(self.context, "destination closed while writing/reading")
             signal("http1layer_error").send(self.http1_layer,
                                             exe_info=DestStreamClosedError(e))
         except Exception as e:
@@ -123,8 +130,9 @@ class HttpForwarder(object):
 
     @gen.coroutine
     def resp_done(self, sender):
-        logger.debug("destination response done")
+        log_debug_with_http_info(self.context, "destination response done")
         responses = signal_response.send(self, response=sender.resp)
+
         if len(responses) > 1:
             logger.error("More than one interceptor")
         try:
@@ -151,9 +159,9 @@ class HttpForwarder(object):
             yield self.src_conn.write_headers(status_line, headers)
             yield self.src_conn.write(self.resp.body)
             self.src_conn.finish()
-            logger.debug("source response done")
+            log_debug_with_http_info(self.context, "source response done")
         except iostream.StreamClosedError as e:
-            logger.debug("source stream closed while writing")
+            log_debug_with_http_info(self.context, "source stream closed while writing")
             signal("http1layer_error").send(self.http1_layer,
                                             exe_info=SrcStreamClosedError(e))
         except Exception as e:
@@ -166,18 +174,19 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
         self.context = context
 
     def headers_received(self, start_line, headers):
-        logger.debug("destination response headers received")
+        log_debug_with_http_info(self.context,
+                                 "destination response headers recieved")
         self.resp = http.HttpResponse(code=start_line.code,
                                       reason=start_line.reason,
                                       version=start_line.version,
                                       headers=headers)
 
     def data_received(self, chunk):
-        logger.debug("destination response data received")
+        log_debug_with_http_info(self.context, "destination response data recieved")
         self.resp.body += bytes(chunk)
 
     def finish(self):
         signal("response_done").send(self)
 
     def on_connection_close(self):
-        logger.debug("destination connection closed")
+        log_debug_with_http_info(self.context, "destination connection closed")
