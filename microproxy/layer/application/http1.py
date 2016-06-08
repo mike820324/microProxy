@@ -9,6 +9,7 @@ from blinker import signal
 from microproxy.utils import get_logger
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy import http
+from microproxy.interceptor import signal_request, signal_response, signal_publish
 
 logger = get_logger(__name__)
 
@@ -95,9 +96,18 @@ class HttpForwarder(object):
     @gen.coroutine
     def req_done(self, sender):
         logger.debug("source request done")
-        self.req = sender.req
-        signal("interceptor_request").send(self, request=self.req)
+        requests = signal_request.send(self, request=sender.req)
+        if len(requests) > 1:
+            print len(requests)
+            logger.error("More than one interceptor")
 
+        try:
+            _, new_request = requests[0]
+        except IndexError:
+            new_request = sender.req
+            logger.debug("No interceptor is listening")
+
+        self.req = new_request
         status_line = httputil.RequestStartLine(self.req.method,
                                                 self.req.path,
                                                 self.req.version)
@@ -116,11 +126,19 @@ class HttpForwarder(object):
     @gen.coroutine
     def resp_done(self, sender):
         logger.debug("destination response done")
-        self.resp = sender.resp
-        signal("interceptor_response").send(self, response=self.resp)
-        signal("interceptor_record").send(self,
-                                          request=self.req,
-                                          response=self.resp)
+        responses = signal_response.send(self, response=sender.resp)
+        if len(responses) > 1:
+            logger.error("More than one interceptor")
+        try:
+            _, new_response = responses[0]
+        except IndexError:
+            new_response = sender.resp
+            logger.debug("No Interceptor is listening")
+
+        self.resp = new_response
+        signal_publish.send(self,
+                            request=self.req,
+                            response=self.resp)
 
         headers = self.resp.headers.copy()
         # restriction on using tornado http connection
