@@ -43,7 +43,7 @@ class ForwardLayerTest(AsyncTestCase):
 
     @gen_test
     def test_forward_message(self):
-        self.forward_layer.process()
+        self.forward_layer.process_and_return_context()
         self.src_stream.write(b"aaa\r\n")
         message = yield self.dest_stream.read_until(b"\r\n")
         assert message == b"aaa\r\n"
