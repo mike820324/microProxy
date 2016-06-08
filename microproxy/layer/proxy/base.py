@@ -1,9 +1,6 @@
 import socket
 from copy import copy
 
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
-
 
 class ProxyLayer(object):
     def __init__(self, context):
