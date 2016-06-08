@@ -28,11 +28,11 @@ class TlsLayer(object):
             self.ssl_sock = SSL.Connection(dest_context,
                                            self.context.dest_stream)
 
-            # alpn callback is being called first
-            if not self.hostname:
-                self.hostname = src_ssl_conn.get_servername()
+            self.hostname = src_ssl_conn.get_servername()
 
-            self.ssl_sock.set_tlsext_host_name(self.hostname)
+            if self.hostname:
+                self.ssl_sock.set_tlsext_host_name(self.hostname)
+
             self.ssl_sock.set_connect_state()
             self.ssl_sock.do_handshake()
 
@@ -55,10 +55,6 @@ class TlsLayer(object):
             raise
         return None
 
-    def src_sni_callback(self, src_ssl_conn):
-        if not self.hostname:
-            self.hostname = src_ssl_conn.get_servername()
-
     def create_dest_sslcontext(self, alpn):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
         ssl_ctx.set_options(SSL.OP_NO_SSLv2)
@@ -73,7 +69,6 @@ class TlsLayer(object):
         ssl_ctx.set_options(SSL.OP_NO_SSLv2)
         ssl_ctx.use_certificate_file(self.context.config["certfile"])
         ssl_ctx.use_privatekey_file(self.context.config["keyfile"])
-        ssl_ctx.set_tlsext_servername_callback(self.src_sni_callback)
         ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
 
         return ssl_ctx
@@ -93,6 +88,7 @@ class TlsLayer(object):
         dest_stream = MicroProxySSLIOStream(self.ssl_sock)
         self.context.src_stream = src_stream
         self.context.dest_stream = dest_stream
-        self.context.host = self.hostname
+        if self.hostname:
+            self.context.host = self.hostname
 
         raise gen.Return(self.context)
