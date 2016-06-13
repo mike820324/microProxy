@@ -1,6 +1,6 @@
 from OpenSSL import SSL
 from copy import copy
-from tornado import gen
+from tornado import gen, concurrent
 
 from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
@@ -13,8 +13,8 @@ class TlsLayer(object):
     def __init__(self, context):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
-        self.ssl_sock = None
-        self.hostname = ""
+        # tuple contains (dest_ssl_sock, hostname, alpn_info) or exception if failed
+        self._alpn_future = concurrent.Future()
 
     def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
@@ -25,35 +25,31 @@ class TlsLayer(object):
             ]
 
             dest_context = self.create_dest_sslcontext(support_alpn)
-            self.ssl_sock = SSL.Connection(dest_context,
-                                           self.context.dest_stream)
+            ssl_sock = SSL.Connection(dest_context,
+                                      self.context.dest_stream)
 
-            self.hostname = src_ssl_conn.get_servername()
+            hostname = src_ssl_conn.get_servername()
 
-            if self.hostname:
-                self.ssl_sock.set_tlsext_host_name(self.hostname)
+            if hostname:
+                ssl_sock.set_tlsext_host_name(hostname)
 
-            self.ssl_sock.set_connect_state()
-            self.ssl_sock.do_handshake()
+            ssl_sock.set_connect_state()
+            ssl_sock.do_handshake()
 
-            alpn_info = self.ssl_sock.get_alpn_proto_negotiated()
-            if len(alpn_info) == 0:
-                alpn_info = b"http/1.1"
-
-            if alpn_info == "http/1.1":
-                self.context.scheme = "https"
-            elif alpn_info == "h2":
-                self.context.scheme = "h2"
-            else:
-                self.context.scheme = "https"
+            alpn_info = ssl_sock.get_alpn_proto_negotiated() or b"http/1.1"
 
             logger.debug("Choose {0} as application protocol".format(alpn_info))
+            self._alpn_future.set_result((ssl_sock,
+                                          hostname,
+                                          alpn_info))
             return bytes(alpn_info)
-
         except Exception as e:
-            logger.exception(e)
-            raise
-        return None
+            # According to the document on PyOpenSSL
+            # It said that the callback function should return a bytestring that determine the alpn protocol
+            # We could not know what will happen if we throw exception here
+            # So I think we log the exception here and handle the problem in another place
+            self._alpn_future.set_result(e)
+            return None
 
     def create_dest_sslcontext(self, alpn):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
@@ -77,18 +73,22 @@ class TlsLayer(object):
     def process_and_return_context(self):
         self.context.src_stream.resume()
         src_ssl_ctx = self.create_src_sslcontext()
-        try:
-            src_stream = yield self.context.src_stream.start_tls(server_side=True,
-                                                                 ssl_options=src_ssl_ctx)
-        except Exception as e:
-            logger.exception(e)
-            raise
+        src_stream = yield self.context.src_stream.start_tls(server_side=True,
+                                                             ssl_options=src_ssl_ctx)
 
-        self.ssl_sock.setblocking(False)
-        dest_stream = MicroProxySSLIOStream(self.ssl_sock)
+        dest_ssl_sock, hostname, alpn_info = yield self._alpn_future
+        dest_ssl_sock.setblocking(False)
+        dest_stream = MicroProxySSLIOStream(dest_ssl_sock)
         self.context.src_stream = src_stream
         self.context.dest_stream = dest_stream
-        if self.hostname:
-            self.context.host = self.hostname
+
+        if hostname:
+            self.context.host = hostname
+        if alpn_info == "http/1.1":
+            self.context.scheme = "https"
+        elif alpn_info == "h2":
+            self.context.scheme = "h2"
+        else:
+            self.context.scheme = "https"
 
         raise gen.Return(self.context)
