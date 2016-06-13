@@ -18,6 +18,9 @@ class TlsLayer(object):
         self._alpn_future = concurrent.Future()
 
     def create_cert(self, common_name):
+        # FIXME: Should add Server Alternative Name extensions.
+        # FIXME: Should be able to reuse certificate.
+
         root_ca_file = self.context.config["certfile"]
         with open(root_ca_file, "rb") as fp:
             _buffer = fp.read()
@@ -29,6 +32,8 @@ class TlsLayer(object):
         private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, _buffer)
 
         cert = crypto.X509()
+
+        # NOTE: Expire time 3 yr
         cert.gmtime_adj_notBefore(-3600 * 48)
         cert.gmtime_adj_notAfter(94608000)
         cert.get_subject().CN = common_name
@@ -59,7 +64,7 @@ class TlsLayer(object):
             if hostname:
                 ssl_sock.set_tlsext_host_name(hostname)
 
-            # if the sni hostname is not the same as self.context.host,
+            # NOTE: If the sni hostname is not the same as self.context.host,
             # we use sni hostname instead. Since it's more reliable.
             if hostname and hostname != self.context.host:
                 cert, priv_key = self.create_cert(hostname)
@@ -100,9 +105,13 @@ class TlsLayer(object):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
         ssl_ctx.set_options(SSL.OP_NO_SSLv2)
 
+        # FIXME: Should be avaliable to remove this part.
+        # Currently, If we remove this part,
+        # the whole tls negotiation will failed.
         cert, priv_key = self.create_cert(self.context.host)
         ssl_ctx.use_certificate(cert)
         ssl_ctx.use_privatekey(priv_key)
+
         ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
 
         return ssl_ctx
