@@ -22,12 +22,10 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         self._future = concurrent.Future()
         signal("http1layer_error").connect(self.on_error, sender=self)
 
-    @gen.coroutine
     def process_and_return_context(self):
         http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
         http_server_connection.start_serving(self)
-        yield self._future
-        raise gen.Return(self.context)
+        return self._future
 
     def start_request(self, server_conn, request_conn):
         dest_conn = http1connection.HTTP1Connection(self.context.dest_stream,
@@ -41,7 +39,7 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
     def on_close(self, server_conn):
         logger.debug("http layer done")
         if self._future.running():
-            self._future.set_result(None)
+            self._future.set_result(self.context)
 
     def on_error(self, sender, exe_info=None):
         logger.debug("http layer error")
