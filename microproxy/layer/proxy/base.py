@@ -16,8 +16,5 @@ class ProxyLayer(object):
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_socket.setblocking(True)
-        try:
-            dest_socket.connect(dest_addr_info)
-            return dest_socket
-        except:
-            raise
+        dest_socket.connect(dest_addr_info)
+        return dest_socket

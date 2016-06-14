@@ -14,75 +14,68 @@ logger = get_logger(__name__)
 
 
 class LayerManager(object):
-    def __init__(self, src_stream, config):
-        self.src_stream = src_stream
+    def __init__(self, config):
         self.config = config
 
     @gen.coroutine
-    def start_layer(self):
-        mode = self.config["mode"]
-        if mode == "socks":
-            layer_constructor = SocksLayer
-        elif mode == "transparent":
-            layer_constructor = TransparentLayer
-        else:
-            logger.error("Unsupport proxy mode : {0}".format(mode))
-            raise ValueError
-
-        current_context = Context(src_stream=self.src_stream,
+    def run_layers(self, src_stream):
+        current_context = Context(src_stream=src_stream,
                                   config=self.config)
-        while True:
+        current_layer = self.get_first_layer(current_context)
+
+        while current_layer:
             try:
-                current_layer = layer_constructor(current_context)
                 logger.debug("Enter {0} Layer".format(current_layer))
                 current_context = yield current_layer.process_and_return_context()
                 logger.debug("Leave {0} Layer".format(current_layer))
-                layer_constructor = self.next_layer(current_layer, current_context)
-
-                if not layer_constructor:
-                    logger.debug("Layer Loop Ended")
-                    break
+                current_layer = self.next_layer(current_layer, current_context)
             except gen.TimeoutError:
-                self.src_stream.close()
+                src_stream.close()
                 break
             except DestStreamClosedError:
                 logger.error("destination stream closed unexceptedly")
-                self.src_stream.close()
+                src_stream.close()
                 break
             except SrcStreamClosedError:
                 logger.error("source stream closed unexceptedly")
                 break
             except iostream.StreamClosedError:
                 logger.error("stream closed")
-                self.src_stream.close()
+                src_stream.close()
                 break
             except Exception:
                 raise
 
         raise gen.Return(None)
 
+    def get_first_layer(self, context):
+        mode = self.config["mode"]
+        if mode == "socks":
+            return SocksLayer(context)
+        elif mode == "transparent":
+            return TransparentLayer(context)
+        else:
+            raise ValueError("Unsupport proxy mode: {0}".format(mode))
+
     def next_layer(self, current_layer, context):
-        try:
-            http_ports = [80]
-            http_ports.extend(context.config["http_port"])
-            https_ports = [443]
-            https_ports.extend(context.config["https_port"])
-        except KeyError:
-            pass
+        http_ports = [80]
+        http_ports.extend(context.config["http_port"])
+        https_ports = [443]
+        https_ports.extend(context.config["https_port"])
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
-                return NonTlsLayer
+                return NonTlsLayer(context)
             elif context.port in https_ports:
-                return TlsLayer
+                return TlsLayer(context)
             else:
-                return ForwardLayer
+                return ForwardLayer(context)
 
         if isinstance(current_layer, TlsLayer) or isinstance(current_layer, NonTlsLayer):
             if context.scheme == "http" or context.scheme == "https":
-                return Http1Layer
+                return Http1Layer(context)
             elif context.scheme == "h2":
-                return ForwardLayer
+                return ForwardLayer(context)
 
 
 class ProxyServer(tcpserver.TCPServer):
@@ -92,6 +85,7 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
+        self.layer_manager = LayerManager(config)
 
     def _handle_connection(self, connection, address):
         try:
@@ -106,18 +100,15 @@ class ProxyServer(tcpserver.TCPServer):
             logger.exception(e)
             raise
 
-
     @gen.coroutine
     def handle_stream(self, stream, port):
         try:
             logger.debug("Start new layer manager")
-            layer_manager = LayerManager(stream, self.config)
-            yield layer_manager.start_layer()
+            yield self.layer_manager.run_layers(stream)
         except Exception as e:
             # not handle exception, log it and close the stream
             logger.exception(e)
             stream.close()
-            raise
 
     def start_listener(self):
         self.listen(self.port, self.host)
