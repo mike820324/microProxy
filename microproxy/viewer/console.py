@@ -3,47 +3,95 @@ import json
 from colored import fg, bg, attr
 
 
-def construct_header_msg(request, response):
-    req_headers = ["{0}: {1}".format(k, request["headers"][k]) for k in request["headers"]]
-    resp_headers = ["{0}: {1}".format(k, response["headers"][k]) for k in response["headers"]]
+class ColorText(object):
+    def __init__(self,
+                 text,
+                 fg_color=None,
+                 bg_color=None,
+                 attrs=None):
+        self.text = str(text)
+        self.fg_color = fg_color
+        self.bg_color = bg_color
+        self.attrs = attrs or []
 
-    req_headers_str = fg("blue") + attr("bold") + "Request Headers:\n" + attr("reset")
-    req_headers_str += bg("blue")
-    req_headers_str += "\n".join(req_headers)
-    req_headers_str += attr("reset")
-
-    resp_headers_str = fg("blue") + attr("bold") + "Response Headers:\n" + attr("reset")
-    resp_headers_str += bg("blue")
-    resp_headers_str += "\n".join(resp_headers)
-    resp_headers_str += attr("reset")
-
-    return req_headers_str + "\n\n" + resp_headers_str
+    def __str__(self):
+        if not (self.fg_color or self.bg_color or self.attrs):
+            return self.text
+        _str = fg(self.fg_color) if self.fg_color else ""
+        _str += bg(self.bg_color) if self.bg_color else ""
+        _str += "".join(map(lambda a: attr(a), self.attrs))
+        _str += self.text
+        _str += attr("reset")
+        return _str
 
 
-def construct_status_msg(request, response):
+class TextList(object):
+    def __init__(self, text_list, delimiter="\n"):
+        self.text_list = text_list
+        self.delimiter = delimiter
+
+    def __str__(self):
+        return self.delimiter.join(map(lambda s: str(s), self.text_list))
+
+
+class StatusText(TextList):
+    FG_COLOR_OK = "green"
+    FG_COLOR_NOT_OK = "red"
+    ATTRS = ["bold"]
+
+    def __init__(self, status_code, method, host, path):
+        status_fg = self.FG_COLOR_OK if status_code < 400 else self.FG_COLOR_NOT_OK
+        super(StatusText, self).__init__([ColorText(status_code, fg_color=status_fg, attrs=self.ATTRS),
+                                          method,
+                                          host + path],
+                                         delimiter=" ")
+
+
+class Header(TextList):
+    BG_COLOR = "blue"
+
+    def __init__(self, headers):
+        super(Header, self).__init__(map(lambda k: ColorText("{0}: {1}".format(k, headers[k]),
+                                                             bg_color=self.BG_COLOR), headers))
+
+
+class Request(TextList):
+    TITLE = "Request Headers:"
+    FG_COLOR = "blue"
+    ATTRS = ["bold"]
+
+    def __init__(self, headers):
+        super(Request, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
+                                       Header(headers)])
+
+
+class Response(TextList):
+    TITLE = "Response Headers:"
+    FG_COLOR = "blue"
+    ATTRS = ["bold"]
+
+    def __init__(self, headers):
+        super(Response, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
+                                        Header(headers)])
+
+
+def construct_status_summary(request, response):
     host = request["headers"]["Host"]
     path = request["path"]
-
-    if response["code"] < 400:
-        status = fg("green") + attr("bold") + str(response["code"]) + attr("reset")
-    else:
-        status = fg("red") + attr("bold") + str(response["code"]) + attr("reset")
-
+    status_code = response["code"]
     method = request["method"]
-
-    return "{0} {1} {2}{3}".format(status, method, host, path)
+    return StatusText(status_code, method, host, path)
 
 
 def construct_color_msg(message, verbose_level):
     request = message["request"]
     response = message["response"]
-    status = construct_status_msg(request, response)
-    header = construct_header_msg(request, response)
+    status = construct_status_summary(request, response)
 
     if verbose_level == "status":
-        return status + "\n"
+        return status
     if verbose_level == "header":
-        return status + "\n" + header + "\n"
+        return TextList([status, Request(request["headers"]), Response(response["headers"])])
     elif verbose_level == "body":
         raise NotImplementedError
     elif verbose_level == "all":
@@ -61,13 +109,17 @@ def create_msg_channel(channel):
 def start(config):
     socket = create_msg_channel(config["viewer_channel"])
     verbose_level = config["verbose_level"]
-    print fg("blue") + attr("bold") + "MicroProxy Simple Viewer v0.0.2" + attr("reset")
+    print ColorText("MicroProxy Simple Viewer v0.0.2",
+                    fg_color="blue",
+                    attrs=["bold"])
     while True:
         try:
             data = socket.recv()
             message = json.loads(data)
-            color_msg = construct_color_msg(message, verbose_level)
-            print color_msg
+            print construct_color_msg(message, verbose_level)
+            print
         except KeyboardInterrupt:
-            print fg("blue") + attr("bold") + "Closing Simple Viewer" + attr("reset")
+            print ColorText("Closing Simple Viewer",
+                            fg_color="blue",
+                            attrs=["bold"])
             exit(0)
