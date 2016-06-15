@@ -186,7 +186,3 @@ def start(config):
     stream = zmqstream.ZMQStream(socket)
     tui = Tui(stream)
     tui.start()
-
-
-if __name__ == "__main__":
-    start(dict(viewer_channel=sys.argv[1]))
