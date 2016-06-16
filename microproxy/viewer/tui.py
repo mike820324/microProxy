@@ -1,4 +1,3 @@
-import sys
 import zmq
 from zmq.utils import jsonapi as json
 from zmq.eventloop import ioloop, zmqstream
@@ -18,10 +17,11 @@ class Message(urwid.WidgetWrap):
         path = self.msg["request"]["path"]
         status_code = self.msg["response"]["code"]
         method = self.msg["request"]["method"]
-        return "{0} {1} {2}{3}".format(status_code, method, host, path)
+        return "{0} {1:5} {2}{3}".format(status_code, method, host, path)
 
     def _make_widget(self):
-        return urwid.AttrMap(urwid.Text(self._get_title()), "message", "message focus")
+        return urwid.AttrMap(
+            urwid.Text(self._get_title()), "message", "message focus")
 
     def selectable(self):
         return True
@@ -89,7 +89,8 @@ class Detail(urwid.WidgetWrap):
 
 class Prop(urwid.WidgetWrap):
     def __init__(self, key, value):
-        w = urwid.AttrMap(urwid.Text("{0}: {1}".format(key, value)), "prop", "prop focus")
+        w = urwid.AttrMap(
+            urwid.Text("{0}: {1}".format(key, value)), "prop", "prop focus")
         super(Prop, self).__init__(w)
 
     def selectable(self):
@@ -101,7 +102,8 @@ class Prop(urwid.WidgetWrap):
 
 class PropSeparator(urwid.WidgetWrap):
     def __init__(self, content):
-        super(PropSeparator, self).__init__(urwid.AttrMap(urwid.Text(content), "prop separator"))
+        super(PropSeparator, self).__init__(
+            urwid.AttrMap(urwid.Text(content), "prop separator"))
 
 
 class EmptyLine(urwid.Text):
@@ -109,35 +111,36 @@ class EmptyLine(urwid.Text):
         super(EmptyLine, self).__init__("")
 
 
-class ParentView(urwid.Columns):
+class ParentView(urwid.Frame):
+    HEADER = "MicroProxy TUI Viewer"
+    FOOTER = "q: quit"
+
     def __init__(self):
+        header = urwid.AttrMap(urwid.Text(self.HEADER), "header")
+        footer = urwid.AttrMap(urwid.Text(self.FOOTER), "footer")
         self.walker = MessageWalker(self)
         self.list = MessageList(self.walker, self)
-        super(ParentView, self).__init__([self.list])
+        super(ParentView, self).__init__(
+            body=self.list, header=header, footer=footer)
 
     def on_msg_recv(self, msg):
         self.walker.on_msg_recv(msg)
 
     def open_detail(self, message):
-        self.remove_view(Detail)
-        self.contents.append((Detail(message), self.options()))
+        self.set_body(Detail(message))
 
-    def remove_view(self, clazz):
-        for w in self.contents:
-            if isinstance(w[0], clazz):
-                self.contents.remove(w)
+    def close_detail(self):
+        self.set_body(self.list)
 
     def keypress(self, size, key):
         if key in ("q", "Q"):
-            if len(self.contents) > 1:
-                self.contents.pop()
+            if isinstance(self.get_body(), Detail):
+                self.close_detail()
                 return None
         return super(ParentView, self).keypress(size, key)
 
 
 class Tui(object):
-    HEADER = "MicroProxy TUI Viewer"
-    FOOTER = "q: quit"
     PALETTE = [
         ("header", "white", "dark green", "bold"),
         ("footer", "white", "dark blue", "bold"),
@@ -151,22 +154,18 @@ class Tui(object):
     def __init__(self, stream, io_loop=None):
         self.stream = stream
         self.io_loop = io_loop or ioloop.IOLoop.instance()
-        self.loop = None
-        self.parent = ParentView()
-        header = urwid.AttrMap(urwid.Text(self.HEADER), "header")
-        footer = urwid.AttrMap(urwid.Text(self.FOOTER), "footer")
-        self.view = urwid.Frame(body=self.parent, header=header, footer=footer)
+        self.view = ParentView()
 
     def recv_msg(self, msg):
-        self.parent.on_msg_recv(msg)
+        self.view.on_msg_recv(msg)
 
     def start(self):
         self.stream.on_recv(self.recv_msg)
-        self.loop = urwid.MainLoop(self.view,
-                                   self.PALETTE,
-                                   event_loop=urwid.TornadoEventLoop(self.io_loop),
-                                   unhandled_input=self.unhandled_input)
-        self.loop.run()
+        loop = urwid.MainLoop(
+            self.view, self.PALETTE,
+            event_loop=urwid.TornadoEventLoop(self.io_loop),
+            unhandled_input=self.unhandled_input)
+        loop.run()
 
     def unhandled_input(self, key):
         if key in ("q", "Q"):
