@@ -42,7 +42,9 @@ class TlsLayer(object):
         cert.set_issuer(ca_root.get_subject())
         cert.set_pubkey(ca_root.get_pubkey())
         cert.set_version(2)
-        logger.debug("Signing {0}".format(common_name))
+        logger.debug("{0}:{1} -> Signing {2}".format(self.context.host,
+                                                     self.context.port,
+                                                     common_name))
         cert.sign(private_key, "sha256")
 
         return (cert, private_key)
@@ -79,7 +81,9 @@ class TlsLayer(object):
 
             alpn_info = ssl_sock.get_alpn_proto_negotiated() or b"http/1.1"
 
-            logger.debug("Choose {0} as application protocol".format(alpn_info))
+            logger.debug("{0}:{1} -> Choose {2} as application protocol".format(self.context.host,
+                                                                                self.context.port,
+                                                                                alpn_info))
             self._alpn_future.set_result((ssl_sock,
                                           hostname,
                                           alpn_info))
@@ -89,6 +93,9 @@ class TlsLayer(object):
             # It said that the callback function should return a bytestring that determine the alpn protocol
             # We could not know what will happen if we throw exception here
             # So I think we log the exception here and handle the problem in another place
+            logger.error("{0}:{1} -> ".format(self.context.host,
+                                              self.context.port))
+            logger.exception(e)
             self._alpn_future.set_result(e)
             return bytes("")
 
