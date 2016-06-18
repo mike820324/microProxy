@@ -7,7 +7,8 @@ TEST_MODULES = [
     "tests.test_proxy",
     "tests.layer.test_forward",
     "tests.layer.test_http1",
-    "tests.layer.test_socks"
+    "tests.layer.test_socks",
+    "tests.viewer.test_tui"
 ]
 
 
