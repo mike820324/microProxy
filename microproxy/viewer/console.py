@@ -24,6 +24,18 @@ class ColorText(object):
         _str += attr("reset")
         return _str
 
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
 
 class TextList(object):
     def __init__(self, text_list, delimiter="\n"):
@@ -32,6 +44,18 @@ class TextList(object):
 
     def __str__(self):
         return self.delimiter.join(map(lambda s: str(s), self.text_list))
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
 
 
 class StatusText(TextList):
@@ -46,6 +70,15 @@ class StatusText(TextList):
                                           host + path],
                                          delimiter=" ")
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
 
 class Header(TextList):
     BG_COLOR = "blue"
@@ -53,6 +86,15 @@ class Header(TextList):
     def __init__(self, headers):
         super(Header, self).__init__(map(lambda k: ColorText("{0}: {1}".format(k, headers[k]),
                                                              bg_color=self.BG_COLOR), headers))
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
 
 
 class Request(TextList):
@@ -64,6 +106,15 @@ class Request(TextList):
         super(Request, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
                                        Header(headers)])
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
 
 class Response(TextList):
     TITLE = "Response Headers:"
@@ -73,6 +124,15 @@ class Response(TextList):
     def __init__(self, headers):
         super(Response, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
                                         Header(headers)])
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
 
 
 def construct_status_summary(request, response):
