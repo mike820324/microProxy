@@ -1,6 +1,7 @@
-from OpenSSL import SSL
+from OpenSSL import SSL, crypto
 from copy import copy
 from tornado import gen, concurrent
+import time
 
 from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
@@ -15,6 +16,36 @@ class TlsLayer(object):
         self.context = copy(context)
         # tuple contains (dest_ssl_sock, hostname, alpn_info) or exception if failed
         self._alpn_future = concurrent.Future()
+
+    def create_cert(self, common_name):
+        # FIXME: Should add Server Alternative Name extensions.
+        # FIXME: Should be able to reuse certificate.
+
+        root_ca_file = self.context.config["certfile"]
+        with open(root_ca_file, "rb") as fp:
+            _buffer = fp.read()
+        ca_root = crypto.load_certificate(crypto.FILETYPE_PEM, _buffer)
+
+        private_key_file = self.context.config["keyfile"]
+        with open(private_key_file, "rb") as fp:
+            _buffer = fp.read()
+        private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, _buffer)
+
+        cert = crypto.X509()
+
+        # NOTE: Expire time 3 yr
+        cert.gmtime_adj_notBefore(-3600 * 48)
+        cert.gmtime_adj_notAfter(94608000)
+        cert.get_subject().CN = common_name
+        cert.set_serial_number(int(time.time()) * 10000)
+
+        cert.set_issuer(ca_root.get_subject())
+        cert.set_pubkey(ca_root.get_pubkey())
+        cert.set_version(2)
+        logger.debug("Signing {0}".format(common_name))
+        cert.sign(private_key, "sha256")
+
+        return (cert, private_key)
 
     def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
@@ -33,6 +64,16 @@ class TlsLayer(object):
             if hostname:
                 ssl_sock.set_tlsext_host_name(hostname)
 
+            # NOTE: If the sni hostname is not the same as self.context.host,
+            # we use sni hostname instead. Since it's more reliable.
+            if hostname and hostname != self.context.host:
+                cert, priv_key = self.create_cert(hostname)
+                ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
+                ssl_ctx.set_options(SSL.OP_NO_SSLv2)
+                ssl_ctx.use_certificate(cert)
+                ssl_ctx.use_privatekey(priv_key)
+                src_ssl_conn.set_context(ssl_ctx)
+
             ssl_sock.set_connect_state()
             ssl_sock.do_handshake()
 
@@ -49,7 +90,7 @@ class TlsLayer(object):
             # We could not know what will happen if we throw exception here
             # So I think we log the exception here and handle the problem in another place
             self._alpn_future.set_result(e)
-            return None
+            return bytes("")
 
     def create_dest_sslcontext(self, alpn):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
@@ -63,8 +104,14 @@ class TlsLayer(object):
     def create_src_sslcontext(self):
         ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
         ssl_ctx.set_options(SSL.OP_NO_SSLv2)
-        ssl_ctx.use_certificate_file(self.context.config["certfile"])
-        ssl_ctx.use_privatekey_file(self.context.config["keyfile"])
+
+        # FIXME: Should be avaliable to remove this part.
+        # Currently, If we remove this part,
+        # the whole tls negotiation will failed.
+        cert, priv_key = self.create_cert(self.context.host)
+        ssl_ctx.use_certificate(cert)
+        ssl_ctx.use_privatekey(priv_key)
+
         ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
 
         return ssl_ctx
