@@ -10,4 +10,5 @@ def curr_loop():
 
 
 def get_logger(name):
-    return logging.getLogger(name)
+    short_name = ".".join(name.split(".")[1:])
+    return logging.getLogger(short_name)
