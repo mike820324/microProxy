@@ -70,8 +70,7 @@ class HeaderTest(TestCase):
     def test_two_headers(self):
         self.assertEqual(TextList([ColorText("Header: Value", bg_color="blue"),
                                    ColorText("Host: github.com", bg_color="blue")]).__dict__,
-                         Header(dict(Host="github.com",
-                                     Header="Value")).__dict__)
+                         Header(dict(Header="Value", Host="github.com")).__dict__)
 
 
 class RequestTest(TestCase):
