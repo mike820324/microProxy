@@ -2,13 +2,13 @@ from tornado import tcpserver
 from tornado import gen
 from tornado import iostream
 
-from context import Context
-from layer import SocksLayer, TransparentLayer, Http1Layer, ForwardLayer, TlsLayer, NonTlsLayer
+from microproxy.context import Context
+from microproxy.layer import SocksLayer, TransparentLayer
+from microproxy.layer import ForwardLayer, TlsLayer, NonTlsLayer, Http1Layer
 from microproxy.iostream import MicroProxyIOStream
-
-from utils import curr_loop, get_logger
-from interceptor import Interceptor
-from exception import DestStreamClosedError, SrcStreamClosedError
+from microproxy.utils import curr_loop, get_logger
+from microproxy.interceptor import Interceptor
+from microproxy.exception import DestStreamClosedError, SrcStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -106,13 +106,15 @@ class ProxyServer(tcpserver.TCPServer):
             logger.debug("Start new layer manager")
             yield self.layer_manager.run_layers(stream)
         except Exception as e:
-            # not handle exception, log it and close the stream
+            # NOTE: not handle exception, log it and close the stream
             logger.exception(e)
             stream.close()
 
     def start_listener(self):
         self.listen(self.port, self.host)
-        logger.info("proxy server is listening at {0}:{1}".format(self.host, self.port))
+        logger.info(
+            "proxy server is listening at {0}:{1}".format(self.host,
+                                                          self.port))
 
 
 def start_proxy_server(config):
@@ -122,5 +124,5 @@ def start_proxy_server(config):
     try:
         curr_loop().start()
     except KeyboardInterrupt:
-        # fixme: gracefully stop everything
+        # TODO: gracefully stop everything
         logger.info("bye")

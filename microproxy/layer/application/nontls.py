@@ -8,7 +8,7 @@ class NonTlsLayer(object):
         self.context = copy(context)
 
     def process_and_return_context(self):
-        # we are not going through tls layer
+        # NOTE: we are not going through tls layer
         # chage dest_stream to iostream
         self.context.src_stream.resume()
         self.context.dest_stream.setblocking(False)

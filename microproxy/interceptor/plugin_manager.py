@@ -88,7 +88,9 @@ class PluginManager(object):
                 new_request = plugin.on_request(current_request)
                 current_request = copy(new_request)
             except AttributeError:
-                logger.debug("Plugin {0} does not have on_request".format(plugin.namespace["__file__"].split("/")[-1]))
+                logger.debug(
+                    "Plugin {0} does not have on_request".format(
+                        plugin.namespace["__file__"].split("/")[-1]))
         return current_request
 
     def exec_response(self, response):
@@ -101,5 +103,7 @@ class PluginManager(object):
                 new_response = plugin.on_response(current_response)
                 current_response = copy(new_response)
             except AttributeError:
-                logger.debug("Plugin {0} does not have on_response".format(plugin.namespace["__file__"].split("/")[-1]))
+                logger.debug(
+                    "Plugin {0} does not have on_response".format(
+                        plugin.namespace["__file__"].split("/")[-1]))
         return current_response
