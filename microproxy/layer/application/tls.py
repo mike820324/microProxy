@@ -18,8 +18,8 @@ class TlsLayer(object):
         self._alpn_future = concurrent.Future()
 
     def create_cert(self, common_name):
-        # FIXME: Should add Server Alternative Name extensions.
-        # FIXME: Should be able to reuse certificate.
+        # TODO: Should add Server Alternative Name extensions.
+        # TODO: Should be able to reuse certificate.
 
         root_ca_file = self.context.config["certfile"]
         with open(root_ca_file, "rb") as fp:
@@ -89,7 +89,7 @@ class TlsLayer(object):
                                           alpn_info))
             return bytes(alpn_info)
         except Exception as e:
-            # According to the document on PyOpenSSL
+            # NOTE: According to the document on PyOpenSSL
             # It said that the callback function should return a bytestring that determine the alpn protocol
             # We could not know what will happen if we throw exception here
             # So I think we log the exception here and handle the problem in another place
@@ -127,8 +127,8 @@ class TlsLayer(object):
     def process_and_return_context(self):
         self.context.src_stream.resume()
         src_ssl_ctx = self.create_src_sslcontext()
-        src_stream = yield self.context.src_stream.start_tls(server_side=True,
-                                                             ssl_options=src_ssl_ctx)
+        src_stream = yield self.context.src_stream.start_tls(
+            server_side=True, ssl_options=src_ssl_ctx)
 
         dest_ssl_sock, hostname, alpn_info = yield self._alpn_future
         dest_ssl_sock.setblocking(False)

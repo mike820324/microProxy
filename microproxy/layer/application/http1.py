@@ -30,17 +30,16 @@ class Http1Layer(httputil.HTTPServerConnectionDelegate):
         signal("http1layer_error").connect(self.on_error, sender=self)
 
     def process_and_return_context(self):
-        http_server_connection = http1connection.HTTP1ServerConnection(self.context.src_stream)
+        http_server_connection = http1connection.HTTP1ServerConnection(
+            self.context.src_stream)
         http_server_connection.start_serving(self)
         return self._future
 
     def start_request(self, server_conn, request_conn):
-        dest_conn = http1connection.HTTP1Connection(self.context.dest_stream,
-                                                    True)
-        self.http_forwarder = HttpForwarder(self.context,
-                                            request_conn,
-                                            dest_conn,
-                                            self)
+        dest_conn = http1connection.HTTP1Connection(
+            self.context.dest_stream, True)
+        self.http_forwarder = HttpForwarder(
+            self.context, request_conn, dest_conn, self)
         return self.http_forwarder.create_req_reader()
 
     def on_close(self, server_conn):
@@ -59,8 +58,8 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
         self.context = context
 
     def headers_received(self, start_line, headers):
-        log_debug_with_http_info(self.context,
-                                 "source request headers recieved")
+        log_debug_with_http_info(
+            self.context, "source request headers recieved")
         self.req = http.HttpRequest(version=start_line.version,
                                     method=start_line.method,
                                     path=start_line.path,
@@ -122,7 +121,8 @@ class HttpForwarder(object):
             yield self.dest_conn.read_response(self.create_resp_reader())
             log_debug_with_http_info(self.context, "destination request done")
         except iostream.StreamClosedError as e:
-            log_debug_with_http_info(self.context, "destination closed while writing/reading")
+            log_debug_with_http_info(
+                self.context, "destination closed while writing/reading")
             signal("http1layer_error").send(self.http1_layer,
                                             exe_info=DestStreamClosedError(e))
         except Exception as e:
@@ -147,8 +147,9 @@ class HttpForwarder(object):
                             response=self.resp)
 
         headers = self.resp.headers.copy()
-        # restriction on using tornado http connection
-        # pass Transfer-Encoding in header will let the source cannot receive chunks response correctly
+        # NOTE: restriction on using tornado http connection.
+        # If Transfer-Encoding is in header,
+        # the source cannot receive chunks response properly.
         if headers.get("Transfer-Encoding"):
             del headers["Transfer-Encoding"]
 
@@ -161,7 +162,8 @@ class HttpForwarder(object):
             self.src_conn.finish()
             log_debug_with_http_info(self.context, "source response done")
         except iostream.StreamClosedError as e:
-            log_debug_with_http_info(self.context, "source stream closed while writing")
+            log_debug_with_http_info(
+                self.context, "source stream closed while writing")
             signal("http1layer_error").send(self.http1_layer,
                                             exe_info=SrcStreamClosedError(e))
         except Exception as e:
@@ -174,19 +176,21 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
         self.context = context
 
     def headers_received(self, start_line, headers):
-        log_debug_with_http_info(self.context,
-                                 "destination response headers recieved")
+        log_debug_with_http_info(
+            self.context, "destination response headers recieved")
         self.resp = http.HttpResponse(code=start_line.code,
                                       reason=start_line.reason,
                                       version=start_line.version,
                                       headers=headers)
 
     def data_received(self, chunk):
-        log_debug_with_http_info(self.context, "destination response data recieved")
+        log_debug_with_http_info(
+            self.context, "destination response data recieved")
         self.resp.body += bytes(chunk)
 
     def finish(self):
         signal("response_done").send(self)
 
     def on_connection_close(self):
-        log_debug_with_http_info(self.context, "destination connection closed")
+        log_debug_with_http_info(
+            self.context, "destination connection closed")
