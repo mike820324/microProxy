@@ -1,6 +1,3 @@
-from microproxy import proxy
-from microproxy.viewer import console as console_viewer
-from microproxy.viewer import tui as tui_viewer
 from microproxy.config import parse_config, define_option, define_section
 
 
@@ -116,10 +113,13 @@ if __name__ == "__main__":
     config = parse_config(config_field_info)
 
     if config["command_type"] == "proxy":
+        from microproxy import proxy
         proxy.start_proxy_server(config)
 
     elif config["command_type"] == "console-viewer":
+        from microproxy.viewer import console as console_viewer
         console_viewer.start(config)
 
     elif config["command_type"] == "tui-viewer":
+        from microproxy.viewer import tui as tui_viewer
         tui_viewer.start(config)
