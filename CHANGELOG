@@ -1,3 +1,14 @@
+28 June 2016: MicroProxy 0.2.0
+
+This release focus on adding new features and code refactoring.
+
+* Support TLS Protocol.
+* Add Plugin System.
+* Code refactoring. (credit chhsiao90)
+  * Use tornado native http interface.
+  * layer design.
+* UI Improvement. (credit chhsiao90)
+
 9 May 2016: MicroProxy 0.1.0
 
 Initial release for MicroProxy. Support the following features.
