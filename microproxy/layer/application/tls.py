@@ -8,8 +8,11 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
+DEFAULT_CIPHERS = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:DES-CBC3-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA"
+
+
 class TlsLayer(object):
-    SUPPORT_PROTOCOLS = ["http/1.1"]
+    SUPPORT_PROTOCOLS = ["http/1.1", "h2"]
 
     def __init__(self, context):
         super(TlsLayer, self).__init__()
@@ -34,6 +37,7 @@ class TlsLayer(object):
         cert = crypto.X509()
 
         # NOTE: Expire time 3 yr
+        cert.set_serial_number(int(time.time() * 10000))
         cert.gmtime_adj_notBefore(-3600 * 48)
         cert.gmtime_adj_notAfter(94608000)
         cert.get_subject().CN = common_name
@@ -70,8 +74,7 @@ class TlsLayer(object):
             # we use sni hostname instead. Since it's more reliable.
             if hostname and hostname != self.context.host:
                 cert, priv_key = self.create_cert(hostname)
-                ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
-                ssl_ctx.set_options(SSL.OP_NO_SSLv2)
+                ssl_ctx = self.create_basic_sslcontext()
                 ssl_ctx.use_certificate(cert)
                 ssl_ctx.use_privatekey(priv_key)
                 src_ssl_conn.set_context(ssl_ctx)
@@ -100,8 +103,7 @@ class TlsLayer(object):
             return bytes("")
 
     def create_dest_sslcontext(self, alpn):
-        ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
-        ssl_ctx.set_options(SSL.OP_NO_SSLv2)
+        ssl_ctx = self.create_basic_sslcontext()
         ssl_ctx.set_verify(SSL.VERIFY_NONE,
                            lambda conn, x509, err_num, err_depth, err_code: True)
         ssl_ctx.set_alpn_protos(alpn)
@@ -109,9 +111,7 @@ class TlsLayer(object):
         return ssl_ctx
 
     def create_src_sslcontext(self):
-        ssl_ctx = SSL.Context(SSL.TLSv1_METHOD)
-        ssl_ctx.set_options(SSL.OP_NO_SSLv2)
-
+        ssl_ctx = self.create_basic_sslcontext()
         # FIXME: Should be avaliable to remove this part.
         # Currently, If we remove this part,
         # the whole tls negotiation will failed.
@@ -120,7 +120,16 @@ class TlsLayer(object):
         ssl_ctx.use_privatekey(priv_key)
 
         ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
+        return ssl_ctx
 
+    def create_basic_sslcontext(self):
+        # from mitmproxy, that follow the config, the tls will go for tlsv1.x version
+        ssl_ctx = SSL.Context(SSL.SSLv23_METHOD)
+        ssl_ctx.set_options(SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3 | SSL.OP_CIPHER_SERVER_PREFERENCE)
+
+        ssl_ctx.set_cipher_list(DEFAULT_CIPHERS)
+        # related to cipher method ECDHE
+        ssl_ctx.set_tmp_ecdh(crypto.get_elliptic_curve('prime256v1'))
         return ssl_ctx
 
     @gen.coroutine
