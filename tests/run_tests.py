@@ -8,7 +8,6 @@ TEST_MODULES = [
     "tests.layer.test_forward",
     "tests.layer.test_http1",
     "tests.layer.test_socks",
-    "tests.viewer.test_tui",
     "tests.viewer.test_console"
 ]
 
