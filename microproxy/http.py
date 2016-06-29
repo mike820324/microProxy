@@ -15,8 +15,10 @@ class HttpRequest(object):
         self.body = body
         if headers is None:
             self.headers = httputil.HTTPHeaders()
-        else:
+        elif isinstance(headers, httputil.HTTPHeaders):
             self.headers = headers
+        else:
+            self.headers = httputil.HTTPHeaders(headers)
 
     def serialize(self):
         json = {}
@@ -42,8 +44,10 @@ class HttpResponse(object):
         self.body = body
         if headers is None:
             self.headers = httputil.HTTPHeaders()
-        else:
+        elif isinstance(headers, httputil.HTTPHeaders):
             self.headers = headers
+        else:
+            self.headers = httputil.HTTPHeaders(headers)
 
     def serialize(self):
         json = {}
