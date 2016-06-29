@@ -123,3 +123,6 @@ def main():
     elif config["command_type"] == "tui-viewer":
         from microproxy.viewer import tui as tui_viewer
         tui_viewer.start(config)
+
+if __name__ == '__main__':
+    main()
