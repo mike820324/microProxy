@@ -1,0 +1,6 @@
+-r proxy.txt
+-r viewer.txt
+
+mock==2.0.0
+coverage==4.0.3
+coveralls==1.1
