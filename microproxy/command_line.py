@@ -108,6 +108,7 @@ def create_options():
 
     return config_field_info
 
+
 def main():
     config_field_info = create_options()
     config = parse_config(config_field_info)
