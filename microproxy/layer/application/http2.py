@@ -20,7 +20,7 @@ class Http2Layer(object):
         self.context = context
         self.src_conn = Connection(self, self.context.src_stream, client_side=False)
         self.dest_conn = Connection(self, self.context.dest_stream, client_side=True)
-        self.result = dict()
+        self.streams = dict()
         self._future = concurrent.Future()
 
     @gen.coroutine
@@ -56,25 +56,32 @@ class Http2Layer(object):
         return self.dest_conn if from_conn is self.src_conn else self.src_conn
 
     def on_request_header(self, src_stream_id, headers):
-        headers_dict = dict(headers)
-        headers.append(("Host", self.context.host))
-        self.result[src_stream_id] = dict(
-            request=http.HttpRequest(
-                version="HTTP/2",
-                method=headers_dict[":method"],
-                path=headers_dict[":path"],
-                headers=headers))
+        stream = Stream(self.context)
+        stream.write_request_headers(headers)
+        self.streams[src_stream_id] = stream
+
+    def on_request_body(self, src_stream_id, data):
+        self.streams[src_stream_id].write_request_body(data)
+
+    def get_request(self, src_stream_id):
+        stream = self.streams[src_stream_id]
+        return (stream.req_headers, stream.req_chunks)
 
     def on_response_header(self, src_stream_id, headers):
-        headers_dict = dict(headers)
-        self.result[src_stream_id]["response"] = http.HttpResponse(
-            version="HTTP/2",
-            code=headers_dict[":status"],
-            headers=headers)
+        self.streams[src_stream_id].write_response_headers(headers)
+
+    def on_response_body(self, src_stream_id, data):
+        self.streams[src_stream_id].write_response_body(data)
+
+    def get_response(self, src_stream_id):
+        stream = self.streams[src_stream_id]
+        return (stream.resp_headers, stream.resp_chunks)
+
+    def on_finish(self, src_stream_id):
         signal_publish.send(
             self,
-            request=self.result[src_stream_id]["request"],
-            response=self.result[src_stream_id]["response"])
+            request=self.streams[src_stream_id].to_request(),
+            response=self.streams[src_stream_id].to_response())
 
 
 class Connection(H2Connection):
@@ -82,8 +89,8 @@ class Connection(H2Connection):
         super(Connection, self).__init__(*args, **kwargs)
         self.http2_layer = http2_layer
         self.stream = stream
-        self._type = "dest" if kwargs["client_side"] else "src"
         self.to_stream_ids = dict([(0, 0)])
+        self._type = "dest" if kwargs["client_side"] else "src"
 
     def flush(self):
         data = self.data_to_send()
@@ -98,6 +105,7 @@ class Connection(H2Connection):
             self.handle_events(events)
         except Exception as e:
             logger.exception(e)
+            self.stream.closed()
 
     def handle_events(self, events):
         for event in events:
@@ -107,44 +115,31 @@ class Connection(H2Connection):
             elif isinstance(event, RequestReceived):
                 self.handle_request(event.headers, event.stream_id)
             elif isinstance(event, DataReceived):
-                self.handle_data(event.data, event.stream_id)
+                self.handle_data(event.data, event.stream_id, event.flow_controlled_length)
             elif isinstance(event, StreamEnded):
                 self.handle_end_stream(event.stream_id)
             elif isinstance(event, StreamReset):
-                logger.error("Stream reset: {0}".format(event.error_code))
+                self.handle_reset(event.stream_id, event.error_code)
             elif isinstance(event, RemoteSettingsChanged):
                 self.handle_update_settings(event)
             else:
                 logger.warn("not handled event: {0}".format(event))
 
     def handle_request(self, headers, stream_id):
-        write_conn = self.http2_layer.get_target_conn(self)
-
-        server_stream_id = write_conn.get_next_available_stream_id()
-        self.to_stream_ids[stream_id] = server_stream_id
-        write_conn.to_stream_ids[server_stream_id] = stream_id
-
-        logger.debug("source to destination with stream id {0}->{1}".format(stream_id, server_stream_id))
-
-        write_conn.send_headers(server_stream_id, headers)
-        write_conn.flush()
-
         self.http2_layer.on_request_header(stream_id, headers)
 
     def handle_response(self, headers, stream_id):
-        write_conn = self.http2_layer.get_target_conn(self)
-        client_stream_id = self.to_stream_ids[stream_id]
+        self.http2_layer.on_response_header(self.to_stream_ids[stream_id], headers)
 
-        logger.debug("destination to source with stream id {0}->{1}".format(stream_id, client_stream_id))
-        write_conn.send_headers(client_stream_id, headers)
-        write_conn.flush()
+    def handle_data(self, data, stream_id, flow_controlled_length):
+        if self._is_source_conn():
+            self.http2_layer.on_request_body(stream_id, data)
+        else:
+            self.http2_layer.on_response_body(self.to_stream_ids[stream_id], data)
 
-        self.http2_layer.on_response_header(client_stream_id, headers)
-
-    def handle_data(self, data, stream_id):
-        write_conn = self.http2_layer.get_target_conn(self)
-        write_conn.send_data(self.to_stream_ids[stream_id], data)
-        write_conn.flush()
+        if flow_controlled_length > 0:
+            self.increment_flow_control_window(flow_controlled_length)
+            self.flush()
 
     def handle_update_settings(self, event):
         write_conn = self.http2_layer.get_target_conn(self)
@@ -154,5 +149,82 @@ class Connection(H2Connection):
 
     def handle_end_stream(self, stream_id):
         write_conn = self.http2_layer.get_target_conn(self)
-        write_conn.end_stream(self.to_stream_ids[stream_id])
-        write_conn.flush()
+        if self._is_source_conn():
+            dest_stream_id = write_conn.get_next_available_stream_id()
+            self.to_stream_ids[stream_id] = dest_stream_id
+            write_conn.to_stream_ids[dest_stream_id] = stream_id
+
+            headers, chunks = self.http2_layer.get_request(stream_id)
+            write_conn.write(dest_stream_id, headers, chunks)
+            logger.debug("request {0}->{1}".format(stream_id, dest_stream_id))
+        else:
+            src_stream_id = self.to_stream_ids[stream_id]
+
+            headers, chunks = self.http2_layer.get_response(src_stream_id)
+            write_conn.write(src_stream_id, headers, chunks)
+
+            self.http2_layer.on_finish(src_stream_id)
+            logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
+
+    def write(self, stream_id, headers, chunks):
+        self.send_headers(stream_id, headers)
+        self.flush()
+        for chunk in chunks:
+            position = 0
+            while position < len(chunk):
+                max_outbound_frame_size = self.max_outbound_frame_size
+                frame_chunk = chunk[position:position + max_outbound_frame_size]
+                self.send_data(stream_id, frame_chunk)
+                self.flush()
+                position += max_outbound_frame_size
+        self.end_stream(stream_id)
+        self.flush()
+
+    def handle_reset(self, stream_id, error_code):
+        if error_code == 0x8:
+            write_conn = self.http2_layer.get_target_conn(self)
+            write_conn.reset_stream(self.to_stream_ids[stream_id], error_code)
+            logger.debug("reset {0}({1})->{2}({3}) with {4}".format(
+                self._type, stream_id, write_conn._type, self.to_stream_ids[stream_id], error_code))
+
+    def _is_source_conn(self):
+        return self._type == "src"
+
+
+class Stream(object):
+    def __init__(self, context):
+        super(Stream, self).__init__()
+        self.context = context
+        self.req_headers = None
+        self.req_chunks = []
+        self.resp_headers = None
+        self.resp_chunks = []
+
+    def write_request_headers(self, headers):
+        self.req_headers = headers
+
+    def write_request_body(self, data):
+        self.req_chunks.append(data)
+
+    def write_response_headers(self, headers):
+        self.resp_headers = headers
+
+    def write_response_body(self, data):
+        self.resp_chunks.append(data)
+
+    def to_request(self):
+        headers_dict = dict(self.req_headers)
+        return http.HttpRequest(
+            version="HTTP/2",
+            method=headers_dict[":method"],
+            path=headers_dict[":path"],
+            headers=self.req_headers + [("Host", self.context.host)],
+            body=b"".join(self.req_chunks))
+
+    def to_response(self):
+        headers_dict = dict(self.resp_headers)
+        return http.HttpResponse(
+            version="HTTP/2",
+            code=headers_dict[":status"],
+            headers=self.resp_headers,
+            body=b"".join(self.req_chunks))
