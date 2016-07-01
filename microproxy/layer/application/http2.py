@@ -1,11 +1,11 @@
-from tornado import concurrent, gen
+from tornado import concurrent, gen, httputil
 from h2.connection import H2Connection
 from h2.events import (
     ResponseReceived, RequestReceived, DataReceived, StreamEnded,
     StreamReset, RemoteSettingsChanged
 )
 
-from microproxy.interceptor import signal_publish
+from microproxy.interceptor import signal_request, signal_response, signal_publish
 from microproxy.utils import get_logger
 from microproxy import http
 logger = get_logger(__name__)
@@ -65,7 +65,12 @@ class Http2Layer(object):
 
     def get_request(self, src_stream_id):
         stream = self.streams[src_stream_id]
-        return (stream.req_headers, stream.req_chunks)
+        stream.request_done()
+
+        reqs = signal_request.send(self, request=stream.req)
+        new_req = reqs[0][1] if len(reqs) else stream.req
+        stream.req = new_req
+        return (new_req.headers, new_req.body)
 
     def on_response_header(self, src_stream_id, headers):
         self.streams[src_stream_id].write_response_headers(headers)
@@ -75,13 +80,18 @@ class Http2Layer(object):
 
     def get_response(self, src_stream_id):
         stream = self.streams[src_stream_id]
-        return (stream.resp_headers, stream.resp_chunks)
+        stream.response_done()
+
+        resps = signal_response.send(self, response=stream.resp)
+        new_resp = resps[0][1] if len(resps) else stream.resp
+        stream.resp = new_resp
+        return (new_resp.headers, new_resp.body)
 
     def on_finish(self, src_stream_id):
         signal_publish.send(
             self,
-            request=self.streams[src_stream_id].to_request(),
-            response=self.streams[src_stream_id].to_response())
+            request=self.streams[src_stream_id].req,
+            response=self.streams[src_stream_id].resp)
 
 
 class Connection(H2Connection):
@@ -154,23 +164,29 @@ class Connection(H2Connection):
             self.to_stream_ids[stream_id] = dest_stream_id
             write_conn.to_stream_ids[dest_stream_id] = stream_id
 
-            headers, chunks = self.http2_layer.get_request(stream_id)
-            write_conn.write(dest_stream_id, headers, chunks)
+            headers, body = self.http2_layer.get_request(stream_id)
+            write_conn.write_headers(dest_stream_id, headers)
+            write_conn.write(dest_stream_id, body)
             logger.debug("request {0}->{1}".format(stream_id, dest_stream_id))
         else:
             src_stream_id = self.to_stream_ids[stream_id]
 
-            headers, chunks = self.http2_layer.get_response(src_stream_id)
-            write_conn.write(src_stream_id, headers, chunks)
+            headers, body = self.http2_layer.get_response(src_stream_id)
+            write_conn.write_headers(src_stream_id, headers)
+            write_conn.write(src_stream_id, body)
 
             self.http2_layer.on_finish(src_stream_id)
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
-    def write(self, stream_id, headers, chunks):
-        self.send_headers(stream_id, headers)
+    def write_headers(self, stream_id, headers):
+        sorted_headers = sorted(headers.get_all(), key=lambda h: h[0])
+        self.send_headers(stream_id, sorted_headers)
         self.flush()
+
+    def write(self, stream_id, body):
+        chunks = [body] if isinstance(body, str) else body
+        position = 0
         for chunk in chunks:
-            position = 0
             while position < len(chunk):
                 max_outbound_frame_size = self.max_outbound_frame_size
                 frame_chunk = chunk[position:position + max_outbound_frame_size]
@@ -206,25 +222,25 @@ class Stream(object):
     def write_request_body(self, data):
         self.req_chunks.append(data)
 
+    def request_done(self):
+        headers_dict = dict(self.req_headers)
+        self.req = http.HttpRequest(
+            version="HTTP/2",
+            method=headers_dict[":method"],
+            path=headers_dict[":path"],
+            headers=httputil.HTTPHeaders(self.req_headers),
+            body=b"".join(self.req_chunks))
+
     def write_response_headers(self, headers):
         self.resp_headers = headers
 
     def write_response_body(self, data):
         self.resp_chunks.append(data)
 
-    def to_request(self):
-        headers_dict = dict(self.req_headers)
-        return http.HttpRequest(
-            version="HTTP/2",
-            method=headers_dict[":method"],
-            path=headers_dict[":path"],
-            headers=self.req_headers + [("Host", self.context.host)],
-            body=b"".join(self.req_chunks))
-
-    def to_response(self):
+    def response_done(self):
         headers_dict = dict(self.resp_headers)
-        return http.HttpResponse(
+        self.resp = http.HttpResponse(
             version="HTTP/2",
             code=headers_dict[":status"],
-            headers=self.resp_headers,
-            body=b"".join(self.req_chunks))
+            headers=httputil.HTTPHeaders(self.resp_headers),
+            body=b"".join(self.resp_chunks))
