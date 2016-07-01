@@ -153,7 +153,7 @@ class Connection(H2Connection):
 
     def handle_update_settings(self, event):
         write_conn = self.http2_layer.get_target_conn(self)
-        new_settings = dict([(id, cs.new_value) for (id, cs) in event.changed_settings.iteritems()])
+        new_settings = {id: cs.new_value for (id, cs) in event.changed_settings.iteritems()}
         write_conn.update_settings(new_settings)
         write_conn.flush()
 
@@ -179,6 +179,8 @@ class Connection(H2Connection):
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
     def write_headers(self, stream_id, headers):
+        # Note: headers with key had prefix ":" that must before any other headers
+        # So used sorted function to let header could had the correct order
         sorted_headers = sorted(headers.get_all(), key=lambda h: h[0])
         self.send_headers(stream_id, sorted_headers)
         self.flush()
