@@ -28,7 +28,7 @@ class Tui(gviewer.BaseDisplayer):
         summary = "{0} {1:5} {2}{3}".format(
             msg_dict["response"]["code"],
             msg_dict["request"]["method"],
-            msg_dict["request"]["headers"]["Host"],
+            "" if "Host" not in msg_dict["request"]["headers"] else msg_dict["request"]["headers"]["Host"],
             msg_dict["request"]["path"])
         return summary[:self.SUMMARY_MAX_LENGTH] + ".." \
             if len(summary) > self.SUMMARY_MAX_LENGTH else summary

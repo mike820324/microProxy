@@ -13,10 +13,7 @@ class HttpRequest(object):
         self.method = method
         self.path = path
         self.body = body
-        if headers is None:
-            self.headers = httputil.HTTPHeaders()
-        else:
-            self.headers = headers
+        self.headers = headers or httputil.HTTPHeaders()
 
     def serialize(self):
         json = {}
@@ -24,7 +21,7 @@ class HttpRequest(object):
         json["method"] = self.method
         json["path"] = self.path
         json["body"] = self.body.encode("base64")
-        json["headers"] = {k: v for k, v in self.headers.get_all()}
+        json["headers"] = dict(self.headers.get_all()) if isinstance(self.headers, httputil.HTTPHeaders) else dict(self.headers)
         return json
 
 
@@ -40,10 +37,7 @@ class HttpResponse(object):
         self.reason = reason
         self.version = version
         self.body = body
-        if headers is None:
-            self.headers = httputil.HTTPHeaders()
-        else:
-            self.headers = headers
+        self.headers = headers or httputil.HTTPHeaders()
 
     def serialize(self):
         json = {}
@@ -51,5 +45,5 @@ class HttpResponse(object):
         json["code"] = self.code
         json["reason"] = self.reason
         json["body"] = self.body.encode("base64")
-        json["headers"] = {k: v for k, v in self.headers.get_all()}
+        json["headers"] = dict(self.headers.get_all()) if isinstance(self.headers, httputil.HTTPHeaders) else dict(self.headers)
         return json
