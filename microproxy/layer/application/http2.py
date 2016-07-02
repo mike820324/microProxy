@@ -133,7 +133,7 @@ class Connection(H2Connection):
             elif isinstance(event, RemoteSettingsChanged):
                 self.handle_update_settings(event)
             else:
-                logger.warn("not handled event: {0}".format(event))
+                logger.debug("not handled event: {0}".format(event))
 
     def handle_request(self, headers, stream_id):
         self.http2_layer.on_request_header(stream_id, headers)
