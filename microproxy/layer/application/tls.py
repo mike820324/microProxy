@@ -83,7 +83,7 @@ class TlsLayer(object):
             # NOTE: If the sni hostname is not the same as self.context.host,
             # we use sni hostname instead. Since it's more reliable.
             if hostname and hostname != self.context.host:
-                cert, priv_key = self.cert_store.get_cert(hostname)
+                cert, priv_key = self.cert_store.get_cert_and_pkey(hostname)
                 ssl_ctx = self.create_basic_sslcontext()
                 ssl_ctx.use_certificate(cert)
                 ssl_ctx.use_privatekey(priv_key)
@@ -125,7 +125,7 @@ class TlsLayer(object):
         # FIXME: Should be avaliable to remove this part.
         # Currently, If we remove this part,
         # the whole tls negotiation will failed.
-        cert, priv_key = self.cert_store.get_cert(self.context.host)
+        cert, priv_key = self.cert_store.get_cert_and_pkey(self.context.host)
         ssl_ctx.use_certificate(cert)
         ssl_ctx.use_privatekey(priv_key)
 
