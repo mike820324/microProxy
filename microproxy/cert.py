@@ -24,19 +24,17 @@ class CertStore(object):
 
         return (ca_root, private_key)
 
-    def get_cert(self, common_name):
+    def get_cert_and_pkey(self, common_name):
         cert = self.get_cert_from_cache(common_name)
         if cert:
-            return cert
-
-        if common_name.startswith(b"www"):
-            wildcard_common_name = b"*" + common_name[3:]
-            cert = self.create_cert(wildcard_common_name)
-            self.certs_cache[wildcard_common_name] = cert
+            logger.debug("get cert commonname:{0} from cache".format(
+                common_name))
+            return (cert, self.private_key)
         else:
+            logger.debug("create cert commonname:{0} to cache".format(
+                common_name))
             cert = self.create_cert(common_name)
-            self.certs_cache[common_name] = cert
-        return cert
+            return (cert, self.private_key)
 
     def create_cert(self, common_name):
         cert = crypto.X509()
@@ -52,24 +50,11 @@ class CertStore(object):
         cert.set_version(2)
         cert.sign(self.private_key, "sha256")
 
-        logger.debug("create cert with commonname: {0}".format(common_name))
-        return (cert, self.private_key)
-
-    def get_potention_common_names(self, common_name):
-        if "." not in common_name:
-            return [common_name]
-        wildcard_common_name = b"*" + common_name[
-            common_name.index("."):]
-        return [wildcard_common_name, common_name]
+        self.certs_cache[common_name] = cert
+        return cert
 
     def get_cert_from_cache(self, common_name):
-        potential_common_names = self.get_potention_common_names(common_name)
-        match_names = filter(
-            lambda key: key in self.certs_cache,
-            potential_common_names)
-        match_name = match_names[0] if match_names else None
-        if match_name:
-            logger.debug("get cert commonname:{0} from cache with {1}".format(
-                match_name, common_name))
-            return self.certs_cache[match_name]
-        return None
+        try:
+            return self.certs_cache[common_name]
+        except KeyError:
+            return None
