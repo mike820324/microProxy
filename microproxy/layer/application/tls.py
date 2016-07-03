@@ -1,7 +1,6 @@
 from OpenSSL import SSL, crypto
 from copy import copy
 from tornado import gen, concurrent
-import time
 
 from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
@@ -56,45 +55,13 @@ class TlsLayer(object):
         "!KRB5-DES-CBC3-SHA"
     )
 
-    def __init__(self, context):
+    def __init__(self, context, cert_store):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
+        self.cert_store = cert_store
         # NOTE: tuple contains (dest_ssl_sock, hostname, alpn_info)
         # Throws exception if failed
         self._alpn_future = concurrent.Future()
-
-    def create_cert(self, common_name):
-        # TODO: Should add Server Alternative Name extensions.
-        # TODO: Should be able to reuse certificate.
-
-        root_ca_file = self.context.config["certfile"]
-        with open(root_ca_file, "rb") as fp:
-            _buffer = fp.read()
-        ca_root = crypto.load_certificate(crypto.FILETYPE_PEM, _buffer)
-
-        private_key_file = self.context.config["keyfile"]
-        with open(private_key_file, "rb") as fp:
-            _buffer = fp.read()
-        private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, _buffer)
-
-        cert = crypto.X509()
-
-        # NOTE: Expire time 3 yr
-        cert.set_serial_number(int(time.time() * 10000))
-        cert.gmtime_adj_notBefore(-3600 * 48)
-        cert.gmtime_adj_notAfter(94608000)
-        cert.get_subject().CN = common_name
-        cert.set_serial_number(int(time.time()) * 10000)
-
-        cert.set_issuer(ca_root.get_subject())
-        cert.set_pubkey(ca_root.get_pubkey())
-        cert.set_version(2)
-        logger.debug("{0}:{1} -> Signing {2}".format(self.context.host,
-                                                     self.context.port,
-                                                     common_name))
-        cert.sign(private_key, "sha256")
-
-        return (cert, private_key)
 
     def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
@@ -116,7 +83,7 @@ class TlsLayer(object):
             # NOTE: If the sni hostname is not the same as self.context.host,
             # we use sni hostname instead. Since it's more reliable.
             if hostname and hostname != self.context.host:
-                cert, priv_key = self.create_cert(hostname)
+                cert, priv_key = self.cert_store.get_cert_and_pkey(hostname)
                 ssl_ctx = self.create_basic_sslcontext()
                 ssl_ctx.use_certificate(cert)
                 ssl_ctx.use_privatekey(priv_key)
@@ -158,7 +125,7 @@ class TlsLayer(object):
         # FIXME: Should be avaliable to remove this part.
         # Currently, If we remove this part,
         # the whole tls negotiation will failed.
-        cert, priv_key = self.create_cert(self.context.host)
+        cert, priv_key = self.cert_store.get_cert_and_pkey(self.context.host)
         ssl_ctx.use_certificate(cert)
         ssl_ctx.use_privatekey(priv_key)
 

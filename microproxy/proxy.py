@@ -9,6 +9,7 @@ from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import Interceptor
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError
+from microproxy.cert import CertStore
 
 logger = get_logger(__name__)
 
@@ -16,6 +17,7 @@ logger = get_logger(__name__)
 class LayerManager(object):
     def __init__(self, config):
         self.config = config
+        self.cert_store = CertStore(config)
 
     @gen.coroutine
     def run_layers(self, src_stream):
@@ -67,7 +69,7 @@ class LayerManager(object):
             if context.port in http_ports:
                 return NonTlsLayer(context)
             elif context.port in https_ports:
-                return TlsLayer(context)
+                return TlsLayer(context, self.cert_store)
             else:
                 return ForwardLayer(context)
 

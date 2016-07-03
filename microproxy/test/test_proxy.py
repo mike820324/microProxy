@@ -14,8 +14,8 @@ class LayerManagerTest(AsyncTestCase):
             "mode": "socks",
             "http_port": [],
             "https_port": [],
-            "certfile": None,
-            "keyfile": None
+            "certfile": "microproxy/test/test.crt",
+            "keyfile": "microproxy/test/test.key"
         }
         self.layer_manager = LayerManager(config=self.config)
         self.src_stream = Mock()
@@ -58,6 +58,6 @@ class LayerManagerTest(AsyncTestCase):
         assert isinstance(layer, Http1Layer)
 
         context.scheme = "https"
-        tls_layer = TlsLayer(context)
+        tls_layer = TlsLayer(context, None)
         layer = self.layer_manager.next_layer(tls_layer, context)
         assert isinstance(layer, Http1Layer)
