@@ -50,7 +50,7 @@ setup(
         "watchdog==0.8.3",
         "pyOpenSSL==16.0.0",
         "service-identity==16.0.0",
-        "h2==2.3.1"
+        "h2==2.4.0"
     ],
     extras_require={
         'viewer': [
