@@ -57,19 +57,18 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def socks_greeting(self):
         src_stream = self.context.src_stream
-        data = yield src_stream.read_bytes(3)
+        data = yield src_stream.read_bytes(2)
 
         logger.debug("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
-        socks_version, socks_nmethod, _ = struct.unpack('BBB', data)
+        socks_version, socks_nmethod = struct.unpack('BB', data)
+
+        yield src_stream.read_bytes(socks_nmethod)
 
         if socks_version != self.SOCKS_VERSION:
             raise ProtocolError("not support socks version {0}".format(socks_version))
 
-        if socks_nmethod == 1:
-            response = struct.pack('BB', self.SOCKS_VERSION, 0)
-            yield src_stream.write(response)
-        else:
-            raise ProtocolError("socks5 auth not supported")
+        response = struct.pack('BB', self.SOCKS_VERSION, 0)
+        yield src_stream.write(response)
 
     @gen.coroutine
     def socks_request(self):
