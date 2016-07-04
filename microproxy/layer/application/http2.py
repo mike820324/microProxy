@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 class Http2Layer(object):
     '''
-    ForwardLayer: passing all the src data to destination. Will not intercept anything
+    Http2Layer: Responsible for handling the http2 request and response.
     '''
     def __init__(self, context):
         super(Http2Layer, self).__init__()
@@ -175,7 +175,7 @@ class Connection(H2Connection):
             else:
                 write_conn.write_headers(
                     dest_stream_id, headers, stream_ended=False)
-                write_conn.write(dest_stream_id, body)
+                write_conn.write_data(dest_stream_id, body)
             logger.debug("request {0}->{1}".format(stream_id, dest_stream_id))
         else:
             src_stream_id = self.to_stream_ids[stream_id]
@@ -183,19 +183,19 @@ class Connection(H2Connection):
             headers, body = self.http2_layer.get_response(src_stream_id)
             write_conn.write_headers(
                 src_stream_id, headers, stream_ended=False)
-            write_conn.write(src_stream_id, body)
+            write_conn.write_data(src_stream_id, body)
 
             self.http2_layer.on_finish(src_stream_id)
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
     def write_headers(self, stream_id, headers, stream_ended=False):
-        # Note: headers with key had prefix ":" that must before any other headers
+        # NOTE: headers with key had prefix ":" that must before any other headers
         # So used sorted function to let header could had the correct order
         sorted_headers = sorted(headers.get_all(), key=lambda h: h[0])
         self.send_headers(stream_id, sorted_headers, end_stream=stream_ended)
         self.flush()
 
-    def write(self, stream_id, body):
+    def write_data(self, stream_id, body):
         chunks = [body] if isinstance(body, str) else body
         position = 0
         for chunk in chunks:
@@ -222,7 +222,6 @@ class Connection(H2Connection):
 class Stream(object):
     def __init__(self, stream_ended):
         super(Stream, self).__init__()
-        # self.context = context
         self.stream_ended = stream_ended
         self.req_headers = None
         self.req_chunks = []
