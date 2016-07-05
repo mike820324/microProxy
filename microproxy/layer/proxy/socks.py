@@ -1,5 +1,6 @@
 import struct
 import ipaddress
+import socket
 
 from tornado import gen
 from tornado import iostream
@@ -7,7 +8,7 @@ from tornado import iostream
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import ProtocolError, SrcStreamClosedError
+from microproxy.exception import ProtocolError, SrcStreamClosedError, DestStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -110,17 +111,19 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def socks_response_with_dest_stream_creation(self, host, port, addr_type):
         src_stream = self.context.src_stream
-        dest_stream = yield self.create_dest_stream((host, port))
         try:
+            dest_stream = yield self.create_dest_stream((host, port))
             yield src_stream.write(struct.pack("!BBx",
                                                self.SOCKS_VERSION,
                                                self.SOCKS_RESP_STATUS["SUCCESS"]))
             if addr_type == self.SOCKS_ADDR_TYPE["IPV4"]:
                 yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV4"]))
                 yield src_stream.write(ipaddress.IPv4Address(host).packed)
+
             elif addr_type == self.SOCKS_ADDR_TYPE["IPV6"]:
                 yield src_stream.write(struct.pack('!B', self.SOCKS_ADDR_TYPE["IPV6"]))
                 yield src_stream.write(ipaddress.IPv6Address(host).packed)
+
             elif addr_type == self.SOCKS_ADDR_TYPE["DOMAINNAME"]:
                 yield src_stream.write(struct.pack("!BB",
                                                    self.SOCKS_ADDR_TYPE["DOMAINNAME"],
@@ -129,6 +132,12 @@ class SocksLayer(ProxyLayer):
 
             yield src_stream.write(struct.pack("!H", port))
             raise gen.Return(dest_stream)
+
+        except gen.TimeoutError:
+            logger.debug("connect to {0}:{1} timeout".format(host, port))
+            yield src_stream.write(struct.pack("!BBx",
+                                               self.SOCKS_VERSION,
+                                               self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
         except iostream.StreamClosedError as e:
             dest_stream.close()
             raise SrcStreamClosedError(e)
