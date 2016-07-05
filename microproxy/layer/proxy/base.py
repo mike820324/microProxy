@@ -17,5 +17,5 @@ class ProxyLayer(object):
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         dest_stream = iostream.MicroProxyIOStream(dest_socket)
-        yield dest_stream.connect(dest_addr_info)
+        yield gen.with_timeout(5, dest_stream.connect(dest_addr_info))
         raise gen.Return(dest_stream)
