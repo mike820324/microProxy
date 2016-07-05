@@ -8,7 +8,7 @@ from tornado import iostream
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import ProtocolError, SrcStreamClosedError, DestStreamClosedError
+from microproxy.exception import ProtocolError, SrcStreamClosedError
 
 logger = get_logger(__name__)
 
