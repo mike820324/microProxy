@@ -10,34 +10,58 @@ ioloop.install()
 
 class Tui(gviewer.BaseDisplayer):
     SUMMARY_MAX_LENGTH = 100
+    PALETTE = [
+        ("code ok", "light green", "black", "bold"),
+        ("code error", "light red", "black", "bold")
+    ]
 
     def __init__(self, stream):
         self.stream = stream
         self.data_store = self.create_data_store()
         self.viewer = gviewer.GViewer(
-            self.data_store, self, event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
+            self.data_store, self,
+            palette=self.PALETTE,
+            event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
 
     def create_data_store(self):
-        return gviewer.AsyncDataStore(self.stream.on_recv)
+        return ZmqAsyncDataStore(self.stream.on_recv)
 
     def start(self):
         self.viewer.start()
 
-    def to_summary(self, message):
-        msg_dict = json.loads(message[0])
-        summary = "{0} {1:5} {2}{3}".format(
-            msg_dict["response"]["code"],
-            msg_dict["request"]["method"],
-            "" if "Host" not in msg_dict["request"]["headers"] else msg_dict["request"]["headers"]["Host"],
-            msg_dict["request"]["path"])
-        return summary[:self.SUMMARY_MAX_LENGTH] + ".." \
-            if len(summary) > self.SUMMARY_MAX_LENGTH else summary
+    def _code_text_markup(self, code):
+        if int(code) < 400:
+            return ("code ok", str(code))
+        return ("code error", str(code))
 
+    def _fold_path(self, path):
+        return path if len(path) < self.SUMMARY_MAX_LENGTH else path[:self.SUMMARY_MAX_LENGTH - 1] + "..."
+
+    def _safe_get_host(self, request):
+        return "" if "Host" not in request["headers"] else request["headers"]["Host"]
+
+    def to_summary(self, message):
+        return [
+            self._code_text_markup(message["response"]["code"]),
+            " {0:5} {1}{2}".format(
+                message["request"]["method"],
+                self._safe_get_host(message["request"]),
+                self._fold_path(message["request"]["path"]))]
+
+    def get_detail_displayers(self):
+        return [("Detail", HttpDetailDisplayer())]
+
+
+class ZmqAsyncDataStore(gviewer.AsyncDataStore):
+    def transform(self, message):
+        return json.loads(message[0])
+
+
+class HttpDetailDisplayer(gviewer.DetailDisplayer):
     def to_detail_groups(self, message):
-        msg_dict = json.loads(message[0])
         groups = []
 
-        request = msg_dict["request"]
+        request = message["request"]
         groups.append(gviewer.DetailGroup(
             "Request",
             [gviewer.DetailProp("method", request["method"]),
@@ -47,10 +71,10 @@ class Tui(gviewer.BaseDisplayer):
             "Request Header",
             [gviewer.DetailProp(k, v) for k, v in request["headers"].iteritems()]))
 
-        response = msg_dict["response"]
+        response = message["response"]
         groups.append(gviewer.DetailGroup(
             "Response",
-            [gviewer.DetailProp("code", response["code"]),
+            [gviewer.DetailProp("code", str(response["code"])),
              gviewer.DetailProp("reason", response["reason"]),
              gviewer.DetailProp("version", response["version"])]))
         groups.append(gviewer.DetailGroup(
