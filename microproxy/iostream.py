@@ -36,24 +36,13 @@ class MicroProxyIOStream(IOStream):
         socket = self.socket
         self.io_loop.remove_handler(socket)
         self.socket = None
-
-        socket.setblocking(True)
         return socket
 
     def start_tls(self, server_side, ssl_options, server_hostname=None):
-        if (self._read_callback or self._read_future or
-                self._write_callback or self._write_future or
-                self._connect_callback or self._connect_future or
-                self._pending_callbacks or self._closed or
-                self._read_buffer or self._write_buffer):
-            raise ValueError("IOStream is not idle; cannot convert to SSL")
-
         if not isinstance(ssl_options, SSL.Context):
             raise ValueError("ssl_options is not SSL.Context")
 
-        socket = self.socket
-        self.io_loop.remove_handler(socket)
-        self.socket = None
+        socket = self.detach()
         socket = SSL.Connection(ssl_options, socket)
         if server_side:
             socket.set_accept_state()
