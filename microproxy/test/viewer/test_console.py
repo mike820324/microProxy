@@ -64,27 +64,40 @@ class StatusTextTest(TestCase):
 
 class HeaderTest(TestCase):
     def test_one_header(self):
-        self.assertEqual(TextList([ColorText("Host: github.com", bg_color="blue")]).__dict__,
-                         Header(dict(Host="github.com")).__dict__)
+        expected = TextList([ColorText("Host: github.com", bg_color="blue")])
+        self.assertEqual(
+            expected.__dict__,
+            Header([("Host", "github.com")]).__dict__)
 
     def test_two_headers(self):
-        self.assertEqual(TextList([ColorText("Header: Value", bg_color="blue"),
-                                   ColorText("Host: github.com", bg_color="blue")]).__dict__,
-                         Header(dict(Header="Value", Host="github.com")).__dict__)
+        expected = TextList(
+            [ColorText("Header: Value", bg_color="blue"),
+             ColorText("Host: github.com", bg_color="blue")])
+        self.assertEqual(
+            expected.__dict__,
+            Header([("Header", "Value"), ("Host", "github.com")]).__dict__)
 
 
 class RequestTest(TestCase):
     def test_simple_request(self):
-        self.assertEqual(TextList([ColorText("Request Headers:", fg_color="blue", attrs=["bold"]),
-                                   Header(dict(Host="github.com"))]).__dict__,
-                         Request(dict(Host="github.com")).__dict__)
+        headers = [("Host", "github.com")]
+        expected = TextList(
+            [ColorText("Request Headers:", fg_color="blue", attrs=["bold"]),
+             Header(headers)])
+        self.assertEqual(
+            expected.__dict__,
+            Request(headers).__dict__)
 
 
 class ResponseTest(TestCase):
     def test_simple_response(self):
-        self.assertEqual(TextList([ColorText("Response Headers:", fg_color="blue", attrs=["bold"]),
-                                   Header(dict(Host="github.com"))]).__dict__,
-                         Response(dict(Host="github.com")).__dict__)
+        headers = [("Host", "github.com")]
+        expected = TextList(
+            [ColorText("Response Headers:", fg_color="blue", attrs=["bold"]),
+             Header(headers)])
+        self.assertEqual(
+            expected.__dict__,
+            Response(headers).__dict__)
 
 
 if __name__ == "__main__":

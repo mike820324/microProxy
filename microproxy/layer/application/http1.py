@@ -60,10 +60,11 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
     def headers_received(self, start_line, headers):
         log_debug_with_http_info(
             self.context, "source request headers recieved")
+        headers_dict = {k: v for k, v in headers.get_all()}
         self.req = http.HttpRequest(version=start_line.version,
                                     method=start_line.method,
                                     path=start_line.path,
-                                    headers=headers)
+                                    headers=headers_dict)
 
     def data_received(self, chunk):
         log_debug_with_http_info(self.context, "source request body recieved")
@@ -116,7 +117,9 @@ class HttpForwarder(object):
                                                 self.req.path,
                                                 self.req.version)
         try:
-            yield self.dest_conn.write_headers(status_line, self.req.headers)
+            yield self.dest_conn.write_headers(
+                status_line,
+                httputil.HTTPHeaders(self.req.headers.get_dict()))
             yield self.dest_conn.write(self.req.body)
             yield self.dest_conn.read_response(self.create_resp_reader())
             log_debug_with_http_info(self.context, "destination request done")
@@ -146,18 +149,21 @@ class HttpForwarder(object):
                             request=self.req,
                             response=self.resp)
 
-        headers = self.resp.headers.copy()
+        headers = self.resp.headers.get_dict()
         # NOTE: restriction on using tornado http connection.
         # If Transfer-Encoding is in header,
         # the source cannot receive chunks response properly.
-        if headers.get("Transfer-Encoding"):
+        if "Transfer-Encoding" in headers:
             del headers["Transfer-Encoding"]
 
-        status_line = httputil.ResponseStartLine(self.resp.version,
-                                                 self.resp.code,
-                                                 self.resp.reason)
+        status_line = httputil.ResponseStartLine(
+            self.resp.version,
+            self.resp.code,
+            self.resp.reason)
         try:
-            yield self.src_conn.write_headers(status_line, headers)
+            yield self.src_conn.write_headers(
+                status_line,
+                httputil.HTTPHeaders(headers))
             yield self.src_conn.write(self.resp.body)
             self.src_conn.finish()
             log_debug_with_http_info(self.context, "source response done")
@@ -178,10 +184,11 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
     def headers_received(self, start_line, headers):
         log_debug_with_http_info(
             self.context, "destination response headers recieved")
+        headers_dict = {k: v for k, v in headers.get_all()}
         self.resp = http.HttpResponse(code=start_line.code,
                                       reason=start_line.reason,
                                       version=start_line.version,
-                                      headers=headers)
+                                      headers=headers_dict)
 
     def data_received(self, chunk):
         log_debug_with_http_info(
