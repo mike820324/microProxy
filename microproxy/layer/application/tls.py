@@ -73,6 +73,8 @@ class TlsLayer(object):
 
             dest_context = self.create_dest_sslcontext(support_alpn)
             dest_sock = self.context.dest_stream.detach()
+            dest_sock.setblocking(True)
+
             ssl_sock = SSL.Connection(dest_context,
                                       dest_sock)
 
