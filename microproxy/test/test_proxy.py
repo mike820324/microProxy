@@ -4,7 +4,8 @@ from tornado.testing import AsyncTestCase
 
 from microproxy.proxy import LayerManager
 from microproxy.context import Context
-from microproxy.layer import SocksLayer, TransparentLayer, Http1Layer, TlsLayer, NonTlsLayer
+from microproxy.layer import SocksLayer, TransparentLayer, TlsLayer
+from microproxy.layer import Http1Layer, Http2Layer
 
 
 class LayerManagerTest(AsyncTestCase):
@@ -20,6 +21,25 @@ class LayerManagerTest(AsyncTestCase):
         self.layer_manager = LayerManager(config=self.config)
         self.src_stream = Mock()
 
+    def test_get_socks_layer(self):
+        context = Context(src_stream=Mock(),
+                          config=self.config,
+                          port=443)
+
+        layer = self.layer_manager.get_first_layer(context)
+        self.assertIsInstance(layer, SocksLayer)
+
+    def test_get_transparent_layer(self):
+        context = Context(src_stream=Mock(),
+                          config=self.config,
+                          port=443)
+
+        config = self.config
+        config["mode"] = "transparent"
+        layer_manager = LayerManager(config=config)
+        layer = layer_manager.get_first_layer(context)
+        self.assertIsInstance(layer, TransparentLayer)
+
     def test_get_tls_layer(self):
         context = Context(src_stream=Mock(),
                           config=self.config,
@@ -27,37 +47,36 @@ class LayerManagerTest(AsyncTestCase):
 
         socks_layer = SocksLayer(context)
         layer = self.layer_manager.next_layer(socks_layer, context)
-        assert isinstance(layer, TlsLayer)
+        self.assertIsInstance(layer, TlsLayer)
 
         transparent_layer = TransparentLayer(context)
         layer = self.layer_manager.next_layer(transparent_layer, context)
-        assert isinstance(layer, TlsLayer)
-
-    def test_get_nontls_layer(self):
-        context = Context(src_stream=Mock(),
-                          config=self.config,
-                          port=80)
-
-        socks_layer = SocksLayer(context)
-        layer = self.layer_manager.next_layer(socks_layer, context)
-        assert isinstance(layer, NonTlsLayer)
-
-        transparent_layer = TransparentLayer(context)
-        layer = self.layer_manager.next_layer(transparent_layer, context)
-        assert isinstance(layer, NonTlsLayer)
+        self.assertIsInstance(layer, TlsLayer)
 
     def test_get_http1_layer(self):
         context = Context(src_stream=Mock(),
                           config=self.config,
                           port=80)
 
-        context.scheme = "http"
-        nontls_layer = NonTlsLayer(context)
-        layer = self.layer_manager.next_layer(nontls_layer,
-                                              context)
-        assert isinstance(layer, Http1Layer)
+        socks_layer = SocksLayer(context)
+        layer = self.layer_manager.next_layer(socks_layer, context)
+        self.assertIsInstance(layer, Http1Layer)
+
+        transparent_layer = TransparentLayer(context)
+        layer = self.layer_manager.next_layer(transparent_layer, context)
+        self.assertIsInstance(layer, Http1Layer)
 
         context.scheme = "https"
         tls_layer = TlsLayer(context, None)
         layer = self.layer_manager.next_layer(tls_layer, context)
-        assert isinstance(layer, Http1Layer)
+        self.assertIsInstance(layer, Http1Layer)
+
+    def test_get_http2_layer(self):
+        context = Context(src_stream=Mock(),
+                          config=self.config,
+                          port=443)
+
+        context.scheme = "h2"
+        tls_layer = TlsLayer(context, None)
+        layer = self.layer_manager.next_layer(tls_layer, context)
+        self.assertIsInstance(layer, Http2Layer)

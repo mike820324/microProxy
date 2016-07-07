@@ -4,7 +4,7 @@ from tornado import iostream
 
 from microproxy.context import Context
 from microproxy.layer import SocksLayer, TransparentLayer
-from microproxy.layer import ForwardLayer, TlsLayer, NonTlsLayer, Http1Layer, Http2Layer
+from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import Interceptor
@@ -67,13 +67,13 @@ class LayerManager(object):
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
-                return NonTlsLayer(context)
+                return Http1Layer(context)
             elif context.port in https_ports:
                 return TlsLayer(context, self.cert_store)
             else:
                 return ForwardLayer(context)
 
-        if isinstance(current_layer, TlsLayer) or isinstance(current_layer, NonTlsLayer):
+        if isinstance(current_layer, TlsLayer):
             if context.scheme == "http" or context.scheme == "https":
                 return Http1Layer(context)
             elif context.scheme == "h2":

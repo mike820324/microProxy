@@ -1,5 +1,8 @@
 import socket
 from copy import copy
+from tornado import gen
+
+from microproxy import iostream
 
 
 class ProxyLayer(object):
@@ -10,11 +13,9 @@ class ProxyLayer(object):
     def process_and_return_context(self):
         raise NotImplementedError
 
+    @gen.coroutine
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        dest_socket.setblocking(True)
-        # FIXME: using concurrent.futures ThreadExecutor?
-        dest_socket.settimeout(3)
-        dest_socket.connect(dest_addr_info)
-        dest_socket.settimeout(None)
-        return dest_socket
+        dest_stream = iostream.MicroProxyIOStream(dest_socket)
+        yield dest_stream.connect(dest_addr_info)
+        raise gen.Return(dest_stream)

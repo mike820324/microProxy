@@ -72,8 +72,11 @@ class TlsLayer(object):
             ]
 
             dest_context = self.create_dest_sslcontext(support_alpn)
+            dest_sock = self.context.dest_stream.detach()
+            dest_sock.setblocking(True)
+
             ssl_sock = SSL.Connection(dest_context,
-                                      self.context.dest_stream)
+                                      dest_sock)
 
             hostname = src_ssl_conn.get_servername()
 
@@ -144,7 +147,6 @@ class TlsLayer(object):
 
     @gen.coroutine
     def process_and_return_context(self):
-        self.context.src_stream.resume()
         src_ssl_ctx = self.create_src_sslcontext()
         src_stream = yield self.context.src_stream.start_tls(
             server_side=True, ssl_options=src_ssl_ctx)
