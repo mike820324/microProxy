@@ -8,7 +8,7 @@ from tornado import iostream
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import ProtocolError, SrcStreamClosedError
+from microproxy.exception import ProtocolError, SrcStreamClosedError, DestStreamClosedError
 
 logger = get_logger(__name__)
 
@@ -131,6 +131,15 @@ class SocksLayer(ProxyLayer):
         src_stream = self.context.src_stream
         try:
             dest_stream = yield self.create_dest_stream((host, port))
+
+        except iostream.StreamClosedError as e:
+            logger.debug("connect to {0}:{1} timeout".format(host, port))
+            src_stream.write(struct.pack("!BBx",
+                                         self.SOCKS_VERSION,
+                                         self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
+            raise DestStreamClosedError(e)
+
+        try:
             yield src_stream.write(struct.pack("!BBx",
                                                self.SOCKS_VERSION,
                                                self.SOCKS_RESP_STATUS["SUCCESS"]))
@@ -151,11 +160,6 @@ class SocksLayer(ProxyLayer):
             yield src_stream.write(struct.pack("!H", port))
             raise gen.Return(dest_stream)
 
-        except gen.TimeoutError:
-            logger.debug("connect to {0}:{1} timeout".format(host, port))
-            yield src_stream.write(struct.pack("!BBx",
-                                               self.SOCKS_VERSION,
-                                               self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
         except iostream.StreamClosedError as e:
             dest_stream.close()
             raise SrcStreamClosedError(e)
