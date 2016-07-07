@@ -130,9 +130,12 @@ class SocksProxyHandlerTest(AsyncTestCase):
 
     @gen_test
     def test_greeting_with_auth(self):
-        self.client_stream.write(struct.pack("BBx", 5, 0))
-        with self.assertRaises(ProtocolError):
-            yield self.layer.socks_greeting()
+        self.client_stream.write(struct.pack("BBBB", 5, 2, 0, 1))
+        yield self.layer.socks_greeting()
+        data = yield self.client_stream.read_bytes(2)
+        _, auth = struct.unpack("BB", data)
+        self.assertEqual(0, auth)
+
         self.client_stream.close()
         self.server_stream.close()
 
@@ -140,7 +143,7 @@ class SocksProxyHandlerTest(AsyncTestCase):
     def test_request_with_wrong_socks_version(self):
         self.client_stream.write(struct.pack("!BBxB", 4, 1, 1))
         with self.assertRaises(ProtocolError):
-            yield self.layer.socks_greeting()
+            yield self.layer.socks_request()
         self.client_stream.close()
         self.server_stream.close()
 
@@ -148,6 +151,6 @@ class SocksProxyHandlerTest(AsyncTestCase):
     def test_request_with_wrong_socks_command(self):
         self.client_stream.write(struct.pack("!BBxB", 5, 0, 1))
         with self.assertRaises(ProtocolError):
-            yield self.layer.socks_greeting()
+            yield self.layer.socks_request()
         self.client_stream.close()
         self.server_stream.close()
