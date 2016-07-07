@@ -16,6 +16,13 @@ logger = get_logger(__name__)
 class SocksLayer(ProxyLayer):
     SOCKS_VERSION = 0x05
 
+    SOCKS_AUTH_TYPE = {
+        "NO_AUTH": 0x0,
+        "GSSAPI": 0x1,
+        "USERNAME_PASSWD": 0x2,
+        "NO_SUPPORT_AUTH_METHOD": 0xFF
+    }
+
     SOCKS_REQ_COMMAND = {
         "CONNECT": 0x1,
         "BIND": 0x02,
@@ -59,15 +66,26 @@ class SocksLayer(ProxyLayer):
         src_stream = self.context.src_stream
         data = yield src_stream.read_bytes(2)
 
-        logger.debug("socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
+        logger.debug(
+            "socks greeting to {0}".format(src_stream.socket.getpeername()[0]))
+
         socks_version, socks_nmethod = struct.unpack('BB', data)
+
+        if socks_version != self.SOCKS_VERSION:
+            raise ProtocolError(
+                "not support socks version {0}".format(socks_version))
 
         yield src_stream.read_bytes(socks_nmethod)
 
-        if socks_version != self.SOCKS_VERSION:
-            raise ProtocolError("not support socks version {0}".format(socks_version))
+        if socks_nmethod < 1:
+            response = struct.pack(
+                'BB', self.SOCKS_VERSION,
+                self.SOCKS_AUTH_TYPE["NO_SUPPORT_AUTH_METHOD"])
+        else:
+            response = struct.pack(
+                'BB', self.SOCKS_VERSION,
+                self.SOCKS_AUTH_TYPE["NO_AUTH"])
 
-        response = struct.pack('BB', self.SOCKS_VERSION, 0)
         yield src_stream.write(response)
 
     @gen.coroutine
