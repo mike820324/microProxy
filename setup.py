@@ -56,15 +56,12 @@ setup(
         'viewer': [
             "colored==1.2.2",
             "urwid==1.3.1",
-            "gviewer==0.1.0"
+            "gviewer==1.0.0"
         ],
         'develop': [
             "mock==2.0.0",
             "coverage==4.0.3",
             "coveralls==1.1"
         ]
-    },
-    dependency_links=[
-        "https://github.com/chhsiao90/gviewer/archive/0.1.0.tar.gz#egg=gviewer-0.1.0"
-    ]
+    }
 )
