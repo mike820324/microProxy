@@ -26,6 +26,20 @@ class MicroProxyIOStream(IOStream):
         self._add_io_state(ioloop.IOLoop.READ)
         self._add_io_state(ioloop.IOLoop.WRITE)
 
+    def detach(self):
+        if (self._read_callback or self._read_future or
+                self._write_callback or self._write_future or
+                self._connect_callback or self._connect_future or
+                self._pending_callbacks or self._closed or
+                self._read_buffer or self._write_buffer):
+            raise ValueError("IOStream is not idle; cannot detach")
+        socket = self.socket
+        self.io_loop.remove_handler(socket)
+        self.socket = None
+
+        socket.setblocking(True)
+        return socket
+
     def start_tls(self, server_side, ssl_options, server_hostname=None):
         if (self._read_callback or self._read_future or
                 self._write_callback or self._write_future or

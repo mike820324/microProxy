@@ -31,7 +31,6 @@ class TransparentLayer(ProxyLayer):
     def process_and_return_context(self):
         host, port = self._get_dest_addr()
         dest_stream = yield self.create_dest_stream((host, port))
-        self.context.src_stream.pause()
         self.context.dest_stream = dest_stream
         self.context.host = host
         self.context.port = port
