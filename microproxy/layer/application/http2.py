@@ -1,4 +1,4 @@
-from tornado import concurrent, gen, httputil
+from tornado import concurrent, gen
 from h2.connection import H2Connection
 from h2.events import (
     ResponseReceived, RequestReceived, DataReceived, StreamEnded,
@@ -74,7 +74,7 @@ class Http2Layer(object):
         reqs = signal_request.send(self, request=stream.req)
         new_req = reqs[0][1] if len(reqs) else stream.req
         stream.req = new_req
-        return (new_req.headers, new_req.body)
+        return (new_req.headers.get_list(), new_req.body)
 
     def on_response_header(self, src_stream_id, headers):
         self.streams[src_stream_id].write_response_headers(headers)
@@ -89,7 +89,7 @@ class Http2Layer(object):
         resps = signal_response.send(self, response=stream.resp)
         new_resp = resps[0][1] if len(resps) else stream.resp
         stream.resp = new_resp
-        return (new_resp.headers, new_resp.body)
+        return (new_resp.headers.get_list(), new_resp.body)
 
     def on_finish(self, src_stream_id):
         signal_publish.send(
@@ -189,10 +189,7 @@ class Connection(H2Connection):
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
     def write_headers(self, stream_id, headers, stream_ended=False):
-        # NOTE: headers with key had prefix ":" that must before any other headers
-        # So used sorted function to let header could had the correct order
-        sorted_headers = sorted(headers.get_all(), key=lambda h: h[0])
-        self.send_headers(stream_id, sorted_headers, end_stream=stream_ended)
+        self.send_headers(stream_id, headers, end_stream=stream_ended)
         self.flush()
 
     def write_data(self, stream_id, body):
@@ -240,7 +237,7 @@ class Stream(object):
             version="HTTP/2",
             method=headers_dict[":method"],
             path=headers_dict[":path"],
-            headers=httputil.HTTPHeaders(self.req_headers),
+            headers=self.req_headers,
             body=b"".join(self.req_chunks))
 
     def write_response_headers(self, headers):
@@ -254,5 +251,5 @@ class Stream(object):
         self.resp = http.HttpResponse(
             version="HTTP/2",
             code=headers_dict[":status"],
-            headers=httputil.HTTPHeaders(self.resp_headers),
+            headers=self.resp_headers,
             body=b"".join(self.resp_chunks))

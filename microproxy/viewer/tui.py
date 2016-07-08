@@ -38,7 +38,8 @@ class Tui(gviewer.BaseDisplayer):
         return path if len(path) < self.SUMMARY_MAX_LENGTH else path[:self.SUMMARY_MAX_LENGTH - 1] + "..."
 
     def _safe_get_host(self, request):
-        return "" if "Host" not in request["headers"] else request["headers"]["Host"]
+        headers_dict = dict(request["headers"])
+        return "" if "Host" not in headers_dict else headers_dict["Host"]
 
     def to_summary(self, message):
         return [
@@ -69,7 +70,7 @@ class HttpDetailDisplayer(gviewer.DetailDisplayer):
              gviewer.DetailProp("version", request["version"])]))
         groups.append(gviewer.DetailGroup(
             "Request Header",
-            [gviewer.DetailProp(k, v) for k, v in request["headers"].iteritems()]))
+            [gviewer.DetailProp(k, v) for k, v in request["headers"]]))
 
         response = message["response"]
         groups.append(gviewer.DetailGroup(
@@ -79,7 +80,7 @@ class HttpDetailDisplayer(gviewer.DetailDisplayer):
              gviewer.DetailProp("version", response["version"])]))
         groups.append(gviewer.DetailGroup(
             "Response Header",
-            [gviewer.DetailProp(k, v) for k, v in response["headers"].iteritems()]))
+            [gviewer.DetailProp(k, v) for k, v in response["headers"]]))
 
         return groups
 

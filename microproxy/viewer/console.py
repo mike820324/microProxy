@@ -65,10 +65,11 @@ class StatusText(TextList):
 
     def __init__(self, status_code, method, host, path):
         status_fg = self.FG_COLOR_OK if status_code < 400 else self.FG_COLOR_NOT_OK
-        super(StatusText, self).__init__([ColorText(status_code, fg_color=status_fg, attrs=self.ATTRS),
-                                          method,
-                                          host + path],
-                                         delimiter=" ")
+        super(StatusText, self).__init__(
+            [ColorText(status_code, fg_color=status_fg, attrs=self.ATTRS),
+             method,
+             host + path],
+            delimiter=" ")
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -84,8 +85,9 @@ class Header(TextList):
     BG_COLOR = "blue"
 
     def __init__(self, headers):
-        super(Header, self).__init__(map(lambda k: ColorText("{0}: {1}".format(k, headers[k]),
-                                                             bg_color=self.BG_COLOR), headers))
+        super(Header, self).__init__(
+            map(lambda (k, v): ColorText("{0}: {1}".format(k, v),
+                bg_color=self.BG_COLOR), headers))
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -103,8 +105,9 @@ class Request(TextList):
     ATTRS = ["bold"]
 
     def __init__(self, headers):
-        super(Request, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
-                                       Header(headers)])
+        super(Request, self).__init__(
+            [ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
+             Header(headers)])
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -122,8 +125,9 @@ class Response(TextList):
     ATTRS = ["bold"]
 
     def __init__(self, headers):
-        super(Response, self).__init__([ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
-                                        Header(headers)])
+        super(Response, self).__init__(
+            [ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
+             Header(headers)])
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -136,7 +140,8 @@ class Response(TextList):
 
 
 def construct_status_summary(request, response):
-    host = request["headers"]["Host"]
+    # TODO: need update here when we implement new context system
+    host = "<host unimplement>"
     path = request["path"]
     status_code = response["code"]
     method = request["method"]
