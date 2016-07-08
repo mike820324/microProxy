@@ -8,7 +8,7 @@ from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import Interceptor
-from microproxy.exception import DestStreamClosedError, SrcStreamClosedError
+from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.cert import CertStore
 
 logger = get_logger(__name__)
@@ -33,6 +33,9 @@ class LayerManager(object):
                 current_layer = self.next_layer(current_layer, current_context)
             except gen.TimeoutError:
                 src_stream.close()
+                break
+            except DestNotConnectedError:
+                logger.debug("destination not conected")
                 break
             except DestStreamClosedError:
                 logger.error("destination stream closed unexceptedly")
