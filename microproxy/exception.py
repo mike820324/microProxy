@@ -9,5 +9,9 @@ class SrcStreamClosedError(iostream.StreamClosedError):
     pass
 
 
+class DestNotConnectedError(iostream.StreamClosedError):
+    pass
+
+
 class DestStreamClosedError(iostream.StreamClosedError):
     pass

@@ -1,6 +1,6 @@
 import struct
 import ipaddress
-import socket
+import errno
 
 from tornado import gen
 from tornado import iostream
@@ -8,7 +8,7 @@ from tornado import iostream
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import ProtocolError, SrcStreamClosedError, DestStreamClosedError
+from microproxy.exception import ProtocolError, SrcStreamClosedError, DestNotConnectedError
 
 logger = get_logger(__name__)
 
@@ -129,17 +129,9 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def socks_response_with_dest_stream_creation(self, host, port, addr_type):
         src_stream = self.context.src_stream
+
         try:
             dest_stream = yield self.create_dest_stream((host, port))
-
-        except iostream.StreamClosedError as e:
-            logger.debug("connect to {0}:{1} timeout".format(host, port))
-            src_stream.write(struct.pack("!BBx",
-                                         self.SOCKS_VERSION,
-                                         self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
-            raise DestStreamClosedError(e)
-
-        try:
             yield src_stream.write(struct.pack("!BBx",
                                                self.SOCKS_VERSION,
                                                self.SOCKS_RESP_STATUS["SUCCESS"]))
@@ -161,5 +153,30 @@ class SocksLayer(ProxyLayer):
             raise gen.Return(dest_stream)
 
         except iostream.StreamClosedError as e:
-            dest_stream.close()
-            raise SrcStreamClosedError(e)
+            if e.real_error:
+                err_num = e.real_error[0]
+                logger.debug("connect to {0}:{1} with error code {2}".format(
+                    host, port, errno.errorcode[err_num]))
+
+                # NOTE: if we submit in ipv6 address,
+                # the error code is ENOEXEC.
+                if err_num == errno.ENOEXEC:
+                    yield src_stream.write(struct.pack("!BBx",
+                                           self.SOCKS_VERSION,
+                                           self.SOCKS_RESP_STATUS["ADDRESS_TYPE_NOT_SUPPORTED"]))
+
+                elif err_num == errno.ETIMEDOUT:
+                    yield src_stream.write(struct.pack("!BBx",
+                                           self.SOCKS_VERSION,
+                                           self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
+
+                else:
+                    logger.error("unhandle error code {0} received".format(errno.errorcode[err_num]))
+                    yield src_stream.write(struct.pack("!BBx",
+                                           self.SOCKS_VERSION,
+                                           self.SOCKS_RESP_STATUS["GENRAL_FAILURE"]))
+                raise DestNotConnectedError(e)
+            else:
+                # NOTE: if real_error is None, it imply the source stream is closed.
+                dest_stream.close()
+                raise SrcStreamClosedError(e)
