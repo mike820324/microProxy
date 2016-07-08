@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 class Http2Layer(object):
     '''
-    ForwardLayer: passing all the src data to destination. Will not intercept anything
+    Http2Layer: Responsible for handling the http2 request and response.
     '''
     def __init__(self, context):
         super(Http2Layer, self).__init__()
@@ -55,13 +55,17 @@ class Http2Layer(object):
     def get_target_conn(self, from_conn):
         return self.dest_conn if from_conn is self.src_conn else self.src_conn
 
-    def on_request_header(self, src_stream_id, headers):
-        stream = Stream(self.context)
+    def on_request_header(self, src_stream_id, headers, stream_ended):
+        stream = Stream(stream_ended)
         stream.write_request_headers(headers)
         self.streams[src_stream_id] = stream
 
     def on_request_body(self, src_stream_id, data):
         self.streams[src_stream_id].write_request_body(data)
+
+    def is_stream_ended(self, src_stream_id):
+        stream = self.streams[src_stream_id]
+        return stream.stream_ended
 
     def get_request(self, src_stream_id):
         stream = self.streams[src_stream_id]
@@ -123,7 +127,7 @@ class Connection(H2Connection):
             if isinstance(event, ResponseReceived):
                 self.handle_response(event.headers, event.stream_id)
             elif isinstance(event, RequestReceived):
-                self.handle_request(event.headers, event.stream_id)
+                self.handle_request(event.headers, event.stream_ended, event.stream_id)
             elif isinstance(event, DataReceived):
                 self.handle_data(event.data, event.stream_id, event.flow_controlled_length)
             elif isinstance(event, StreamEnded):
@@ -135,8 +139,8 @@ class Connection(H2Connection):
             else:
                 logger.debug("not handled event: {0}".format(event))
 
-    def handle_request(self, headers, stream_id):
-        self.http2_layer.on_request_header(stream_id, headers)
+    def handle_request(self, headers, stream_ended, stream_id):
+        self.http2_layer.on_request_header(stream_id, headers, stream_ended)
 
     def handle_response(self, headers, stream_id):
         self.http2_layer.on_response_header(self.to_stream_ids[stream_id], headers)
@@ -165,27 +169,33 @@ class Connection(H2Connection):
             write_conn.to_stream_ids[dest_stream_id] = stream_id
 
             headers, body = self.http2_layer.get_request(stream_id)
-            write_conn.write_headers(dest_stream_id, headers)
-            write_conn.write(dest_stream_id, body)
+            if self.http2_layer.is_stream_ended(stream_id):
+                write_conn.write_headers(
+                    dest_stream_id, headers, stream_ended=True)
+            else:
+                write_conn.write_headers(
+                    dest_stream_id, headers, stream_ended=False)
+                write_conn.write_data(dest_stream_id, body)
             logger.debug("request {0}->{1}".format(stream_id, dest_stream_id))
         else:
             src_stream_id = self.to_stream_ids[stream_id]
 
             headers, body = self.http2_layer.get_response(src_stream_id)
-            write_conn.write_headers(src_stream_id, headers)
-            write_conn.write(src_stream_id, body)
+            write_conn.write_headers(
+                src_stream_id, headers, stream_ended=False)
+            write_conn.write_data(src_stream_id, body)
 
             self.http2_layer.on_finish(src_stream_id)
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
-    def write_headers(self, stream_id, headers):
-        # Note: headers with key had prefix ":" that must before any other headers
+    def write_headers(self, stream_id, headers, stream_ended=False):
+        # NOTE: headers with key had prefix ":" that must before any other headers
         # So used sorted function to let header could had the correct order
         sorted_headers = sorted(headers.get_all(), key=lambda h: h[0])
-        self.send_headers(stream_id, sorted_headers)
+        self.send_headers(stream_id, sorted_headers, end_stream=stream_ended)
         self.flush()
 
-    def write(self, stream_id, body):
+    def write_data(self, stream_id, body):
         chunks = [body] if isinstance(body, str) else body
         position = 0
         for chunk in chunks:
@@ -210,9 +220,9 @@ class Connection(H2Connection):
 
 
 class Stream(object):
-    def __init__(self, context):
+    def __init__(self, stream_ended):
         super(Stream, self).__init__()
-        self.context = context
+        self.stream_ended = stream_ended
         self.req_headers = None
         self.req_chunks = []
         self.resp_headers = None
