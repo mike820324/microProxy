@@ -70,6 +70,7 @@ class LayerManager(object):
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
+                context.scheme = "http"
                 return Http1Layer(context)
             elif context.port in https_ports:
                 return TlsLayer(context, self.cert_store)
@@ -77,7 +78,7 @@ class LayerManager(object):
                 return ForwardLayer(context)
 
         if isinstance(current_layer, TlsLayer):
-            if context.scheme == "http" or context.scheme == "https":
+            if context.scheme == "https":
                 return Http1Layer(context)
             elif context.scheme == "h2":
                 return Http2Layer(context)
