@@ -1,4 +1,7 @@
-class Context(object):
+class LayerContext(object):
+    """
+    LayerContext: Context used to communicate with different layer.
+    """
     def __init__(self,
                  src_stream=None,
                  dest_stream=None,

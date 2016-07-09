@@ -8,7 +8,7 @@ from blinker import signal
 
 from microproxy.utils import get_logger
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
-from microproxy import http
+from microproxy.context import HttpRequest, HttpResponse
 from microproxy.interceptor import signal_request, signal_response, signal_publish
 
 logger = get_logger(__name__)
@@ -61,10 +61,10 @@ class HttpReqReader(httputil.HTTPMessageDelegate):
         log_debug_with_http_info(
             self.context, "source request headers recieved")
         headers_dict = {k: v for k, v in headers.get_all()}
-        self.req = http.HttpRequest(version=start_line.version,
-                                    method=start_line.method,
-                                    path=start_line.path,
-                                    headers=headers_dict)
+        self.req = HttpRequest(version=start_line.version,
+                               method=start_line.method,
+                               path=start_line.path,
+                               headers=headers_dict)
 
     def data_received(self, chunk):
         log_debug_with_http_info(self.context, "source request body recieved")
@@ -145,9 +145,10 @@ class HttpForwarder(object):
             logger.debug("No Interceptor is listening")
 
         self.resp = new_response
-        signal_publish.send(self,
-                            request=self.req,
-                            response=self.resp)
+
+        signal_publish.send(
+            self, layer_context=self.context,
+            request=self.req, response=self.resp)
 
         headers = self.resp.headers.get_dict()
         # NOTE: restriction on using tornado http connection.
@@ -185,10 +186,10 @@ class HttpRespReader(httputil.HTTPMessageDelegate):
         log_debug_with_http_info(
             self.context, "destination response headers recieved")
         headers_dict = {k: v for k, v in headers.get_all()}
-        self.resp = http.HttpResponse(code=start_line.code,
-                                      reason=start_line.reason,
-                                      version=start_line.version,
-                                      headers=headers_dict)
+        self.resp = HttpResponse(code=start_line.code,
+                                 reason=start_line.reason,
+                                 version=start_line.version,
+                                 headers=headers_dict)
 
     def data_received(self, chunk):
         log_debug_with_http_info(
