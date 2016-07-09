@@ -2,6 +2,7 @@ from copy import copy
 from signal import signal_request, signal_publish, signal_response
 from msg_publisher import MsgPublisher
 from plugin_manager import PluginManager
+from microproxy.context import ViewerContext
 
 
 class Interceptor(object):
@@ -25,5 +26,13 @@ class Interceptor(object):
         response_msg = self.plugin_manager.exec_response(response_msg)
         return response_msg
 
-    def publish(self, sender, request, response):
-        self.msg_publisher.publish(request, response)
+    def publish(self, sender, layer_context, request, response):
+        viewer_context = ViewerContext(
+            scheme=layer_context.scheme,
+            host=layer_context.host,
+            port=layer_context.port,
+            path=request.path,
+            request=request,
+            response=response)
+
+        self.msg_publisher.publish(viewer_context)
