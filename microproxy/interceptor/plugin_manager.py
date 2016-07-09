@@ -78,32 +78,32 @@ class PluginManager(object):
             plugin = Plugin(plugin_path)
             self.plugins.append(plugin)
 
-    def exec_request(self, request):
+    def exec_request(self, plugin_context):
         if len(self.plugins) == 0:
-            return request
+            return plugin_context
 
-        current_request = copy(request)
+        current_context = copy(plugin_context)
         for plugin in self.plugins:
             try:
-                new_request = plugin.on_request(current_request)
-                current_request = copy(new_request)
+                new_context = plugin.on_request(current_context)
+                current_context = copy(new_context)
             except AttributeError:
                 logger.debug(
                     "Plugin {0} does not have on_request".format(
                         plugin.namespace["__file__"].split("/")[-1]))
-        return current_request
+        return current_context
 
-    def exec_response(self, response):
+    def exec_response(self, plugin_context):
         if len(self.plugins) == 0:
-            return response
+            return plugin_context
 
-        current_response = copy(response)
+        current_context = copy(plugin_context)
         for plugin in self.plugins:
             try:
-                new_response = plugin.on_response(current_response)
-                current_response = copy(new_response)
+                new_context = plugin.on_response(current_context)
+                current_context = copy(new_context)
             except AttributeError:
                 logger.debug(
                     "Plugin {0} does not have on_response".format(
                         plugin.namespace["__file__"].split("/")[-1]))
-        return current_response
+        return current_context

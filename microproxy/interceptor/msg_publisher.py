@@ -20,9 +20,5 @@ class MsgPublisher(object):
         logger.info("MsgPublisher is listening at {0}".format(viewer_channel))
         return socket
 
-    def publish(self, request, response):
-        message = {
-            "request": request.serialize(),
-            "response": response.serialize()
-        }
-        self.zmq_stream.send_json(message)
+    def publish(self, viewer_context):
+        self.zmq_stream.send_json(viewer_context.serialize())

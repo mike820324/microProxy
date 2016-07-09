@@ -37,17 +37,14 @@ class Tui(gviewer.BaseDisplayer):
     def _fold_path(self, path):
         return path if len(path) < self.SUMMARY_MAX_LENGTH else path[:self.SUMMARY_MAX_LENGTH - 1] + "..."
 
-    def _safe_get_host(self, request):
-        headers_dict = dict(request["headers"])
-        return "" if "Host" not in headers_dict else headers_dict["Host"]
-
     def to_summary(self, message):
         return [
             self._code_text_markup(message["response"]["code"]),
-            " {0:5} {1}{2}".format(
+            " {0:5} {1}://{2}{3}".format(
                 message["request"]["method"],
-                self._safe_get_host(message["request"]),
-                self._fold_path(message["request"]["path"]))]
+                message["scheme"],
+                message["host"],
+                self._fold_path(message["path"]))]
 
     def get_detail_displayers(self):
         return [("Detail", HttpDetailDisplayer())]

@@ -1,7 +1,7 @@
-from copy import copy
 from signal import signal_request, signal_publish, signal_response
 from msg_publisher import MsgPublisher
 from plugin_manager import PluginManager
+from microproxy.context import ViewerContext, PluginContext
 
 
 class Interceptor(object):
@@ -15,15 +15,37 @@ class Interceptor(object):
         signal_response.connect(self.response)
         signal_publish.connect(self.publish)
 
-    def request(self, sender, request):
-        request_msg = copy(request)
-        request_msg = self.plugin_manager.exec_request(request_msg)
-        return request_msg
+    def request(self, sender, layer_context, request):
+        plugin_context = PluginContext(
+            scheme=layer_context.scheme,
+            host=layer_context.host,
+            port=layer_context.port,
+            path=request.path,
+            request=request,
+            response=None)
 
-    def response(self, sender, response):
-        response_msg = copy(response)
-        response_msg = self.plugin_manager.exec_response(response_msg)
-        return response_msg
+        new_plugin_context = self.plugin_manager.exec_request(plugin_context)
+        return new_plugin_context
 
-    def publish(self, sender, request, response):
-        self.msg_publisher.publish(request, response)
+    def response(self, sender, layer_context, request, response):
+        plugin_context = PluginContext(
+            scheme=layer_context.scheme,
+            host=layer_context.host,
+            port=layer_context.port,
+            path=request.path,
+            request=request,
+            response=response)
+
+        new_plugin_context = self.plugin_manager.exec_response(plugin_context)
+        return new_plugin_context
+
+    def publish(self, sender, layer_context, request, response):
+        viewer_context = ViewerContext(
+            scheme=layer_context.scheme,
+            host=layer_context.host,
+            port=layer_context.port,
+            path=request.path,
+            request=request,
+            response=response)
+
+        self.msg_publisher.publish(viewer_context)

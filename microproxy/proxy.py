@@ -2,7 +2,7 @@ from tornado import tcpserver
 from tornado import gen
 from tornado import iostream
 
-from microproxy.context import Context
+from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer, TransparentLayer
 from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 from microproxy.iostream import MicroProxyIOStream
@@ -21,8 +21,9 @@ class LayerManager(object):
 
     @gen.coroutine
     def run_layers(self, src_stream):
-        current_context = Context(src_stream=src_stream,
-                                  config=self.config)
+        current_context = LayerContext(
+            src_stream=src_stream, config=self.config)
+
         current_layer = self.get_first_layer(current_context)
 
         while current_layer:
