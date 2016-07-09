@@ -19,17 +19,22 @@ class Http2Layer(object):
     def __init__(self, context):
         super(Http2Layer, self).__init__()
         self.context = context
-        self.src_conn = Connection(self, self.context.src_stream, client_side=False)
-        self.dest_conn = Connection(self, self.context.dest_stream, client_side=True)
+        self.src_conn = Connection(
+            self, self.context.src_stream, client_side=False)
+        self.dest_conn = Connection(
+            self, self.context.dest_stream, client_side=True)
         self.streams = dict()
         self._future = concurrent.Future()
 
     @gen.coroutine
     def process_and_return_context(self):
         yield self._init_h2_connection()
-        self.context.src_stream.read_until_close(streaming_callback=self.src_conn.on_data_received)
+        self.context.src_stream.read_until_close(
+            streaming_callback=self.src_conn.on_data_received)
         self.context.src_stream.set_close_callback(self.on_src_close)
-        self.context.dest_stream.read_until_close(streaming_callback=self.dest_conn.on_data_received)
+
+        self.context.dest_stream.read_until_close(
+            streaming_callback=self.dest_conn.on_data_received)
         self.context.dest_stream.set_close_callback(self.on_dest_close)
         result = yield self._future
         raise gen.Return(result)
@@ -72,8 +77,10 @@ class Http2Layer(object):
         stream = self.streams[src_stream_id]
         stream.request_done()
 
-        reqs = signal_request.send(self, request=stream.req)
-        new_req = reqs[0][1] if len(reqs) else stream.req
+        plugin_response = signal_request.send(
+            self, layer_context=self.context, request=stream.req)
+
+        new_req = plugin_response[0][1].request if len(plugin_response) else stream.req
         stream.req = new_req
         return (new_req.headers.get_list(), new_req.body)
 
@@ -87,8 +94,11 @@ class Http2Layer(object):
         stream = self.streams[src_stream_id]
         stream.response_done()
 
-        resps = signal_response.send(self, response=stream.resp)
-        new_resp = resps[0][1] if len(resps) else stream.resp
+        plugin_response = signal_response.send(
+            self, layer_context=self.context,
+            request=stream.req, response=stream.resp)
+
+        new_resp = plugin_response[0][1].response if len(plugin_response) else stream.resp
         stream.resp = new_resp
         return (new_resp.headers.get_list(), new_resp.body)
 
