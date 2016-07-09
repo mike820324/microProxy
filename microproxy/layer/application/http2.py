@@ -2,8 +2,10 @@ from tornado import concurrent, gen
 from h2.connection import H2Connection
 from h2.events import (
     ResponseReceived, RequestReceived, DataReceived, StreamEnded,
-    StreamReset, RemoteSettingsChanged
+    StreamReset, RemoteSettingsChanged, WindowUpdated,
+    PushedStreamReceived, PriorityUpdated
 )
+from h2.exceptions import ProtocolError, NoSuchStreamError
 
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.interceptor import signal_request, signal_response, signal_publish
@@ -61,17 +63,14 @@ class Http2Layer(object):
     def get_target_conn(self, from_conn):
         return self.dest_conn if from_conn is self.src_conn else self.src_conn
 
-    def on_request_header(self, src_stream_id, headers, stream_ended):
-        stream = Stream(stream_ended)
+    def on_request_header(self, src_stream_id, headers, priority_updated):
+        stream = Stream()
         stream.write_request_headers(headers)
+        self.priority_updated = priority_updated
         self.streams[src_stream_id] = stream
 
     def on_request_body(self, src_stream_id, data):
         self.streams[src_stream_id].write_request_body(data)
-
-    def is_stream_ended(self, src_stream_id):
-        stream = self.streams[src_stream_id]
-        return stream.stream_ended
 
     def get_request(self, src_stream_id):
         stream = self.streams[src_stream_id]
@@ -82,10 +81,15 @@ class Http2Layer(object):
 
         new_req = plugin_response[0][1].request if len(plugin_response) else stream.req
         stream.req = new_req
-        return (new_req.headers.get_list(), new_req.body)
+        return (new_req.headers.get_list(), new_req.body, stream.priority_updated)
 
     def on_response_header(self, src_stream_id, headers):
         self.streams[src_stream_id].write_response_headers(headers)
+
+    def on_pushed_header(self, src_stream_id, headers):
+        self.on_request_header(src_stream_id, headers, None)
+        stream = self.streams[src_stream_id]
+        stream.request_done()
 
     def on_response_body(self, src_stream_id, data):
         self.streams[src_stream_id].write_response_body(data)
@@ -120,7 +124,6 @@ class Connection(H2Connection):
 
     def flush(self):
         data = self.data_to_send()
-        logger.debug("data send to {0} with length:  {1}".format(self._type, len(data)))
         return self.stream.write(data)
 
     def on_data_received(self, data):
@@ -139,7 +142,7 @@ class Connection(H2Connection):
             if isinstance(event, ResponseReceived):
                 self.handle_response(event.headers, event.stream_id)
             elif isinstance(event, RequestReceived):
-                self.handle_request(event.headers, event.stream_ended, event.stream_id)
+                self.handle_request(event)
             elif isinstance(event, DataReceived):
                 self.handle_data(event.data, event.stream_id, event.flow_controlled_length)
             elif isinstance(event, StreamEnded):
@@ -148,11 +151,18 @@ class Connection(H2Connection):
                 self.handle_reset(event.stream_id, event.error_code)
             elif isinstance(event, RemoteSettingsChanged):
                 self.handle_update_settings(event)
+            elif isinstance(event, WindowUpdated):
+                self.handle_window_updates(event)
+            elif isinstance(event, PushedStreamReceived):
+                self.handle_pushed_stream(event)
+            elif isinstance(event, PriorityUpdated):
+                self.handle_priority_updates(event)
             else:
                 logger.debug("not handled event: {0}".format(event))
 
-    def handle_request(self, headers, stream_ended, stream_id):
-        self.http2_layer.on_request_header(stream_id, headers, stream_ended)
+    def handle_request(self, event):
+        self.http2_layer.on_request_header(
+            event.stream_id, event.headers, event.priority_updated)
 
     def handle_response(self, headers, stream_id):
         self.http2_layer.on_response_header(self.to_stream_ids[stream_id], headers)
@@ -172,6 +182,10 @@ class Connection(H2Connection):
         new_settings = {id: cs.new_value for (id, cs) in event.changed_settings.iteritems()}
         write_conn.update_settings(new_settings)
         write_conn.flush()
+        logger.debug("settings update sent to {0}: {1}".format(
+            write_conn._type,
+            new_settings)
+        )
 
     def handle_end_stream(self, stream_id):
         write_conn = self.http2_layer.get_target_conn(self)
@@ -180,13 +194,15 @@ class Connection(H2Connection):
             self.to_stream_ids[stream_id] = dest_stream_id
             write_conn.to_stream_ids[dest_stream_id] = stream_id
 
-            headers, body = self.http2_layer.get_request(stream_id)
-            if self.http2_layer.is_stream_ended(stream_id):
-                write_conn.write_headers(
-                    dest_stream_id, headers, stream_ended=True)
-            else:
-                write_conn.write_headers(
-                    dest_stream_id, headers, stream_ended=False)
+            headers, body, priority_updated = self.http2_layer.get_request(stream_id)
+            has_body = len(body) > 0
+            write_conn.write_headers(
+                dest_stream_id, headers, stream_ended=not has_body,
+                priority_weight=priority_updated.priority_weight if priority_updated else None,
+                priority_exclusive=priority_updated.priority_exclusive if priority_updated else None,
+                priority_depends_on=self.safe_map_to_stream_id(priority_updated.depends_on) if priority_updated else None
+            )
+            if has_body:
                 write_conn.write_data(dest_stream_id, body)
             logger.debug("request {0}->{1}".format(stream_id, dest_stream_id))
         else:
@@ -195,27 +211,87 @@ class Connection(H2Connection):
             headers, body = self.http2_layer.get_response(src_stream_id)
             write_conn.write_headers(
                 src_stream_id, headers, stream_ended=False)
-            write_conn.write_data(src_stream_id, body)
+            write_conn.write_data(src_stream_id, body, stream_ended=True)
 
             self.http2_layer.on_finish(src_stream_id)
             logger.debug("response {0}->{1}".format(stream_id, src_stream_id))
 
-    def write_headers(self, stream_id, headers, stream_ended=False):
-        self.send_headers(stream_id, headers, end_stream=stream_ended)
-        self.flush()
+    def safe_map_to_stream_id(self, stream_id):
+        if stream_id in self.to_stream_ids.keys():
+            return self.to_stream_ids[stream_id]
+        return None
 
-    def write_data(self, stream_id, body):
-        chunks = [body] if isinstance(body, str) else body
-        position = 0
-        for chunk in chunks:
-            while position < len(chunk):
-                max_outbound_frame_size = self.max_outbound_frame_size
-                frame_chunk = chunk[position:position + max_outbound_frame_size]
-                self.send_data(stream_id, frame_chunk)
+    def handle_window_updates(self, event):
+        to_stream_id = self.safe_map_to_stream_id(event.stream_id) or None
+        write_conn = self.http2_layer.get_target_conn(self)
+        write_conn.increment_flow_control_window(event.delta, to_stream_id)
+        write_conn.flush()
+        logger.debug("window update sent to {0}: {1}".format(
+            write_conn._type,
+            dict(delta=event.delta,
+                 stream_id=to_stream_id))
+        )
+
+    def handle_pushed_stream(self, event):
+        write_conn = self.http2_layer.get_target_conn(self)
+
+        self.to_stream_ids[event.pushed_stream_id] = event.pushed_stream_id
+        write_conn.to_stream_ids[event.pushed_stream_id] = event.pushed_stream_id
+
+        to_parent_stream_id = self.to_stream_ids[event.parent_stream_id]
+
+        self.http2_layer.on_pushed_header(event.pushed_stream_id, event.headers)
+        write_conn.push_stream(
+            to_parent_stream_id,
+            event.pushed_stream_id,
+            event.headers)
+        write_conn.flush()
+
+        logger.debug("push {0} with parent {1}->{2}".format(
+            event.pushed_stream_id, event.parent_stream_id, to_parent_stream_id))
+
+    def handle_priority_updates(self, event):
+        write_conn = self.http2_layer.get_target_conn(self)
+        to_stream_id = self.safe_map_to_stream_id(event.stream_id)
+        to_depends_on_id = self.safe_map_to_stream_id(event.depends_on)
+
+        if to_stream_id and to_depends_on_id:
+            logger.debug("priority updated sent: {0}".format(
+                dict(stream_id=to_stream_id,
+                     priority_weight=event.weight,
+                     priority_depends_on=to_depends_on_id,
+                     priority_exclusive=event.exclusive))
+            )
+            write_conn.prioritize(
+                to_stream_id, event.weight,
+                to_depends_on_id, event.exclusive)
+            write_conn.flush()
+
+    def write_headers(self, stream_id, headers, stream_ended=False, **kwargs):
+        try:
+            self.send_headers(stream_id, headers, end_stream=stream_ended, **kwargs)
+            self.flush()
+        except ProtocolError:
+            logger.error("write headers failed on stream id: {0}".format(stream_id))
+
+    def write_data(self, stream_id, body, stream_ended=True):
+        try:
+            chunks = [body] if isinstance(body, str) else body
+            position = 0
+            for chunk in chunks:
+                while position < len(chunk):
+                    max_outbound_frame_size = self.max_outbound_frame_size
+                    frame_chunk = chunk[position:position + max_outbound_frame_size]
+                    self.send_data(stream_id, frame_chunk)
+                    self.flush()
+                    position += max_outbound_frame_size
+            if stream_ended:
+                self.end_stream(stream_id)
                 self.flush()
-                position += max_outbound_frame_size
-        self.end_stream(stream_id)
-        self.flush()
+        except NoSuchStreamError as e:
+            logger.error("stream id not found on {0} with {1}".format(
+                self._type, stream_id))
+            logger.exception(e)
 
     def handle_reset(self, stream_id, error_code):
         if error_code == 0x8:
@@ -229,13 +305,13 @@ class Connection(H2Connection):
 
 
 class Stream(object):
-    def __init__(self, stream_ended):
+    def __init__(self):
         super(Stream, self).__init__()
-        self.stream_ended = stream_ended
         self.req = None
         self.resp = None
         self.req_headers = None
         self.req_chunks = []
+        self.priority_updated = None
         self.resp_headers = None
         self.resp_chunks = []
 
