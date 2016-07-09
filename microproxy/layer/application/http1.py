@@ -102,17 +102,11 @@ class HttpForwarder(object):
     @gen.coroutine
     def req_done(self, sender):
         log_debug_with_http_info(self.context, "source request done")
-        requests = signal_request.send(self, request=sender.req)
-        if len(requests) > 1:
-            logger.error("More than one interceptor")
 
-        try:
-            _, new_request = requests[0]
-        except IndexError:
-            new_request = sender.req
-            logger.debug("No interceptor is listening")
+        plugin_response = signal_request.send(
+            self, layer_context=self.context, request=sender.req)
+        self.req = plugin_response[0][1].request if len(plugin_response) else sender.req
 
-        self.req = new_request
         status_line = httputil.RequestStartLine(self.req.method,
                                                 self.req.path,
                                                 self.req.version)
@@ -134,17 +128,11 @@ class HttpForwarder(object):
     @gen.coroutine
     def resp_done(self, sender):
         log_debug_with_http_info(self.context, "destination response done")
-        responses = signal_response.send(self, response=sender.resp)
 
-        if len(responses) > 1:
-            logger.error("More than one interceptor")
-        try:
-            _, new_response = responses[0]
-        except IndexError:
-            new_response = sender.resp
-            logger.debug("No Interceptor is listening")
+        plugin_response = signal_response.send(
+            self, layer_context=self.context, request=self.req, response=sender.resp)
 
-        self.resp = new_response
+        self.resp = plugin_response[0][1].response if len(plugin_response) else sender.resp
 
         signal_publish.send(
             self, layer_context=self.context,
