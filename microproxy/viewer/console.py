@@ -139,19 +139,19 @@ class Response(TextList):
         return not self.__eq__(other)
 
 
-def construct_status_summary(request, response):
+def construct_status_summary(message):
     # TODO: need update here when we implement new context system
-    host = "<host unimplement>"
-    path = request["path"]
-    status_code = response["code"]
-    method = request["method"]
+    host = message["host"]
+    path = message["path"]
+    status_code = message["response"]["code"]
+    method = message["request"]["method"]
     return StatusText(status_code, method, host, path)
 
 
 def construct_color_msg(message, verbose_level):
+    status = construct_status_summary(message)
     request = message["request"]
     response = message["response"]
-    status = construct_status_summary(request, response)
 
     if verbose_level == "status":
         return status

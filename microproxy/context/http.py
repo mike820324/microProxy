@@ -1,3 +1,4 @@
+import time
 
 
 class HttpRequest(object):
@@ -8,6 +9,7 @@ class HttpRequest(object):
                  headers=None,
                  body=b""):
         super(HttpRequest, self).__init__()
+        self.timestamp = int(time.time())
         self.version = version
         self.method = method
         self.path = path
@@ -16,6 +18,7 @@ class HttpRequest(object):
 
     def serialize(self):
         json = {}
+        json["timestamp"] = self.timestamp
         json["version"] = self.version
         json["method"] = self.method
         json["path"] = self.path
@@ -32,6 +35,7 @@ class HttpResponse(object):
                  headers=None,
                  body=b""):
         super(HttpResponse, self).__init__()
+        self.timestamp = int(time.time())
         self.code = code
         self.reason = reason
         self.version = version
@@ -40,6 +44,7 @@ class HttpResponse(object):
 
     def serialize(self):
         json = {}
+        json["timestamp"] = self.timestamp
         json["version"] = self.version
         json["code"] = self.code
         json["reason"] = self.reason
@@ -52,14 +57,17 @@ class HttpHeaders(object):
     def __init__(self, headers=None):
         headers = headers or []
         if isinstance(headers, dict):
-            self.headers = self._parse_dict(headers)
+            self.headers = headers.items()
         elif isinstance(headers, list):
             self.headers = headers
         else:
             raise ValueError("HttpHeaders not support with: " + str(type(headers)))
 
-    def _parse_dict(self, headers):
-        return [(k, v) for k, v in headers.iteritems()]
+    def __getitem__(self, key):
+        return [v for k, v in self.headers if k == key]
+
+    def __setitem__(self, key, value):
+        self.headers.append(key, value)
 
     def get_dict(self):
         return dict(self.headers)

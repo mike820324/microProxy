@@ -6,7 +6,7 @@ from tornado.locks import Event
 from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
-from microproxy.context import Context
+from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
 from microproxy.exception import ProtocolError
 
@@ -34,7 +34,7 @@ class SocksProxyHandlerTest(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = Context(src_stream=self.server_stream)
+        self.context = LayerContext(src_stream=self.server_stream)
         self.layer = SocksLayer(self.context)
 
         dest_listener, dest_port = bind_unused_port()

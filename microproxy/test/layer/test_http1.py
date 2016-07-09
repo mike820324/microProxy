@@ -5,7 +5,7 @@ from tornado.locks import Semaphore
 from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
-from microproxy.context import Context
+from microproxy.context import LayerContext
 from microproxy.layer import Http1Layer
 from microproxy.exception import SrcStreamClosedError
 
@@ -36,8 +36,8 @@ class Http1LayerTest(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = Context(src_stream=server_streams[0],
-                               dest_stream=client_streams[1])
+        self.context = LayerContext(src_stream=server_streams[0],
+                                    dest_stream=client_streams[1])
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
         self.http_layer = Http1Layer(self.context)
