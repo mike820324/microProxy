@@ -40,7 +40,7 @@ class Tui(gviewer.BaseDisplayer):
     def to_summary(self, message):
         return [
             self._code_text_markup(message["response"]["code"]),
-            " {0:5} {1}://{2}{3}".format(
+            " {0:7} {1}://{2}{3}".format(
                 message["request"]["method"],
                 message["scheme"],
                 message["host"],
