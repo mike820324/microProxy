@@ -47,39 +47,40 @@ class Tui(gviewer.BaseDisplayer):
                 self._fold_path(message["path"]))]
 
     def get_detail_displayers(self):
-        return [("Detail", HttpDetailDisplayer())]
+        return [("Request", self.request_view),
+                ("Response", self.response_view)]
+
+    def request_view(self, message):
+        groups = []
+        request = message["request"]
+        groups.append(gviewer.PropsDetailGroup(
+            "",
+            [gviewer.DetailProp("method", request["method"]),
+             gviewer.DetailProp("path", request["path"]),
+             gviewer.DetailProp("version", request["version"])]))
+        groups.append(gviewer.PropsDetailGroup(
+            "Request Header",
+            [gviewer.DetailProp(k, v) for k, v in request["headers"]]))
+        return groups
+
+    def response_view(self, message):
+        groups = []
+        response = message["response"]
+        groups.append(gviewer.PropsDetailGroup(
+            "",
+            [gviewer.DetailProp("code", str(response["code"])),
+             gviewer.DetailProp("reason", response["reason"]),
+             gviewer.DetailProp("version", response["version"])]))
+        groups.append(gviewer.PropsDetailGroup(
+            "Response Header",
+            [gviewer.DetailProp(k, v) for k, v in response["headers"]]))
+
+        return groups
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
         return json.loads(message[0])
-
-
-class HttpDetailDisplayer(gviewer.DetailDisplayer):
-    def to_detail_groups(self, message):
-        groups = []
-
-        request = message["request"]
-        groups.append(gviewer.DetailGroup(
-            "Request",
-            [gviewer.DetailProp("method", request["method"]),
-             gviewer.DetailProp("path", request["path"]),
-             gviewer.DetailProp("version", request["version"])]))
-        groups.append(gviewer.DetailGroup(
-            "Request Header",
-            [gviewer.DetailProp(k, v) for k, v in request["headers"]]))
-
-        response = message["response"]
-        groups.append(gviewer.DetailGroup(
-            "Response",
-            [gviewer.DetailProp("code", str(response["code"])),
-             gviewer.DetailProp("reason", response["reason"]),
-             gviewer.DetailProp("version", response["version"])]))
-        groups.append(gviewer.DetailGroup(
-            "Response Header",
-            [gviewer.DetailProp(k, v) for k, v in response["headers"]]))
-
-        return groups
 
 
 def create_msg_channel(channel):
