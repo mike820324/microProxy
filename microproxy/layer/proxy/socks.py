@@ -152,15 +152,25 @@ class SocksLayer(ProxyLayer):
             yield src_stream.write(struct.pack("!H", port))
             raise gen.Return(dest_stream)
 
+        except gen.TimeoutError as e:
+            logger.debug("connection timout {0}:{1}".format(
+                host, port))
+            yield src_stream.write(struct.pack("!BBx",
+                                   self.SOCKS_VERSION,
+                                   self.SOCKS_RESP_STATUS["NETWORK_UNREACHABLE"]))
+            raise DestNotConnectedError(e)
+
         except iostream.StreamClosedError as e:
             if e.real_error:
-                err_num = e.real_error[0]
+                err_num = abs(e.real_error[0])
                 logger.debug("connect to {0}:{1} with error code {2}".format(
                     host, port, errno.errorcode[err_num]))
 
-                # NOTE: if we submit in ipv6 address,
-                # the error code is ENOEXEC.
-                if err_num == errno.ENOEXEC:
+                # NOTE: if we submit an incorrect address type,
+                # the error code will be:
+                # - ENOEXEC in macos.
+                # - EBADF in linux.
+                if err_num == errno.ENOEXEC or err_num == errno.EBADF:
                     yield src_stream.write(struct.pack("!BBx",
                                            self.SOCKS_VERSION,
                                            self.SOCKS_RESP_STATUS["ADDRESS_TYPE_NOT_SUPPORTED"]))
