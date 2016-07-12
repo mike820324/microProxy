@@ -4,6 +4,7 @@ import urwid
 import json
 
 import gviewer
+from format import Formatter
 
 ioloop.install()
 
@@ -22,6 +23,7 @@ class Tui(gviewer.BaseDisplayer):
             self.data_store, self,
             palette=self.PALETTE,
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
+        self.formatter = Formatter()
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
@@ -61,6 +63,11 @@ class Tui(gviewer.BaseDisplayer):
         groups.append(gviewer.PropsDetailGroup(
             "Request Header",
             [gviewer.DetailProp(k, v) for k, v in request["headers"]]))
+
+        if request["body"]:
+            groups.append(gviewer.DetailGroup(
+                "Request Body",
+                [gviewer.DetailLine(s) for s in self.formatter.format_request(request)]))
         return groups
 
     def response_view(self, message):
@@ -75,12 +82,21 @@ class Tui(gviewer.BaseDisplayer):
             "Response Header",
             [gviewer.DetailProp(k, v) for k, v in response["headers"]]))
 
+        if response["body"]:
+            groups.append(gviewer.DetailGroup(
+                "Response Body",
+                [gviewer.DetailLine(s) for s in self.formatter.format_response(response)]))
         return groups
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
-        return json.loads(message[0])
+        message_dict = json.loads(message[0])
+        message_dict["request"]["body"] = \
+            message_dict["request"]["body"].decode("base64")
+        message_dict["response"]["body"] = \
+            message_dict["response"]["body"].decode("base64")
+        return message_dict
 
 
 def create_msg_channel(channel):
