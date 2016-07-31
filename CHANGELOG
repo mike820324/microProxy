@@ -1,3 +1,24 @@
+31 July 2016: MicroProxy 0.3.0
+
+This release focus on adding new features and code refactoring.
+
+* Add setup.py. 
+* Support HTTP2 Protocol. (credit chhsiao90)
+* SOCKS layer Improvement.
+  * better error handling.
+  * handle timeout.
+
+* MsgProtocol refactoring. 
+  * Reorganize context type for internal use.
+
+* TUI Improvement. (credit chhsiao90)
+  * Add body viewer for different content type.
+  * Using tab to switch between request and response.
+
+* Several bugs fix.
+  * TLS layer
+  * HTTP2 layer
+
 28 June 2016: MicroProxy 0.2.0
 
 This release focus on adding new features and code refactoring.
