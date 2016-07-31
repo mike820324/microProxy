@@ -36,8 +36,9 @@ For more in depth information about our architecture design, please refer to the
 
 ## System Requirement:
 **microProxy** can run in both **Linux** and **MacOS**.
+> Note: The transparent proxy mode can only work in Linux.
 
-The python version we are using is version 2.7.10.
+In order to let http2 protocol works properly, the openssl version **1.0.2.h** (alpn support)is required.
 
 ## Installation
 
