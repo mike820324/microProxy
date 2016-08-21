@@ -39,7 +39,7 @@ class Tui(gviewer.BaseDisplayer):
     def _fold_path(self, path):
         return path if len(path) < self.SUMMARY_MAX_LENGTH else path[:self.SUMMARY_MAX_LENGTH - 1] + "..."
 
-    def to_summary(self, message):
+    def summary(self, message):
         return [
             self._code_text_markup(message["response"]["code"]),
             " {0:7} {1}://{2}{3}".format(
@@ -48,45 +48,45 @@ class Tui(gviewer.BaseDisplayer):
                 message["host"],
                 self._fold_path(message["path"]))]
 
-    def get_detail_displayers(self):
+    def get_views(self):
         return [("Request", self.request_view),
                 ("Response", self.response_view)]
 
     def request_view(self, message):
         groups = []
         request = message["request"]
-        groups.append(gviewer.PropsDetailGroup(
+        groups.append(gviewer.PropsGroup(
             "",
-            [gviewer.DetailProp("method", request["method"]),
-             gviewer.DetailProp("path", request["path"]),
-             gviewer.DetailProp("version", request["version"])]))
-        groups.append(gviewer.PropsDetailGroup(
+            [gviewer.Prop("method", request["method"]),
+             gviewer.Prop("path", request["path"]),
+             gviewer.Prop("version", request["version"])]))
+        groups.append(gviewer.PropsGroup(
             "Request Header",
-            [gviewer.DetailProp(k, v) for k, v in request["headers"]]))
+            [gviewer.Prop(k, v) for k, v in request["headers"]]))
 
         if request["body"]:
-            groups.append(gviewer.DetailGroup(
+            groups.append(gviewer.Group(
                 "Request Body",
-                [gviewer.DetailLine(s) for s in self.formatter.format_request(request)]))
-        return groups
+                [gviewer.Line(s) for s in self.formatter.format_request(request)]))
+        return gviewer.Groups(groups)
 
     def response_view(self, message):
         groups = []
         response = message["response"]
-        groups.append(gviewer.PropsDetailGroup(
+        groups.append(gviewer.PropsGroup(
             "",
-            [gviewer.DetailProp("code", str(response["code"])),
-             gviewer.DetailProp("reason", response["reason"]),
-             gviewer.DetailProp("version", response["version"])]))
-        groups.append(gviewer.PropsDetailGroup(
+            [gviewer.Prop("code", str(response["code"])),
+             gviewer.Prop("reason", response["reason"]),
+             gviewer.Prop("version", response["version"])]))
+        groups.append(gviewer.PropsGroup(
             "Response Header",
-            [gviewer.DetailProp(k, v) for k, v in response["headers"]]))
+            [gviewer.Prop(k, v) for k, v in response["headers"]]))
 
         if response["body"]:
-            groups.append(gviewer.DetailGroup(
+            groups.append(gviewer.Group(
                 "Response Body",
-                [gviewer.DetailLine(s) for s in self.formatter.format_response(response)]))
-        return groups
+                [gviewer.Line(s) for s in self.formatter.format_response(response)]))
+        return gviewer.Groups(groups)
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
