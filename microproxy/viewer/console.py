@@ -204,14 +204,27 @@ def start(config):
     if "replay_file" in config and config["replay_file"]:
         replay(config)
 
+    dump_file = None
+    if "dump_file" in config and config["dump_file"]:
+        dump_file = config["dump_file"]
+
+    if dump_file:
+        fp = open(dump_file, "w")
+
     while True:
         try:
             data = socket.recv()
             message = json.loads(data)
+            if dump_file:
+                fp.write(data)
+                fp.write("\n")
+
             print construct_color_msg(message, verbose_level)
             print
         except KeyboardInterrupt:
             print ColorText("Closing Simple Viewer",
                             fg_color="blue",
                             attrs=["bold"])
+            if dump_file:
+                fp.close()
             exit(0)
