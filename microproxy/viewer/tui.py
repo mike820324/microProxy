@@ -68,7 +68,7 @@ class Tui(gviewer.BaseDisplayer):
             groups.append(gviewer.Group(
                 "Request Body",
                 [gviewer.Line(s) for s in self.formatter.format_request(request)]))
-        return gviewer.Groups(groups)
+        return gviewer.View(groups)
 
     def response_view(self, message):
         groups = []
@@ -86,7 +86,7 @@ class Tui(gviewer.BaseDisplayer):
             groups.append(gviewer.Group(
                 "Response Body",
                 [gviewer.Line(s) for s in self.formatter.format_response(response)]))
-        return gviewer.Groups(groups)
+        return gviewer.View(groups)
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
