@@ -15,15 +15,18 @@ class Tui(gviewer.BaseDisplayer):
         ("code ok", "light green", "black", "bold"),
         ("code error", "light red", "black", "bold")
     ]
+    DEFAULT_EXPORT_REPLAY_FILE = "replay.script"
 
-    def __init__(self, stream):
+    def __init__(self, stream, config):
         self.stream = stream
         self.data_store = self.create_data_store()
         self.viewer = gviewer.GViewer(
             self.data_store, self,
+            summary_actions=dict(e=self.export_replay),
             palette=self.PALETTE,
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
+        self.config = config
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
@@ -88,6 +91,17 @@ class Tui(gviewer.BaseDisplayer):
                 [gviewer.Line(s) for s in self.formatter.format_response(response)]))
         return gviewer.View(groups)
 
+    def export_replay(self, parent, message):
+        if "out_file" in self.config:
+            export_file = self.config["out_file"]
+        else:
+            export_file = self.DEFAULT_EXPORT_REPLAY_FILE
+
+        with open(export_file, "a") as f:
+            f.write(json.dumps(message))
+            f.write("\n")
+        parent.notify("replay script export to {0}".format(export_file))
+
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
@@ -105,5 +119,5 @@ def create_msg_channel(channel):
 def start(config):
     socket = create_msg_channel(config["viewer_channel"])
     stream = zmqstream.ZMQStream(socket)
-    tui = Tui(stream)
+    tui = Tui(stream, config)
     tui.start()
