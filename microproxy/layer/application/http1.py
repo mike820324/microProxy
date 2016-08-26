@@ -60,14 +60,8 @@ class Http1Layer(object):
         self.http_stream.write_request_body(data)
 
     def get_request(self):
-        self.http_stream.request_done()
-
-        plugin_response = signal_request.send(
-            self, layer_context=self.context, request=self.http_stream.req)
-
-        new_req = plugin_response[0][1].request if len(plugin_response) else self.http_stream.req
-        self.http_stream.req = new_req
-        return new_req
+        self.http_stream.request_done(self.context)
+        return self.http_stream.req
 
     def on_response_header(self, header):
         self.http_stream.write_response_header(header)
@@ -76,15 +70,8 @@ class Http1Layer(object):
         self.http_stream.write_response_body(data)
 
     def get_response(self):
-        self.http_stream.response_done()
-
-        plugin_response = signal_response.send(
-            self, layer_context=self.context,
-            request=self.http_stream.req, response=self.http_stream.resp)
-
-        new_resp = plugin_response[0][1].response if len(plugin_response) else self.http_stream.resp
-        self.http_stream.resp = new_resp
-        return new_resp
+        self.http_stream.response_done(self.context)
+        return self.http_stream.resp
 
     def on_finish(self):
         signal_publish.send(
@@ -188,17 +175,22 @@ class Stream(object):
     def write_request_body(self, data):
         self.req_chunks.append(bytes(data.data))
 
-    def request_done(self):
+    def request_done(self, layer_context):
         try:
             version = "HTTP/{0}".format(self.req_header.http_version)
         except:
             version = "HTTP/1.1"
-        self.req = HttpRequest(
+        req = HttpRequest(
             version=version,
             method=self.req_header.method,
             path=self.req_header.target,
             headers=self.req_header.headers,
             body=b"".join(self.req_chunks))
+
+        plugin_response = signal_request.send(
+            self, layer_context=layer_context, request=req)
+
+        self.req = plugin_response[0][1].request if len(plugin_response) else req
 
     def write_response_header(self, header):
         self.resp_header = header
@@ -206,13 +198,19 @@ class Stream(object):
     def write_response_body(self, data):
         self.resp_chunks.append(bytes(data.data))
 
-    def response_done(self):
+    def response_done(self, layer_context):
         try:
             version = "HTTP/{0}".format(self.req_header.http_version)
         except:
             version = "HTTP/1.1"
-        self.resp = HttpResponse(
+        resp = HttpResponse(
             version=version,
             code=self.resp_header.status_code,
             headers=self.resp_header.headers,
             body=b"".join(self.resp_chunks))
+
+        plugin_response = signal_response.send(
+            self, layer_context=layer_context,
+            request=self.req, response=resp)
+
+        self.resp = plugin_response[0][1].response if len(plugin_response) else resp
