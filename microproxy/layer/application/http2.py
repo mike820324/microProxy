@@ -74,14 +74,8 @@ class Http2Layer(object):
 
     def get_request(self, src_stream_id):
         stream = self.streams[src_stream_id]
-        stream.request_done()
-
-        plugin_response = signal_request.send(
-            self, layer_context=self.context, request=stream.req)
-
-        new_req = plugin_response[0][1].request if len(plugin_response) else stream.req
-        stream.req = new_req
-        return (new_req.headers.get_list(), new_req.body, stream.priority_updated)
+        stream.request_done(self.context)
+        return (stream.req.headers.get_list(), stream.req.body, stream.priority_updated)
 
     def on_response_header(self, src_stream_id, headers):
         self.streams[src_stream_id].write_response_headers(headers)
@@ -96,15 +90,8 @@ class Http2Layer(object):
 
     def get_response(self, src_stream_id):
         stream = self.streams[src_stream_id]
-        stream.response_done()
-
-        plugin_response = signal_response.send(
-            self, layer_context=self.context,
-            request=stream.req, response=stream.resp)
-
-        new_resp = plugin_response[0][1].response if len(plugin_response) else stream.resp
-        stream.resp = new_resp
-        return (new_resp.headers.get_list(), new_resp.body)
+        stream.response_done(self.context)
+        return (stream.resp.headers.get_list(), stream.resp.body)
 
     def on_finish(self, src_stream_id):
         stream = self.streams[src_stream_id]
@@ -321,14 +308,19 @@ class Stream(object):
     def write_request_body(self, data):
         self.req_chunks.append(data)
 
-    def request_done(self):
+    def request_done(self, layer_context):
         headers_dict = dict(self.req_headers)
-        self.req = HttpRequest(
+        req = HttpRequest(
             version="HTTP/2",
             method=headers_dict[":method"],
             path=headers_dict[":path"],
             headers=self.req_headers,
             body=b"".join(self.req_chunks))
+
+        plugin_response = signal_request.send(
+            self, layer_context=layer_context, request=req)
+
+        self.req = plugin_response[0][1].request if len(plugin_response) else req
 
     def write_response_headers(self, headers):
         self.resp_headers = headers
@@ -336,10 +328,16 @@ class Stream(object):
     def write_response_body(self, data):
         self.resp_chunks.append(data)
 
-    def response_done(self):
+    def response_done(self, layer_context):
         headers_dict = dict(self.resp_headers)
-        self.resp = HttpResponse(
+        resp = HttpResponse(
             version="HTTP/2",
             code=headers_dict[":status"],
             headers=self.resp_headers,
             body=b"".join(self.resp_chunks))
+
+        plugin_response = signal_response.send(
+            self, layer_context=layer_context,
+            request=self.req, response=resp)
+
+        self.resp = plugin_response[0][1].response if len(plugin_response) else resp
