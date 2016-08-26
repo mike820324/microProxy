@@ -6,4 +6,5 @@ watchdog==0.8.3
 pyOpenSSL==16.0.0
 service-identity==16.0.0
 h2==2.4.0
-h11==0.5.0
+
+-e git+https://github.com/chhsiao90/h11.git#egg=h11

@@ -205,6 +205,7 @@ class Stream(object):
             version = "HTTP/1.1"
         resp = HttpResponse(
             version=version,
+            reason=self.resp_header.reason,
             code=self.resp_header.status_code,
             headers=self.resp_header.headers,
             body=b"".join(self.resp_chunks))
