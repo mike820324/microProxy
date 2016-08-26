@@ -4,6 +4,7 @@ import h11
 from h11 import Connection as H11Connection
 from h11 import Request, InformationalResponse, Response, Data, EndOfMessage
 
+from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.interceptor import signal_request, signal_response, signal_publish
 from microproxy.utils import get_logger
@@ -34,12 +35,18 @@ class Http1Layer(object):
     def on_src_close(self):
         self.context.dest_stream.close()
         if self._future.running():
-            self._future.set_result(self.context)
+            if self.http_stream:  # contains running request
+                self._future.set_exception(SrcStreamClosedError())
+            else:
+                self._future.set_result(self.context)
 
     def on_dest_close(self):
         self.context.src_stream.close()
         if self._future.running():
-            self._future.set_result(self.context)
+            if self.http_stream:  # contains running request
+                self._future.set_exception(DestStreamClosedError())
+            else:
+                self._future.set_result(self.context)
 
     def get_target_conn(self, from_conn):
         return self.dest_conn if from_conn is self.src_conn else self.src_conn
