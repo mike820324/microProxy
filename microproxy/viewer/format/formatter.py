@@ -95,7 +95,7 @@ class Formatter(object):
 
     def format_request(self, request):
         headers_dict = dict(request["headers"])
-        body = request["body"]
+        body = request["body"].decode("base64")
 
         if self._is_gzip(headers_dict):
             body = decompress.ungzip(body)
@@ -106,7 +106,7 @@ class Formatter(object):
 
     def format_response(self, response):
         headers_dict = dict(response["headers"])
-        body = response["body"]
+        body = response["body"].decode("base64")
 
         if self._is_gzip(headers_dict):
             body = decompress.ungzip(body)
