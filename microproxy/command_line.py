@@ -2,6 +2,31 @@ from microproxy.config import parse_config, define_option, define_section
 
 
 def create_options():
+
+    config_field_info = {}
+
+    proxy_option_info = create_proxy_options()
+    define_section(config_field_info=config_field_info,
+                   section="proxy",
+                   option_info=proxy_option_info,
+                   help_str="Open microproxy service")
+
+    console_viewer_option_info = create_console_viewer_options()
+    define_section(config_field_info=config_field_info,
+                   section="console-viewer",
+                   option_info=console_viewer_option_info,
+                   help_str="Open console viewer")
+
+    tui_viewer_option_info = create_tui_viewer_options()
+    define_section(config_field_info=config_field_info,
+                   section="tui-viewer",
+                   option_info=tui_viewer_option_info,
+                   help_str="Open tui viewer")
+
+    return config_field_info
+
+
+def create_proxy_options():
     proxy_option_info = {}
     define_option(option_info=proxy_option_info,
                   option_name="host",
@@ -66,6 +91,22 @@ def create_options():
                   option_type="string",
                   cmd_flags="--key-file")
 
+    return proxy_option_info
+
+
+def create_tui_viewer_options():
+    tui_viewer_option_info = {}
+
+    define_option(option_info=tui_viewer_option_info,
+                  option_name="viewer_channel",
+                  help_str="Specify the viewer channel",
+                  option_type="string",
+                  cmd_flags="--viewer-channel")
+
+    return tui_viewer_option_info
+
+
+def create_console_viewer_options():
     console_viewer_option_info = {}
 
     define_option(option_info=console_viewer_option_info,
@@ -82,31 +123,7 @@ def create_options():
                   default="status",
                   choices=["status", "header", "body", "all"])
 
-    tui_viewer_option_info = {}
-
-    define_option(option_info=tui_viewer_option_info,
-                  option_name="viewer_channel",
-                  help_str="Specify the viewer channel",
-                  option_type="string",
-                  cmd_flags="--viewer-channel")
-
-    config_field_info = {}
-    define_section(config_field_info=config_field_info,
-                   section="proxy",
-                   option_info=proxy_option_info,
-                   help_str="Open microproxy service")
-
-    define_section(config_field_info=config_field_info,
-                   section="console-viewer",
-                   option_info=console_viewer_option_info,
-                   help_str="Open console viewer")
-
-    define_section(config_field_info=config_field_info,
-                   section="tui-viewer",
-                   option_info=tui_viewer_option_info,
-                   help_str="Open tui viewer")
-
-    return config_field_info
+    return console_viewer_option_info
 
 
 def main():
