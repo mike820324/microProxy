@@ -8,7 +8,7 @@ def on_request(plugin_context):
     try:
         headers = plugin_context.request.headers.get_dict()
         for key in headers:
-            if key != "accept-encoding":
+            if key.lower() != "accept-encoding":
                 continue
             headers[key] = "deflate"
 
