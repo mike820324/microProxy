@@ -11,7 +11,7 @@ class EventClient(object):
         super(EventClient, self).__init__()
         self.zmq_socket = zmq_socket or self._create_socket(config)
 
-    def _create_socket(self, config):
+    def _create_socket(self, config):  # pragma: no cover
         context = zmq.Context()
         socket = context.socket(zmq.PUSH)
         socket.connect(config["events_channel"])
