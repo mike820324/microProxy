@@ -10,6 +10,7 @@ from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import Interceptor
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.cert import CertStore
+from microproxy.event import EventManager
 
 logger = get_logger(__name__)
 
@@ -92,6 +93,8 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
+        self.layer_manager = LayerManager(config)
+        self.event_manager = EventManager(config, self)
 
     def _handle_connection(self, connection, address):
         try:
