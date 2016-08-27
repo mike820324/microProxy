@@ -114,7 +114,6 @@ class Request(TextList):
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
         content.append(Header(request["headers"]))
         if show_body and request["body"]:
-            request["body"] = request["body"].decode("base64")
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
             content = content + _formatter.format_request(request)
         super(Request, self).__init__(content)
@@ -140,7 +139,6 @@ class Response(TextList):
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
         content.append(Header(response["headers"]))
         if show_body and response["body"]:
-            response["body"] = response["body"].decode("base64")
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
             content = content + _formatter.format_request(response)
         super(Response, self).__init__(content)
