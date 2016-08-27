@@ -63,10 +63,8 @@ class LayerManager(object):
             raise ValueError("Unsupport proxy mode: {0}".format(mode))
 
     def next_layer(self, current_layer, context):
-        http_ports = [80]
-        http_ports.extend(context.config["http_port"])
-        https_ports = [443]
-        https_ports.extend(context.config["https_port"])
+        http_ports = [80] + context.config["http_port"]
+        https_ports = [443] + context.config["https_port"]
 
         if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
             if context.port in http_ports:
@@ -90,8 +88,6 @@ class ProxyServer(tcpserver.TCPServer):
     def __init__(self, config, proxy_server_handler=None):
         super(ProxyServer, self).__init__()
         self.config = config
-        self.host = config["host"]
-        self.port = config["port"]
         self.interceptor = Interceptor(config=config)
         self.layer_manager = LayerManager(config)
         self.event_manager = EventManager(config, self)
@@ -126,10 +122,10 @@ class ProxyServer(tcpserver.TCPServer):
             stream.close()
 
     def start_listener(self):
-        self.listen(self.port, self.host)
+        self.listen(self.config["port"], self.config["host"])
         logger.info(
-            "proxy server is listening at {0}:{1}".format(self.host,
-                                                          self.port))
+            "proxy server is listening at {0}:{1}".format(self.config["host"],
+                                                          self.config["port"]))
 
 
 def start_proxy_server(config):
