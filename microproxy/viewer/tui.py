@@ -91,12 +91,7 @@ class Tui(gviewer.BaseDisplayer):
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
-        message_dict = json.loads(message[0])
-        message_dict["request"]["body"] = \
-            message_dict["request"]["body"].decode("base64")
-        message_dict["response"]["body"] = \
-            message_dict["response"]["body"].decode("base64")
-        return message_dict
+        return json.loads(message[0])
 
 
 def create_msg_channel(channel):
