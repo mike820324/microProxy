@@ -80,24 +80,24 @@ class HeaderTest(TestCase):
 
 class RequestTest(TestCase):
     def test_simple_request(self):
-        headers = [("Host", "github.com")]
+        request = {"headers": [("Host", "github.com")]}
         expected = TextList(
             [ColorText("Request Headers:", fg_color="blue", attrs=["bold"]),
-             Header(headers)])
+             Header([("Host", "github.com")])])
         self.assertEqual(
             expected.__dict__,
-            Request(headers).__dict__)
+            Request(request).__dict__)
 
 
 class ResponseTest(TestCase):
     def test_simple_response(self):
-        headers = [("Host", "github.com")]
+        response = {"headers": [("Host", "github.com")]}
         expected = TextList(
             [ColorText("Response Headers:", fg_color="blue", attrs=["bold"]),
-             Header(headers)])
+             Header([("Host", "github.com")])])
         self.assertEqual(
             expected.__dict__,
-            Response(headers).__dict__)
+            Response(response).__dict__)
 
 
 if __name__ == "__main__":

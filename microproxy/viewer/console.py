@@ -2,6 +2,10 @@ import zmq
 import json
 from colored import fg, bg, attr
 
+from format import Formatter
+
+_formatter = Formatter()
+
 
 class ColorText(object):
     def __init__(self,
@@ -100,14 +104,19 @@ class Header(TextList):
 
 
 class Request(TextList):
-    TITLE = "Request Headers:"
+    HEADER_TITLE = "Request Headers:"
+    BODY_TITLE = "Request Body:"
     FG_COLOR = "blue"
     ATTRS = ["bold"]
 
-    def __init__(self, headers):
-        super(Request, self).__init__(
-            [ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
-             Header(headers)])
+    def __init__(self, request, show_body=False):
+        content = []
+        content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
+        content.append(Header(request["headers"]))
+        if show_body and request["body"]:
+            content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
+            content = content + _formatter.format_request(request)
+        super(Request, self).__init__(content)
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -120,14 +129,19 @@ class Request(TextList):
 
 
 class Response(TextList):
-    TITLE = "Response Headers:"
+    HEADER_TITLE = "Response Headers:"
+    BODY_TITLE = "Response Body:"
     FG_COLOR = "blue"
     ATTRS = ["bold"]
 
-    def __init__(self, headers):
-        super(Response, self).__init__(
-            [ColorText(self.TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS),
-             Header(headers)])
+    def __init__(self, response, show_body=False):
+        content = []
+        content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
+        content.append(Header(response["headers"]))
+        if show_body and response["body"]:
+            content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
+            content = content + _formatter.format_request(response)
+        super(Response, self).__init__(content)
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -156,11 +170,11 @@ def construct_color_msg(message, verbose_level):
     if verbose_level == "status":
         return status
     if verbose_level == "header":
-        return TextList([status, Request(request["headers"]), Response(response["headers"])])
+        return TextList([status, Request(request), Response(response)])
     elif verbose_level == "body":
-        raise NotImplementedError
+        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
     elif verbose_level == "all":
-        raise NotImplementedError
+        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
 
 
 def create_msg_channel(channel):
