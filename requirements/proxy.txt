@@ -1,10 +1,10 @@
 tornado==4.3
 pyzmq==15.2.0
 blinker==1.4
-ipaddress==1.0.16
 watchdog==0.8.3
 pyOpenSSL==16.0.0
 service-identity==16.0.0
 h2==2.4.0
 
 -e git+https://github.com/chhsiao90/h11.git#egg=h11
+-e git+https://github.com/mike820324/socks5.git#egg=socks5
