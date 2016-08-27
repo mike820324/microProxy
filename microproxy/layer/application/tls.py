@@ -63,6 +63,30 @@ class TlsLayer(object):
         # Throws exception if failed
         self._alpn_future = concurrent.Future()
 
+    def connect_dest(self, support_alpn, hostname):
+        dest_context = self.create_dest_sslcontext(alpn=support_alpn)
+        dest_sock = self.context.dest_stream.detach()
+        dest_sock.setblocking(True)
+
+        ssl_sock = SSL.Connection(dest_context,
+                                  dest_sock)
+
+        if hostname:
+            ssl_sock.set_tlsext_host_name(hostname)
+
+        ssl_sock.set_connect_state()
+        ssl_sock.do_handshake()
+
+        alpn_info = ssl_sock.get_alpn_proto_negotiated() or b"http/1.1"
+
+        logger.debug("{0}:{1} -> Choose {2} as application protocol".format(
+            self.context.host, self.context.port, alpn_info))
+
+        self._alpn_future.set_result((ssl_sock,
+                                      hostname,
+                                      alpn_info))
+        return alpn_info
+
     def src_alpn_callback(self, src_ssl_conn, src_alpn):
         try:
             support_alpn = [
@@ -71,17 +95,7 @@ class TlsLayer(object):
                 if protocol in self.SUPPORT_PROTOCOLS
             ]
 
-            dest_context = self.create_dest_sslcontext(support_alpn)
-            dest_sock = self.context.dest_stream.detach()
-            dest_sock.setblocking(True)
-
-            ssl_sock = SSL.Connection(dest_context,
-                                      dest_sock)
-
             hostname = src_ssl_conn.get_servername()
-
-            if hostname:
-                ssl_sock.set_tlsext_host_name(hostname)
 
             # NOTE: If the sni hostname is not the same as self.context.host,
             # we use sni hostname instead. Since it's more reliable.
@@ -92,17 +106,7 @@ class TlsLayer(object):
                 ssl_ctx.use_privatekey(priv_key)
                 src_ssl_conn.set_context(ssl_ctx)
 
-            ssl_sock.set_connect_state()
-            ssl_sock.do_handshake()
-
-            alpn_info = ssl_sock.get_alpn_proto_negotiated() or b"http/1.1"
-
-            logger.debug("{0}:{1} -> Choose {2} as application protocol".format(self.context.host,
-                                                                                self.context.port,
-                                                                                alpn_info))
-            self._alpn_future.set_result((ssl_sock,
-                                          hostname,
-                                          alpn_info))
+            alpn_info = self.connect_dest(support_alpn, hostname)
             return bytes(alpn_info)
         except Exception as e:
             logger.error("{0}:{1} -> ".format(self.context.host,
@@ -115,7 +119,17 @@ class TlsLayer(object):
             # Return Null Bytes
             return bytes("")
 
-    def create_dest_sslcontext(self, alpn):
+    def src_info_callback(self, conn, level, ret_code):
+        if not level & SSL.SSL_CB_HANDSHAKE_DONE:
+            return
+
+        if conn.get_alpn_proto_negotiated() or ret_code != 1:
+            return
+
+        logger.debug("handshake withouth alpn, using http/1.1")
+        self.connect_dest(["http/1.1"], conn.get_servername())
+
+    def create_dest_sslcontext(self, alpn=None):
         ssl_ctx = self.create_basic_sslcontext()
         ssl_ctx.set_verify(SSL.VERIFY_NONE,
                            lambda conn, x509, err_num, err_depth, err_code: True)
@@ -133,6 +147,7 @@ class TlsLayer(object):
         ssl_ctx.use_privatekey(priv_key)
 
         ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
+        ssl_ctx.set_info_callback(self.src_info_callback)
         return ssl_ctx
 
     def create_basic_sslcontext(self):
@@ -156,7 +171,6 @@ class TlsLayer(object):
         dest_stream = MicroProxySSLIOStream(dest_ssl_sock)
         self.context.src_stream = src_stream
         self.context.dest_stream = dest_stream
-
         if hostname:
             self.context.host = hostname
         if alpn_info == "http/1.1":
