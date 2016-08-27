@@ -7,7 +7,10 @@ def on_request(plugin_context):
 
     try:
         headers = plugin_context.request.headers.get_dict()
-        headers["Accept-Encoding"] = "deflate"
+        for key in headers:
+            if key != "accept-encoding":
+                continue
+            headers[key] = "deflate"
 
         new_headers = HttpHeaders(headers=headers)
         plugin_context.request.headers = new_headers

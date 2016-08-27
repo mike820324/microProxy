@@ -1,192 +1,217 @@
-from copy import copy
-from tornado import iostream
-from tornado import gen
-from tornado import httputil
-from tornado import http1connection
 from tornado import concurrent
-from blinker import signal
 
-from microproxy.utils import get_logger
+import h11
+from h11 import Connection as H11Connection
+from h11 import Request, InformationalResponse, Response, Data, EndOfMessage
+
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.interceptor import signal_request, signal_response, signal_publish
-
+from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-def log_debug_with_http_info(context, msg):
-    logger.debug("{0}://{1}:{2} -> {3}".format(context.scheme,
-                                               context.host,
-                                               context.port,
-                                               msg))
-
-
-class Http1Layer(httputil.HTTPServerConnectionDelegate):
+class Http1Layer(object):
     def __init__(self, context):
         super(Http1Layer, self).__init__()
-        self.context = copy(context)
-        self.http_forwarder = None
+        self.context = context
+        self.src_conn = Connection(
+            self.context.src_stream, False, self, our_role=h11.SERVER)
+        self.dest_conn = Connection(
+            self.context.dest_stream, True, self, our_role=h11.CLIENT)
         self._future = concurrent.Future()
-        signal("http1layer_error").connect(self.on_error, sender=self)
+        self.http_stream = None
 
     def process_and_return_context(self):
-        http_server_connection = http1connection.HTTP1ServerConnection(
-            self.context.src_stream)
-        http_server_connection.start_serving(self)
+        self.context.src_stream.read_until_close(
+            streaming_callback=self.src_conn.on_data_received)
+        self.context.src_stream.set_close_callback(self.on_src_close)
+
+        self.context.dest_stream.read_until_close(
+            streaming_callback=self.dest_conn.on_data_received)
+        self.context.dest_stream.set_close_callback(self.on_dest_close)
         return self._future
 
-    def start_request(self, server_conn, request_conn):
-        dest_conn = http1connection.HTTP1Connection(
-            self.context.dest_stream, True)
-        self.http_forwarder = HttpForwarder(
-            self.context, request_conn, dest_conn, self)
-        return self.http_forwarder.create_req_reader()
-
-    def on_close(self, server_conn):
-        log_debug_with_http_info(self.context, "http layer done")
+    def on_src_close(self):
+        self.context.dest_stream.close()
         if self._future.running():
-            self._future.set_result(self.context)
+            if self.http_stream:  # contains running request
+                self._future.set_exception(SrcStreamClosedError())
+            else:
+                self._future.set_result(self.context)
 
-    def on_error(self, sender, exe_info=None):
-        log_debug_with_http_info(self.context, "http layer error")
-        self._future.set_exception(exe_info)
+    def on_dest_close(self):
+        self.context.src_stream.close()
+        if self._future.running():
+            if self.http_stream:  # contains running request
+                self._future.set_exception(DestStreamClosedError())
+            else:
+                self._future.set_result(self.context)
 
+    def get_target_conn(self, from_conn):
+        return self.dest_conn if from_conn is self.src_conn else self.src_conn
 
-class HttpReqReader(httputil.HTTPMessageDelegate):
-    def __init__(self, context):
-        super(HttpReqReader, self).__init__()
-        self.context = context
+    def on_request_header(self, header):
+        stream = Stream()
+        stream.write_request_header(header)
+        self.http_stream = stream
 
-    def headers_received(self, start_line, headers):
-        log_debug_with_http_info(
-            self.context, "source request headers recieved")
-        headers_dict = {k: v for k, v in headers.get_all()}
-        self.req = HttpRequest(version=start_line.version,
-                               method=start_line.method,
-                               path=start_line.path,
-                               headers=headers_dict)
+    def on_request_body(self, data):
+        self.http_stream.write_request_body(data)
 
-    def data_received(self, chunk):
-        log_debug_with_http_info(self.context, "source request body recieved")
-        self.req.body += bytes(chunk)
+    def get_request(self):
+        self.http_stream.request_done(self.context)
+        return self.http_stream.req
 
-    def finish(self):
-        signal("request_done").send(self)
+    def on_response_header(self, header):
+        self.http_stream.write_response_header(header)
 
-    def on_connection_close(self):
-        log_debug_with_http_info(self.context, "source connection closed")
+    def on_response_body(self, data):
+        self.http_stream.write_response_body(data)
 
+    def get_response(self):
+        self.http_stream.response_done(self.context)
+        return self.http_stream.resp
 
-class HttpForwarder(object):
-    def __init__(self, context, src_conn, dest_conn, http1_layer):
-        super(HttpForwarder, self).__init__()
-        self.context = context
-        self.src_conn = src_conn
-        self.dest_conn = dest_conn
-        self.http1_layer = http1_layer
-        self.req = None
-        self.resp = None
-
-    def create_req_reader(self):
-        reader = HttpReqReader(self.context)
-
-        signal("request_done").connect(self.req_done, sender=reader)
-        return reader
-
-    def create_resp_reader(self):
-        reader = HttpRespReader(self.context)
-
-        signal("response_done").connect(self.resp_done, sender=reader)
-        return reader
-
-    @gen.coroutine
-    def req_done(self, sender):
-        log_debug_with_http_info(self.context, "source request done")
-
-        plugin_response = signal_request.send(
-            self, layer_context=self.context, request=sender.req)
-        self.req = plugin_response[0][1].request if len(plugin_response) else sender.req
-
-        status_line = httputil.RequestStartLine(self.req.method,
-                                                self.req.path,
-                                                self.req.version)
-        try:
-            yield self.dest_conn.write_headers(
-                status_line,
-                httputil.HTTPHeaders(self.req.headers.get_dict()))
-            yield self.dest_conn.write(self.req.body)
-            yield self.dest_conn.read_response(self.create_resp_reader())
-            log_debug_with_http_info(self.context, "destination request done")
-        except iostream.StreamClosedError as e:
-            log_debug_with_http_info(
-                self.context, "destination closed while writing/reading")
-            signal("http1layer_error").send(self.http1_layer,
-                                            exe_info=DestStreamClosedError(e))
-        except Exception as e:
-            signal("http1layer_error").send(self.http1_layer, exe_info=e)
-
-    @gen.coroutine
-    def resp_done(self, sender):
-        log_debug_with_http_info(self.context, "destination response done")
-
-        plugin_response = signal_response.send(
-            self, layer_context=self.context, request=self.req, response=sender.resp)
-
-        self.resp = plugin_response[0][1].response if len(plugin_response) else sender.resp
-
+    def on_finish(self):
         signal_publish.send(
             self, layer_context=self.context,
-            request=self.req, response=self.resp)
+            request=self.http_stream.req, response=self.http_stream.resp)
 
-        headers = self.resp.headers.get_dict()
-        # NOTE: restriction on using tornado http connection.
-        # If Transfer-Encoding is in header,
-        # the source cannot receive chunks response properly.
-        if "Transfer-Encoding" in headers:
-            del headers["Transfer-Encoding"]
+        self.http_stream = None
+        self.src_conn.start_next_cycle()
+        self.dest_conn.start_next_cycle()
 
-        status_line = httputil.ResponseStartLine(
-            self.resp.version,
-            self.resp.code,
-            self.resp.reason)
+
+class Connection(H11Connection):
+    def __init__(self, io_stream, is_server, layer, *args, **kwargs):
+        super(Connection, self).__init__(*args, **kwargs)
+        self.io_stream = io_stream
+        self._type = "dest" if is_server else "src"
+        self.layer = layer
+
+    def write(self, event):
+        logger.debug("event send to {0}: {1}".format(self._type, type(event)))
+        data = self.send(event)
+        self.io_stream.write(data)
+
+    def on_data_received(self, data):
         try:
-            yield self.src_conn.write_headers(
-                status_line,
-                httputil.HTTPHeaders(headers))
-            yield self.src_conn.write(self.resp.body)
-            self.src_conn.finish()
-            log_debug_with_http_info(self.context, "source response done")
-        except iostream.StreamClosedError as e:
-            log_debug_with_http_info(
-                self.context, "source stream closed while writing")
-            signal("http1layer_error").send(self.http1_layer,
-                                            exe_info=SrcStreamClosedError(e))
+            logger.debug("data received from {0} with length {1}".format(self._type, len(data)))
+            self.receive_data(data)
+            while True:
+                event = self.next_event()
+                if isinstance(event, Request):
+                    logger.debug("event recevied from {0}: {1}".format(self._type, repr(event)))
+                    self.layer.on_request_header(event)
+                elif isinstance(event, InformationalResponse):
+                    logger.debug("event recevied from {0}: {1}".format(self._type, repr(event)))
+                    pass
+                elif isinstance(event, Response):
+                    self.layer.on_response_header(event)
+                elif isinstance(event, Data):
+                    logger.debug("event recevied from {0}: {1}".format(self._type, type(event)))
+                    if self._is_source_conn():
+                        self.layer.on_request_body(event)
+                    else:
+                        self.layer.on_response_body(event)
+                elif isinstance(event, EndOfMessage):
+                    logger.debug("event recevied from {0}: {1}".format(self._type, repr(event)))
+                    if self._is_source_conn():
+                        request = self.layer.get_request()
+                        self.send_request(request)
+                    else:
+                        response = self.layer.get_response()
+                        self.send_response(response)
+                        self.layer.on_finish()
+                elif event is h11.NEED_DATA:
+                    logger.debug("event recevied from {0}: {1}".format(self._type, repr(event)))
+                    break
+                elif event is h11.PAUSED:
+                    logger.debug("event recevied from {0}: {1}".format(self._type, repr(event)))
+                    break
+                else:
+                    logger.debug("event recevied was not handled from {0}: {1}".format(self._type, repr(event)))
         except Exception as e:
-            signal("http1layer_error").send(self.http1_layer, exe_info=e)
+            logger.error("Exception on {0}".format(self._type))
+            logger.exception(e)
+
+    def send_request(self, request):
+        target_conn = self.layer.get_target_conn(self)
+        target_conn.write(h11.Request(
+            method=request.method,
+            target=request.path,
+            headers=request.headers.get_list()))
+        if request.body:
+            target_conn.write(h11.Data(data=request.body))
+        target_conn.write(h11.EndOfMessage())
+
+    def send_response(self, response):
+        target_conn = self.layer.get_target_conn(self)
+        target_conn.write(h11.Response(
+            status_code=response.code,
+            headers=response.headers.get_list()))
+        if response.body:
+            target_conn.write(h11.Data(data=response.body))
+        target_conn.write(h11.EndOfMessage())
+
+    def _is_source_conn(self):
+        return self._type == "src"
 
 
-class HttpRespReader(httputil.HTTPMessageDelegate):
-    def __init__(self, context):
-        super(HttpRespReader, self).__init__()
-        self.context = context
+class Stream(object):
+    def __init__(self):
+        super(Stream, self).__init__()
+        self.req = None
+        self.resp = None
+        self.req_header = None
+        self.req_chunks = []
+        self.resp_header = None
+        self.resp_chunks = []
 
-    def headers_received(self, start_line, headers):
-        log_debug_with_http_info(
-            self.context, "destination response headers recieved")
-        headers_dict = {k: v for k, v in headers.get_all()}
-        self.resp = HttpResponse(code=start_line.code,
-                                 reason=start_line.reason,
-                                 version=start_line.version,
-                                 headers=headers_dict)
+    def write_request_header(self, header):
+        self.req_header = header
 
-    def data_received(self, chunk):
-        log_debug_with_http_info(
-            self.context, "destination response data recieved")
-        self.resp.body += bytes(chunk)
+    def write_request_body(self, data):
+        self.req_chunks.append(bytes(data.data))
 
-    def finish(self):
-        signal("response_done").send(self)
+    def request_done(self, layer_context):
+        try:
+            version = "HTTP/{0}".format(self.req_header.http_version)
+        except:
+            version = "HTTP/1.1"
+        req = HttpRequest(
+            version=version,
+            method=self.req_header.method,
+            path=self.req_header.target,
+            headers=self.req_header.headers,
+            body=b"".join(self.req_chunks))
 
-    def on_connection_close(self):
-        log_debug_with_http_info(
-            self.context, "destination connection closed")
+        plugin_response = signal_request.send(
+            self, layer_context=layer_context, request=req)
+
+        self.req = plugin_response[0][1].request if len(plugin_response) else req
+
+    def write_response_header(self, header):
+        self.resp_header = header
+
+    def write_response_body(self, data):
+        self.resp_chunks.append(bytes(data.data))
+
+    def response_done(self, layer_context):
+        try:
+            version = "HTTP/{0}".format(self.req_header.http_version)
+        except:
+            version = "HTTP/1.1"
+        resp = HttpResponse(
+            version=version,
+            reason=self.resp_header.reason,
+            code=self.resp_header.status_code,
+            headers=self.resp_header.headers,
+            body=b"".join(self.resp_chunks))
+
+        plugin_response = signal_response.send(
+            self, layer_context=layer_context,
+            request=self.req, response=resp)
+
+        self.resp = plugin_response[0][1].response if len(plugin_response) else resp

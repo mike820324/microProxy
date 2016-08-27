@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import time
 
 
@@ -56,7 +57,7 @@ class HttpResponse(object):
 class HttpHeaders(object):
     def __init__(self, headers=None):
         headers = headers or []
-        if isinstance(headers, dict):
+        if isinstance(headers, (dict, OrderedDict)):
             self.headers = headers.items()
         elif isinstance(headers, list):
             self.headers = headers
@@ -70,7 +71,7 @@ class HttpHeaders(object):
         self.headers.append(key, value)
 
     def get_dict(self):
-        return dict(self.headers)
+        return OrderedDict(self.headers)
 
     def get_list(self):
         return self.headers
