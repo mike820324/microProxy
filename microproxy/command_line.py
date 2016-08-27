@@ -91,6 +91,13 @@ def create_proxy_options():
                   option_type="string",
                   cmd_flags="--key-file")
 
+    define_option(option_info=proxy_option_info,
+                  option_name="events_channel",
+                  help_str="Specify the events channel. ex. tcp://*:5582",
+                  option_type="string",
+                  default="tcp://127.0.0.1:5582",  # Note: Make default to only accept local to access it
+                  cmd_flags="--events-channel")
+
     return proxy_option_info
 
 
@@ -99,9 +106,16 @@ def create_tui_viewer_options():
 
     define_option(option_info=tui_viewer_option_info,
                   option_name="viewer_channel",
-                  help_str="Specify the viewer channel",
+                  help_str="Specify the viewer channel. ex. tcp://127.0.0.1:5581",
                   option_type="string",
                   cmd_flags="--viewer-channel")
+
+    define_option(option_info=tui_viewer_option_info,
+                  option_name="events_channel",
+                  help_str="Specify the events channel. ex. tcp://127.0.0.1:5582",
+                  option_type="string",
+                  default="tcp://127.0.0.1:5582",
+                  cmd_flags="--events-channel")
 
     return tui_viewer_option_info
 
@@ -111,7 +125,7 @@ def create_console_viewer_options():
 
     define_option(option_info=console_viewer_option_info,
                   option_name="viewer_channel",
-                  help_str="Specify the viewer channel",
+                  help_str="Specify the viewer channel. ex. tcp://127.0.0.1:5581",
                   option_type="string",
                   cmd_flags="--viewer-channel")
 
@@ -122,6 +136,13 @@ def create_console_viewer_options():
                   cmd_flags="--verbose-level",
                   default="status",
                   choices=["status", "header", "body", "all"])
+
+    define_option(option_info=console_viewer_option_info,
+                  option_name="events_channel",
+                  help_str="Specify the events channel. ex. tcp://127.0.0.1:5582",
+                  option_type="string",
+                  default="tcp://127.0.0.1:5582",
+                  cmd_flags="--events-channel")
 
     return console_viewer_option_info
 
@@ -141,6 +162,7 @@ def main():
     elif config["command_type"] == "tui-viewer":
         from microproxy.viewer import tui as tui_viewer
         tui_viewer.start(config)
+
 
 if __name__ == '__main__':
     main()
