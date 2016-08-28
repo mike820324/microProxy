@@ -51,7 +51,8 @@ class ReplayHandler(object):
             h11.Request(
                 method=context.request.method,
                 target=context.path,
-                headers=context.request.headers.get_list())))
+                headers=context.request.headers.get_list(),
+                keep_case=True)))
         if context.request.body:
             stream.write(conn.send(
                 h11.Data(data=context.request.body.decode("base64"))))
