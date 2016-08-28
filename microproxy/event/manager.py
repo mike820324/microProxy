@@ -4,6 +4,7 @@ from zmq.eventloop import zmqstream
 import json
 
 from microproxy.utils import get_logger
+from replay import ReplayHandler
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,7 @@ class EventHandler(object):
     def __init__(self, config, proxy_server):
         self.config = config
         self.proxy_server = proxy_server
+        self.handler = ReplayHandler(self.config, self.proxy_server)
 
     def handle_event(self, event):
-        pass
+        self.handler.handle(event)
