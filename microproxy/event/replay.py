@@ -32,9 +32,10 @@ class ReplayHandler(object):
                 host=viewer_context.host,
                 port=viewer_context.port,
                 config=self.config,
-                scheme=viewer_context.scheme)
+                scheme=viewer_context.scheme,
+                interceptor=self.proxy_server.interceptor)
             yield self.proxy_server.layer_manager.run_layers(
-                read_stream, context=layer_context)
+                layer_context)
         except Exception as e:
             logger.exception(e)
         else:

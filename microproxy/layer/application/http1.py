@@ -59,7 +59,7 @@ class Http1Layer(object):
         plugin_result = self.context.interceptor.request(
             layer_context=self.context, request=request)
 
-        self.req = plugin_result if plugin_result else request
+        self.req = plugin_result.request if plugin_result else request
         self.dest_conn.send_request(self.req)
 
     def on_response(self, response):
@@ -67,7 +67,7 @@ class Http1Layer(object):
             layer_context=self.context,
             request=self.req, response=response)
 
-        self.resp = plugin_result if plugin_result else response
+        self.resp = plugin_result.response if plugin_result else response
         self.src_conn.send_response(self.resp)
         self.finish()
 
