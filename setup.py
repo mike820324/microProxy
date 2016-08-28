@@ -1,5 +1,6 @@
 from setuptools import setup, find_packages
 from codecs import open
+from microproxy.version import VERSION
 import os
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -18,7 +19,7 @@ with open(os.path.join(here, './requirements/development.txt')) as f:
 
 setup(
     name="microProxy",
-    version="0.2.0",
+    version=VERSION,
     description="A http/https interceptor proxy written in python inspired by mitmproxy",
     long_description=long_description,
     url="https://github.com/mike820324/microProxy",
