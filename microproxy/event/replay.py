@@ -3,8 +3,8 @@ from tornado.iostream import PipeIOStream
 from tornado import gen
 
 import h11
-from h11 import Connection as H11Connection
 
+from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.utils import get_logger
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
@@ -26,7 +26,7 @@ class ReplayHandler(object):
             viewer_context = ViewerContext(**event)
             write_stream, read_stream = self._create_streams()
 
-            self._make_h11_request(write_stream, viewer_context)
+            self._send_http1_request(write_stream, viewer_context)
             layer_context = LayerContext(
                 src_stream=read_stream,
                 host=viewer_context.host,
@@ -45,16 +45,5 @@ class ReplayHandler(object):
         read_stream = PipeIOStream(read_fd, io_loop=self.proxy_server.io_loop)
         return (write_stream, read_stream)
 
-    def _make_h11_request(self, stream, context):
-        conn = H11Connection(our_role=h11.CLIENT)
-        stream.write(conn.send(
-            h11.Request(
-                method=context.request.method,
-                target=context.path,
-                headers=context.request.headers.get_list(),
-                keep_case=True)))
-        if context.request.body:
-            stream.write(conn.send(
-                h11.Data(data=context.request.body.decode("base64"))))
-        stream.write(conn.send(
-            h11.EndOfMessage()))
+    def _send_http1_request(self, stream, context):
+        Http1Connection(h11.CLIENT, stream).send_request(context.request)
