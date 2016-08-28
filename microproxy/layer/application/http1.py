@@ -191,8 +191,7 @@ class Stream(object):
         plugin_resp = layer_context.interceptor.request(
             layer_context=layer_context, request=req
         )
-
-        self.req = plugin_resp.request
+        self.req = plugin_resp.request if plugin_resp else req
 
     def write_response_header(self, header):
         self.resp_header = header
@@ -216,4 +215,4 @@ class Stream(object):
             layer_context=layer_context, request=self.req, response=resp
         )
 
-        self.resp = plugin_resp.response
+        self.resp = plugin_resp.response if plugin_resp else resp
