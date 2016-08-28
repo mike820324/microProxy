@@ -1,5 +1,4 @@
 import socket
-import struct
 
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Event
@@ -9,6 +8,11 @@ from tornado.netutil import add_accept_handler
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
 from microproxy.exception import ProtocolError
+
+import socks5
+from socks5 import GreetingRequest, Request
+from socks5 import GreetingResponse, Response
+from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND, ADDR_TYPE
 
 
 class SocksProxyHandlerTest(AsyncTestCase):
@@ -49,108 +53,120 @@ class SocksProxyHandlerTest(AsyncTestCase):
 
     @gen_test
     def test_socks_greeting(self):
-        greeting = self.layer.socks_greeting()
-        yield self.client_stream.write(struct.pack("BBB", 0x05, 0x01, 0x00))
-        yield greeting
-        data = yield self.client_stream.read_bytes(2)
-        socks_version, _ = struct.unpack("BB", data)
+        greeting_request = GreetingRequest(
+            socks5.VERSION, 1, (AUTH_TYPE["NO_AUTH"], ))
+        greeting_response = self.layer.handle_greeting_request(
+            greeting_request)
+
         self.client_stream.close()
         self.server_stream.close()
-        assert socks_version == 5
+
+        self.assertIsInstance(greeting_response, GreetingResponse)
+        self.assertEqual(greeting_response.version, socks5.VERSION)
+        self.assertEqual(greeting_response.auth_type, AUTH_TYPE["NO_AUTH"])
 
     @gen_test
-    def test_socks_request_ipv4(self):
-        addr_future = self.layer.socks_request()
-        yield self.client_stream.write(struct.pack("!BBxBIH",
-                                                   0x05, 0x01, 0x01,
-                                                   0x7F000001, 80))
+    def test_greeting_without_no_auth(self):
+        greeting_request = GreetingRequest(
+            socks5.VERSION, 1, (AUTH_TYPE["GSSAPI"], ))
+        greeting_response = self.layer.handle_greeting_request(
+            greeting_request)
 
-        host, port, addr_type = yield addr_future
-        self.client_stream.close()
-        self.server_stream.close()
-        assert host == "127.0.0.1"
-        assert port == 80
-        assert addr_type == 0x01
-
-    @gen_test
-    def test_socks_request_remote_dns(self):
-        addr_future = self.layer.socks_request()
-        yield self.client_stream.write(struct.pack("!BBxBB{0}sH".format(len("localhost")),
-                                                   0x05, 0x01, 0x03,
-                                                   len("localhost"), "localhost", 80))
-
-        host, port, addr_type = yield addr_future
-        self.client_stream.close()
-        self.server_stream.close()
-        assert host == "localhost"
-        assert port == 80
-        assert addr_type == 0x03
-
-    @gen_test
-    def test_socks_response_ipv4(self):
-        dest_stream = yield self.layer.socks_response_with_dest_stream_creation(u"127.0.0.1", self.port, 0x01)
-        socks_response_content = yield self.client_stream.read_bytes(10)
-
-        version, status, addr_type, host, port = struct.unpack("!BBxBIH", socks_response_content)
-
-        assert version == 5
-        assert status == 0
-        assert addr_type == 1
-        assert host == 0x7F000001
-        assert port == self.port
-
-        dest_stream.close()
         self.client_stream.close()
         self.server_stream.close()
 
-    @gen_test
-    def test_socks_response_domain(self):
-        dest_stream = yield self.layer.socks_response_with_dest_stream_creation("localhost", self.port, 0x03)
-        socks_response_content = yield self.client_stream.read_bytes(16)
-
-        version, status, addr_type, host, port = struct.unpack("!BBxBx9sH", socks_response_content)
-
-        assert version == 5
-        assert status == 0
-        assert addr_type == 3
-        assert host == "localhost"
-        assert port == self.port
-
-        dest_stream.close()
-        self.client_stream.close()
-        self.server_stream.close()
-
-    @gen_test
-    def test_greeting_with_wrong_socks_version(self):
-        self.client_stream.write(struct.pack("BBx", 4, 1))
-        with self.assertRaises(ProtocolError):
-            yield self.layer.socks_greeting()
-        self.client_stream.close()
-        self.server_stream.close()
+        self.assertIsInstance(greeting_response, GreetingResponse)
+        self.assertEqual(greeting_response.version, socks5.VERSION)
+        self.assertEqual(
+            greeting_response.auth_type, AUTH_TYPE["NO_SUPPORT_AUTH_METHOD"])
 
     @gen_test
     def test_greeting_with_auth(self):
-        self.client_stream.write(struct.pack("BBBB", 5, 2, 0, 1))
-        yield self.layer.socks_greeting()
-        data = yield self.client_stream.read_bytes(2)
-        _, auth = struct.unpack("BB", data)
-        self.assertEqual(0, auth)
+        greeting_request = GreetingRequest(
+            socks5.VERSION, 2, (AUTH_TYPE["NO_AUTH"], AUTH_TYPE["GSSAPI"]))
+        greeting_response = self.layer.handle_greeting_request(
+            greeting_request)
 
         self.client_stream.close()
         self.server_stream.close()
+
+        self.assertIsInstance(greeting_response, GreetingResponse)
+        self.assertEqual(greeting_response.version, socks5.VERSION)
+        self.assertEqual(greeting_response.auth_type, AUTH_TYPE["NO_AUTH"])
 
     @gen_test
-    def test_request_with_wrong_socks_version(self):
-        self.client_stream.write(struct.pack("!BBxB", 4, 1, 1))
-        with self.assertRaises(ProtocolError):
-            yield self.layer.socks_request()
+    def test_greeting_with_wrong_socks_version(self):
+        greeting_request = GreetingRequest(
+            4, 2, (AUTH_TYPE["NO_AUTH"], AUTH_TYPE["GSSAPI"]))
+        greeting_response = self.layer.handle_greeting_request(
+            greeting_request)
+
         self.client_stream.close()
         self.server_stream.close()
+
+        self.assertIsInstance(greeting_response, GreetingResponse)
+        self.assertEqual(greeting_response.version, socks5.VERSION)
+        self.assertEqual(greeting_response.auth_type, AUTH_TYPE["NO_AUTH"])
+
+    @gen_test
+    def test_socks_request_ipv4(self):
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["IPV4"],
+            "127.0.0.1", self.port)
+        addr_future = self.layer.handle_request(socks_request)
+
+        error, event = yield addr_future
+        self.client_stream.close()
+        self.server_stream.close()
+
+        self.assertIsNone(error)
+        self.assertIsInstance(event, Response)
+        self.assertEqual(event.status, RESP_STATUS["SUCCESS"])
+        self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
+        self.assertEqual(event.addr, "127.0.0.1")
+        self.assertEqual(event.port, self.port)
+
+    @gen_test
+    def test_socks_request_remote_dns(self):
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["DOMAINNAME"],
+            "localhost", self.port)
+        addr_future = self.layer.handle_request(socks_request)
+
+        error, event = yield addr_future
+        self.client_stream.close()
+        self.server_stream.close()
+
+        self.assertIsNone(error)
+        self.assertIsInstance(event, Response)
+        self.assertEqual(event.status, RESP_STATUS["SUCCESS"])
+        self.assertEqual(event.atyp, ADDR_TYPE["DOMAINNAME"])
+        self.assertEqual(event.addr, "localhost")
+        self.assertEqual(event.port, self.port)
+
+    # @gen_test
+    # def test_request_with_wrong_socks_version(self):
+    #     self.client_stream.write(struct.pack("!BBxB", 4, 1, 1))
+    #     with self.assertRaises(ProtocolError):
+    #         yield self.layer.socks_request()
+    #     self.client_stream.close()
+    #     self.server_stream.close()
 
     @gen_test
     def test_request_with_wrong_socks_command(self):
-        self.client_stream.write(struct.pack("!BBxB", 5, 0, 1))
-        with self.assertRaises(ProtocolError):
-            yield self.layer.socks_request()
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["BIND"], ADDR_TYPE["DOMAINNAME"],
+            "localhost", self.port)
+
+        addr_future = self.layer.handle_request(socks_request)
+        error, event = yield addr_future
+
+        self.assertIsInstance(error, ProtocolError)
+        self.assertIsInstance(event, Response)
+        self.assertEqual(event.status, RESP_STATUS["COMMAND_NOT_SUPPORTED"])
+        self.assertEqual(event.atyp, ADDR_TYPE["DOMAINNAME"])
+        self.assertEqual(event.addr, "localhost")
+        self.assertEqual(event.port, self.port)
+
         self.client_stream.close()
         self.server_stream.close()
