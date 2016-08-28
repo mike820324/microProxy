@@ -20,11 +20,9 @@ class LayerManager(object):
         self.cert_store = CertStore(config)
 
     @gen.coroutine
-    def run_layers(self, src_stream):
-        current_context = LayerContext(
-            src_stream=src_stream, config=self.config)
-
-        current_layer = self.get_first_layer(current_context)
+    def run_layers(self, initial_layer_context):
+        current_layer = self.get_first_layer(initial_layer_context)
+        src_stream = initial_layer_context.src_stream
 
         while current_layer:
             try:
@@ -94,7 +92,6 @@ class ProxyServer(tcpserver.TCPServer):
         self.host = config["host"]
         self.port = config["port"]
         self.interceptor = Interceptor(config=config)
-        self.layer_manager = LayerManager(config)
 
     def _handle_connection(self, connection, address):
         try:
@@ -112,8 +109,14 @@ class ProxyServer(tcpserver.TCPServer):
     @gen.coroutine
     def handle_stream(self, stream, port):
         try:
+            layer_manager = LayerManager(self.config)
+            initial_context = LayerContext(
+                src_stream=stream,
+                config=self.config,
+                interceptor=self.interceptor)
+
             logger.debug("Start new layer manager")
-            yield self.layer_manager.run_layers(stream)
+            yield layer_manager.run_layers(initial_context)
         except Exception as e:
             # NOTE: not handle exception, log it and close the stream
             logger.exception(e)

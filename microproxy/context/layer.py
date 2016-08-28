@@ -8,10 +8,12 @@ class LayerContext(object):
                  scheme=None,
                  host=None,
                  port=None,
-                 config=None):
+                 config=None,
+                 interceptor=None):
         self.src_stream = src_stream
         self.dest_stream = dest_stream
         self.scheme = scheme
         self.host = host
         self.port = port
         self.config = config
+        self.interceptor = interceptor
