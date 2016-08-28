@@ -8,9 +8,10 @@ class HttpRequest(object):
                  method="",
                  path="",
                  headers=None,
-                 body=b""):
+                 body=b"",
+                 timestamp=None):
         super(HttpRequest, self).__init__()
-        self.timestamp = int(time.time() * 1000000)
+        self.timestamp = timestamp or int(time.time() * 1000000)
         self.version = version
         self.method = method
         self.path = path
@@ -34,9 +35,10 @@ class HttpResponse(object):
                  reason="",
                  version="",
                  headers=None,
-                 body=b""):
+                 body=b"",
+                 timestamp=None):
         super(HttpResponse, self).__init__()
-        self.timestamp = int(time.time() * 1000000)
+        self.timestamp = timestamp or int(time.time() * 1000000)
         self.code = code
         self.reason = reason
         self.version = version

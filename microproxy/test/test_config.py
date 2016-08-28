@@ -2,7 +2,8 @@ import unittest
 from mock import Mock
 
 from microproxy.config import Config, ConfigParserBuilder
-from microproxy.config import define_option, define_section, verify_config
+from microproxy.config import (
+    define_option, define_section, verify_config, gen_config_dict)
 
 
 class DefineSectionTest(unittest.TestCase):
@@ -224,7 +225,8 @@ class ConfigTest(unittest.TestCase):
         }
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=[])
-        config = Config(self.config_field_info, ini_parser, cmd_options)
+        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
+        config = Config(config_dict)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -244,7 +246,8 @@ class ConfigTest(unittest.TestCase):
 
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
-        config = Config(self.config_field_info, ini_parser, cmd_options)
+        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
+        config = Config(config_dict)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -265,7 +268,8 @@ class ConfigTest(unittest.TestCase):
         ]
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
-        config = Config(self.config_field_info, ini_parser, cmd_options)
+        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
+        config = Config(config_dict)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -283,7 +287,8 @@ class ConfigTest(unittest.TestCase):
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
 
-        config = Config(self.config_field_info, ini_parser, cmd_options)
+        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
+        config = Config(config_dict)
 
         with self.assertRaises(KeyError):
             verify_config(self.config_field_info, config)
@@ -298,7 +303,12 @@ class ConfigTest(unittest.TestCase):
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
 
-        config = Config(self.config_field_info, ini_parser, cmd_options)
+        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
+        config = Config(config_dict)
 
         with self.assertRaises(ValueError):
             verify_config(self.config_field_info, config)
+
+
+if __name__ == "__main__":
+    unittest.main()
