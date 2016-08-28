@@ -3,7 +3,7 @@ from tornado import gen
 from tornado import iostream
 
 from microproxy.context import LayerContext
-from microproxy.layer import SocksLayer, TransparentLayer
+from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
 from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
@@ -54,11 +54,13 @@ class LayerManager(object):
         raise gen.Return(None)
 
     def get_first_layer(self, context):
-        mode = self.config["mode"]
+        mode = context.config["mode"]
         if mode == "socks":
             return SocksLayer(context)
         elif mode == "transparent":
             return TransparentLayer(context)
+        elif mode == "replay":
+            return ReplayLayer(context)
         else:
             raise ValueError("Unsupport proxy mode: {0}".format(mode))
 

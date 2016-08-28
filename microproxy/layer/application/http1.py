@@ -15,7 +15,9 @@ class Http1Layer(object):
         super(Http1Layer, self).__init__()
         self.context = context
         self.src_conn = Connection(
-            self.context.src_stream, False, self, our_role=h11.SERVER)
+            self.context.src_stream, False, self,
+            readonly=context.config["mode"] == "replay",
+            our_role=h11.SERVER)
         self.dest_conn = Connection(
             self.context.dest_stream, True, self, our_role=h11.CLIENT)
         self._future = concurrent.Future()
@@ -32,6 +34,7 @@ class Http1Layer(object):
         return self._future
 
     def on_src_close(self):
+        logger.debug("source connection is closed")
         self.context.dest_stream.close()
         if self._future.running():
             if self.http_stream:  # contains running request
@@ -40,6 +43,7 @@ class Http1Layer(object):
                 self._future.set_result(self.context)
 
     def on_dest_close(self):
+        logger.debug("destination connection is closed")
         self.context.src_stream.close()
         if self._future.running():
             if self.http_stream:  # contains running request
@@ -80,21 +84,27 @@ class Http1Layer(object):
         )
 
         self.http_stream = None
-        self.src_conn.start_next_cycle()
-        self.dest_conn.start_next_cycle()
+        if self.context.config["mode"] != "replay":
+            self.src_conn.start_next_cycle()
+            self.dest_conn.start_next_cycle()
+        else:
+            self.context.src_stream.close()
+            self.context.dest_stream.close()
 
 
 class Connection(H11Connection):
-    def __init__(self, io_stream, is_server, layer, *args, **kwargs):
+    def __init__(self, io_stream, is_server, layer, readonly=False, *args, **kwargs):
         super(Connection, self).__init__(*args, **kwargs)
         self.io_stream = io_stream
         self._type = "dest" if is_server else "src"
         self.layer = layer
+        self.readonly = readonly
 
     def write(self, event):
         logger.debug("event send to {0}: {1}".format(self._type, type(event)))
         data = self.send(event)
-        self.io_stream.write(data)
+        if not self.readonly:
+            self.io_stream.write(data)
 
     def on_data_received(self, data):
         try:
