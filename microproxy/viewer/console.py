@@ -1,3 +1,4 @@
+from microproxy.version import VERSION
 import zmq
 import json
 from colored import fg, bg, attr
@@ -188,7 +189,7 @@ def create_msg_channel(channel):
 def start(config):
     socket = create_msg_channel(config["viewer_channel"])
     verbose_level = config["verbose_level"]
-    print ColorText("MicroProxy Simple Viewer v0.0.2",
+    print ColorText("MicroProxy Simple Viewer {}".format(VERSION),
                     fg_color="blue",
                     attrs=["bold"])
     while True:
