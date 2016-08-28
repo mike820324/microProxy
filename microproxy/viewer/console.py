@@ -3,6 +3,7 @@ import zmq
 import json
 from colored import fg, bg, attr
 
+from microproxy.event import EventClient
 from format import Formatter
 
 _formatter = Formatter()
@@ -186,12 +187,23 @@ def create_msg_channel(channel):
     return socket
 
 
+def replay(config):
+    client = EventClient(config)
+    for line in open(config["replay_file"], "r"):
+        if line:
+            client.send_event(json.loads(line))
+
+
 def start(config):
     socket = create_msg_channel(config["viewer_channel"])
     verbose_level = config["verbose_level"]
     print ColorText("MicroProxy Simple Viewer {}".format(VERSION),
                     fg_color="blue",
                     attrs=["bold"])
+
+    if "replay_file" in config and config["replay_file"]:
+        replay(config)
+
     while True:
         try:
             data = socket.recv()

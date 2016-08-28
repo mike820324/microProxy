@@ -33,7 +33,7 @@ class EventManager(object):
         except:
             logger.error("Wrong message received: {0}".format(message))
         else:
-            logger.info("Receive event: {0}".format(event))
+            logger.debug("Receive event: {0}".format(event))
             self.handler.handle_event(event)
 
 
