@@ -31,7 +31,8 @@ class ReplayHandler(object):
                 src_stream=read_stream,
                 host=viewer_context.host,
                 port=viewer_context.port,
-                config=self.config)
+                config=self.config,
+                scheme=viewer_context.scheme)
             yield self.proxy_server.layer_manager.run_layers(
                 read_stream, context=layer_context)
         except Exception as e:
