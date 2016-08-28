@@ -1,4 +1,5 @@
 import socket
+from mock import Mock, MagicMock
 
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Semaphore
@@ -38,6 +39,12 @@ class Http1LayerTest(AsyncTestCase):
 
         self.context = LayerContext(src_stream=server_streams[0],
                                     dest_stream=client_streams[1])
+
+        self.interceptor = Mock()
+        self.interceptor.publish = MagicMock(return_value=None)
+        self.interceptor.request = MagicMock(return_value=None)
+        self.interceptor.response = MagicMock(return_value=None)
+        self.context.interceptor = self.interceptor
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
         self.http_layer = Http1Layer(self.context)

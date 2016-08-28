@@ -6,7 +6,6 @@ from h11 import Request, InformationalResponse, Response, Data, EndOfMessage
 
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy.context import HttpRequest, HttpResponse
-from microproxy.interceptor import signal_request, signal_response, signal_publish
 from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
@@ -74,9 +73,11 @@ class Http1Layer(object):
         return self.http_stream.resp
 
     def on_finish(self):
-        signal_publish.send(
-            self, layer_context=self.context,
-            request=self.http_stream.req, response=self.http_stream.resp)
+        self.context.interceptor.publish(
+            layer_context=self.context,
+            request=self.http_stream.req,
+            response=self.http_stream.resp
+        )
 
         self.http_stream = None
         self.src_conn.start_next_cycle()
@@ -187,10 +188,10 @@ class Stream(object):
             headers=self.req_header.headers,
             body=b"".join(self.req_chunks))
 
-        plugin_response = signal_request.send(
-            self, layer_context=layer_context, request=req)
-
-        self.req = plugin_response[0][1].request if len(plugin_response) else req
+        plugin_resp = layer_context.interceptor.request(
+            layer_context=layer_context, request=req
+        )
+        self.req = plugin_resp.request if plugin_resp else req
 
     def write_response_header(self, header):
         self.resp_header = header
@@ -210,8 +211,8 @@ class Stream(object):
             headers=self.resp_header.headers,
             body=b"".join(self.resp_chunks))
 
-        plugin_response = signal_response.send(
-            self, layer_context=layer_context,
-            request=self.req, response=resp)
+        plugin_resp = layer_context.interceptor.response(
+            layer_context=layer_context, request=self.req, response=resp
+        )
 
-        self.resp = plugin_response[0][1].response if len(plugin_response) else resp
+        self.resp = plugin_resp.response if plugin_resp else resp

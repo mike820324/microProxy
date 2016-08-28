@@ -8,7 +8,6 @@ from h2.events import (
 from h2.exceptions import ProtocolError, NoSuchStreamError
 
 from microproxy.context import HttpRequest, HttpResponse
-from microproxy.interceptor import signal_request, signal_response, signal_publish
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
@@ -96,9 +95,10 @@ class Http2Layer(object):
     def on_finish(self, src_stream_id):
         stream = self.streams[src_stream_id]
 
-        signal_publish.send(
-            self, layer_context=self.context,
-            request=stream.req, response=stream.resp)
+        self.context.interceptor.publish(
+            layer_context=self.context,
+            request=stream.req, response=stream.resp
+        )
 
 
 class Connection(H2Connection):
@@ -317,10 +317,11 @@ class Stream(object):
             headers=self.req_headers,
             body=b"".join(self.req_chunks))
 
-        plugin_response = signal_request.send(
-            self, layer_context=layer_context, request=req)
+        plugin_resp = layer_context.interceptor.request(
+            layer_context=layer_context, request=req
+        )
 
-        self.req = plugin_response[0][1].request if len(plugin_response) else req
+        self.req = plugin_resp.request if plugin_resp else req
 
     def write_response_headers(self, headers):
         self.resp_headers = headers
@@ -336,8 +337,9 @@ class Stream(object):
             headers=self.resp_headers,
             body=b"".join(self.resp_chunks))
 
-        plugin_response = signal_response.send(
-            self, layer_context=layer_context,
-            request=self.req, response=resp)
+        plugin_resp = layer_context.interceptor.response(
+            layer_context=layer_context,
+            request=self.req, response=resp
+        )
 
-        self.resp = plugin_response[0][1].response if len(plugin_response) else resp
+        self.resp = plugin_resp.response if plugin_resp else resp
