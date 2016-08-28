@@ -66,7 +66,7 @@ class LayerManager(object):
         http_ports = [80] + context.config["http_port"]
         https_ports = [443] + context.config["https_port"]
 
-        if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
+        if isinstance(current_layer, (SocksLayer, TransparentLayer, ReplayLayer)):
             if context.port in http_ports:
                 context.scheme = "http"
                 return Http1Layer(context)
@@ -85,8 +85,8 @@ class LayerManager(object):
 
 
 class ProxyServer(tcpserver.TCPServer):
-    def __init__(self, config, proxy_server_handler=None):
-        super(ProxyServer, self).__init__()
+    def __init__(self, config, **kwargs):
+        super(ProxyServer, self).__init__(**kwargs)
         self.config = config
         self.interceptor = Interceptor(config=config)
         self.layer_manager = LayerManager(config)
@@ -98,7 +98,7 @@ class ProxyServer(tcpserver.TCPServer):
                                         io_loop=self.io_loop,
                                         max_buffer_size=self.max_buffer_size,
                                         read_chunk_size=self.read_chunk_size)
-            future = self.handle_stream(stream, address)
+            future = self.handle_stream(stream)
             if future is not None:
                 self.io_loop.add_future(future, lambda f: f.result())
         except Exception as e:
@@ -106,7 +106,7 @@ class ProxyServer(tcpserver.TCPServer):
             raise
 
     @gen.coroutine
-    def handle_stream(self, stream, port):
+    def handle_stream(self, stream):
         try:
             layer_manager = LayerManager(self.config)
             initial_context = LayerContext(
@@ -129,7 +129,8 @@ class ProxyServer(tcpserver.TCPServer):
 
 
 def start_proxy_server(config):
-    server = ProxyServer(config)
+    io_loop = curr_loop()
+    server = ProxyServer(config, io_loop=io_loop)
     server.start_listener()
 
     try:
