@@ -5,13 +5,13 @@ from tornado import iostream
 from socks5 import GreetingRequest, Request
 from socks5 import GreetingResponse, Response
 from socks5 import VERSION as socks_version
-from socks5 import RESP_STATUS, AUTH_TYPE
+from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND
 from socks5.connection import ServerConnection
 
 from base import ProxyLayer
 
 from microproxy.utils import get_logger
-from microproxy.exception import SrcStreamClosedError, DestNotConnectedError
+from microproxy.exception import SrcStreamClosedError, DestNotConnectedError, ProtocolError
 
 logger = get_logger(__name__)
 
@@ -29,14 +29,21 @@ class SocksLayer(ProxyLayer):
             _event = self.socks_conn.receive(data)
 
             if isinstance(_event, GreetingRequest):
-                yield self.handle_greeting_request(_event)
+                event = self.handle_greeting_request(_event)
+                data = self.socks_conn.send(event)
+                yield self.context.src_stream.write(data)
 
             elif isinstance(_event, Request):
-                yield self.handle_request(_event)
+                error, event = yield self.handle_request(_event)
+                data = self.socks_conn.send(event)
+                yield self.context.src_stream.write(data)
+
+                if error:
+                    raise error
+
                 break
         raise gen.Return(self.context)
 
-    @gen.coroutine
     def handle_greeting_request(self, event):
         if not AUTH_TYPE["NO_AUTH"] in event.methods:
             response_event = GreetingResponse(
@@ -44,11 +51,19 @@ class SocksLayer(ProxyLayer):
         else:
             response_event = GreetingResponse(
                 socks_version, AUTH_TYPE["NO_AUTH"])
-        data = self.socks_conn.send(response_event)
-        yield self.context.src_stream.write(data)
+        return response_event
 
     @gen.coroutine
     def handle_request(self, event):
+
+        if event.cmd != REQ_COMMAND["CONNECT"]:
+            logger.debug("Unsupport connect type")
+            error = ProtocolError("Unsupport bind type")
+            response_event = Response(
+                socks_version, RESP_STATUS["COMMAND_NOT_SUPPORTED"],
+                event.atyp, event.addr, event.port)
+            raise gen.Return((error, response_event))
+
         host = event.addr
         port = event.port
         try:
@@ -61,9 +76,8 @@ class SocksLayer(ProxyLayer):
                 socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
                 event.atyp, event.addr, event.port)
 
-            data = self.socks_conn.send(response_event)
-            yield self.context.src_stream.write(data)
-            raise DestNotConnectedError(e)
+            error = DestNotConnectedError(e)
+            raise gen.Return((error, response_event))
 
         except iostream.StreamClosedError as e:
             if e.real_error:
@@ -92,9 +106,8 @@ class SocksLayer(ProxyLayer):
                     response_event = Response(
                         socks_version, RESP_STATUS["GENRAL_FAILURE"],
                         event.atyp, event.addr, event.port)
-                data = self.socks_conn.send(response_event)
-                yield self.context.src_stream.write(data)
-                raise DestNotConnectedError(e)
+                error = DestNotConnectedError(e)
+                raise gen.Return((error, response_event))
             else:
                 # NOTE: if real_error is None, it imply the source stream is closed.
                 dest_stream.close()
@@ -104,8 +117,9 @@ class SocksLayer(ProxyLayer):
         self.context.host = host
         self.context.port = port
 
+        error = None
         response_event = Response(
             socks_version, RESP_STATUS["SUCCESS"],
             event.atyp, event.addr, event.port)
-        data = self.socks_conn.send(response_event)
-        yield self.context.src_stream.write(data)
+
+        raise gen.Return((None, response_event))
