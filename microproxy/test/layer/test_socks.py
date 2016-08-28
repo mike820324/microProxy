@@ -7,7 +7,7 @@ from tornado.netutil import add_accept_handler
 
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
-from microproxy.exception import ProtocolError
+from microproxy.exception import ProtocolError, DestNotConnectedError
 
 import socks5
 from socks5 import GreetingRequest, Request
@@ -166,6 +166,25 @@ class SocksProxyHandlerTest(AsyncTestCase):
         self.assertEqual(event.status, RESP_STATUS["COMMAND_NOT_SUPPORTED"])
         self.assertEqual(event.atyp, ADDR_TYPE["DOMAINNAME"])
         self.assertEqual(event.addr, "localhost")
+        self.assertEqual(event.port, self.port)
+
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test(timeout=10)
+    def test_request_failed_timeout(self):
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["IPV4"],
+            "1.2.3.4", self.port)
+
+        addr_future = self.layer.handle_request(socks_request)
+        error, event = yield addr_future
+
+        self.assertIsInstance(error, DestNotConnectedError)
+        self.assertIsInstance(event, Response)
+        self.assertEqual(event.status, RESP_STATUS["NETWORK_UNREACHABLE"])
+        self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
+        self.assertEqual(event.addr, "1.2.3.4")
         self.assertEqual(event.port, self.port)
 
         self.client_stream.close()
