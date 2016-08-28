@@ -161,7 +161,8 @@ class Connection(H11Connection):
         target_conn = self.layer.get_target_conn(self)
         target_conn.write(h11.Response(
             status_code=response.code,
-            headers=response.headers.get_list()))
+            headers=response.headers.get_list(),
+            keep_case=True))
         if response.body:
             target_conn.write(h11.Data(data=response.body))
         target_conn.write(h11.EndOfMessage())
