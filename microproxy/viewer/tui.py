@@ -29,7 +29,7 @@ class Tui(gviewer.BaseDisplayer):
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
         self.config = config
-        self.event_client = EventClient(config)
+        self.event_client = EventClient(config["events_channel"])
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
