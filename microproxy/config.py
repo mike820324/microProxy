@@ -6,52 +6,8 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-class Config(object):
-    def __init__(self, config_field_info, file_config, cmd_config):
-        command_type = cmd_config["command_type"]
-        optionInfos = config_field_info[command_type]
-
-        file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
-        cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
-        self.__config = file_config.copy()
-        self.__config.update(cmd_config)
-        self.__config.update(self.appendDefault(self.__config, optionInfos))
-        self.__config.update(self.typeTransform(self.__config, optionInfos))
-
-    def appendDefault(self, config, optionInfo):
-        fields = [field for field in optionInfo if field not in config and not optionInfo[field]["is_require"]]
-        options = {field: optionInfo[field]["default"] for field in fields}
-        return options
-
-    def typeTransform(self, config, optionInfo):
-        new_config = {}
-        for field in config:
-            if field not in optionInfo:
-                continue
-
-            if optionInfo[field]["type"] == "int":
-                new_config[field] = int(config[field])
-
-            elif optionInfo[field]["type"] == "list":
-                values = [value for value in config[field].split(",") if len(value) > 0]
-                if optionInfo[field]["list_type"] == "int":
-                    new_config[field] = map(int, values)
-                elif optionInfo[field]["list_type"] == "string":
-                    new_config[field] = values
-
-            else:
-                new_config[field] = config[field]
-
-        return new_config
-
-    def __getitem__(self, key):
-        try:
-            return self.__config[key]
-        except KeyError:
-            raise
-
-    def __iter__(self):
-        return iter(self.__config)
+class Config(dict):
+    pass
 
 
 class ConfigParserBuilder(object):
@@ -178,7 +134,50 @@ def parse_config(config_field_info):
     ini_parser = ConfigParserBuilder.setup_ini_parser()
     ini_parser.read(config_file)
 
-    config = Config(config_field_info, ini_parser, vars(cmd_config))
+    config_dict = gen_config_dict(config_field_info, ini_parser, vars(cmd_config))
+    config = Config(config_dict)
 
     verify_config(config_field_info, config)
     return config
+
+
+def gen_config_dict(config_field_info, file_config, cmd_config):
+        command_type = cmd_config["command_type"]
+        option_infos = config_field_info[command_type]
+
+        file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
+        cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
+        config_dict = dict()
+        config_dict.update(file_config)
+        config_dict.update(cmd_config)
+        config_dict.update(append_default(config_dict, option_infos))
+        config_dict.update(type_transform(config_dict, option_infos))
+        return config_dict
+
+
+def append_default(config, optionInfo):
+    fields = [field for field in optionInfo if field not in config and not optionInfo[field]["is_require"]]
+    options = {field: optionInfo[field]["default"] for field in fields}
+    return options
+
+
+def type_transform(config, optionInfo):
+    new_config = {}
+    for field in config:
+        if field not in optionInfo:
+            continue
+
+        if optionInfo[field]["type"] == "int":
+            new_config[field] = int(config[field])
+
+        elif optionInfo[field]["type"] == "list":
+            values = [value for value in config[field].split(",") if len(value) > 0]
+            if optionInfo[field]["list_type"] == "int":
+                new_config[field] = map(int, values)
+            elif optionInfo[field]["list_type"] == "string":
+                new_config[field] = values
+
+        else:
+            new_config[field] = config[field]
+
+    return new_config

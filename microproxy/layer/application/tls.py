@@ -133,6 +133,7 @@ class TlsLayer(object):
         ssl_ctx = self.create_basic_sslcontext()
         ssl_ctx.set_verify(SSL.VERIFY_NONE,
                            lambda conn, x509, err_num, err_depth, err_code: True)
+        alpn = alpn or []
         ssl_ctx.set_alpn_protos(alpn)
 
         return ssl_ctx
@@ -162,6 +163,10 @@ class TlsLayer(object):
 
     @gen.coroutine
     def process_and_return_context(self):
+        if self.context.config["mode"] == "replay":
+            yield self.process_replay()
+            raise gen.Return(self.context)
+
         src_ssl_ctx = self.create_src_sslcontext()
         src_stream = yield self.context.src_stream.start_tls(
             server_side=True, ssl_options=src_ssl_ctx)
@@ -181,3 +186,10 @@ class TlsLayer(object):
             self.context.scheme = "https"
 
         raise gen.Return(self.context)
+
+    @gen.coroutine
+    def process_replay(self):
+        dest_ssl_ctx = self.create_dest_sslcontext()
+        dest_stream = yield self.context.dest_stream.start_tls(
+            server_side=False, ssl_options=dest_ssl_ctx)
+        self.context.dest_stream = dest_stream

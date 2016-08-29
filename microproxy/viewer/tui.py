@@ -4,6 +4,7 @@ import urwid
 import json
 
 import gviewer
+from microproxy.event import EventClient
 from format import Formatter
 
 ioloop.install()
@@ -22,16 +23,23 @@ class Tui(gviewer.BaseDisplayer):
         self.data_store = self.create_data_store()
         self.viewer = gviewer.GViewer(
             self.data_store, self,
-            summary_actions=dict(e=self.export_replay),
+            summary_actions=dict(e=self.export_replay,
+                                 r=self.replay),
             palette=self.PALETTE,
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
         self.config = config
+        self.event_client = EventClient(config)
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
 
     def start(self):
+        if "replay_file" in self.config and self.config["replay_file"]:
+            for line in open(self.config["replay_file"], "r"):
+                if line:
+                    self.replay(None, json.loads(line))
+
         self.viewer.start()
 
     def _code_text_markup(self, code):
@@ -101,6 +109,9 @@ class Tui(gviewer.BaseDisplayer):
             f.write(json.dumps(message))
             f.write("\n")
         parent.notify("replay script export to {0}".format(export_file))
+
+    def replay(self, parent, message):
+        self.event_client.send_event(message)
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):

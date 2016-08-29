@@ -1,3 +1,5 @@
+from http import HttpRequest, HttpResponse
+
 
 class ViewerContext(object):
     """
@@ -16,8 +18,14 @@ class ViewerContext(object):
         self.host = host
         self.port = port
         self.path = path
-        self.request = request
-        self.response = response
+        if isinstance(request, dict):
+            self.request = HttpRequest(**request)
+        else:
+            self.request = request
+        if isinstance(response, dict):
+            self.response = HttpResponse(**response)
+        else:
+            self.response = response
 
     def serialize(self):
         json = {}

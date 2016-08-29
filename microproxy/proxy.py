@@ -3,13 +3,14 @@ from tornado import gen
 from tornado import iostream
 
 from microproxy.context import LayerContext
-from microproxy.layer import SocksLayer, TransparentLayer
+from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
 from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import Interceptor
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.cert import CertStore
+from microproxy.event import EventManager
 
 logger = get_logger(__name__)
 
@@ -53,21 +54,21 @@ class LayerManager(object):
         raise gen.Return(None)
 
     def get_first_layer(self, context):
-        mode = self.config["mode"]
+        mode = context.config["mode"]
         if mode == "socks":
             return SocksLayer(context)
         elif mode == "transparent":
             return TransparentLayer(context)
+        elif mode == "replay":
+            return ReplayLayer(context)
         else:
             raise ValueError("Unsupport proxy mode: {0}".format(mode))
 
     def next_layer(self, current_layer, context):
-        http_ports = [80]
-        http_ports.extend(context.config["http_port"])
-        https_ports = [443]
-        https_ports.extend(context.config["https_port"])
+        http_ports = [80] + context.config["http_port"]
+        https_ports = [443] + context.config["https_port"]
 
-        if isinstance(current_layer, SocksLayer) or isinstance(current_layer, TransparentLayer):
+        if isinstance(current_layer, (SocksLayer, TransparentLayer, ReplayLayer)):
             if context.port in http_ports:
                 context.scheme = "http"
                 return Http1Layer(context)
@@ -86,12 +87,12 @@ class LayerManager(object):
 
 
 class ProxyServer(tcpserver.TCPServer):
-    def __init__(self, config, proxy_server_handler=None):
-        super(ProxyServer, self).__init__()
+    def __init__(self, config, **kwargs):
+        super(ProxyServer, self).__init__(**kwargs)
         self.config = config
-        self.host = config["host"]
-        self.port = config["port"]
         self.interceptor = Interceptor(config=config)
+        self.layer_manager = LayerManager(config)
+        self.event_manager = EventManager(config, self)
 
     def _handle_connection(self, connection, address):
         try:
@@ -99,7 +100,7 @@ class ProxyServer(tcpserver.TCPServer):
                                         io_loop=self.io_loop,
                                         max_buffer_size=self.max_buffer_size,
                                         read_chunk_size=self.read_chunk_size)
-            future = self.handle_stream(stream, address)
+            future = self.handle_stream(stream)
             if future is not None:
                 self.io_loop.add_future(future, lambda f: f.result())
         except Exception as e:
@@ -107,30 +108,30 @@ class ProxyServer(tcpserver.TCPServer):
             raise
 
     @gen.coroutine
-    def handle_stream(self, stream, port):
+    def handle_stream(self, stream):
         try:
-            layer_manager = LayerManager(self.config)
             initial_context = LayerContext(
                 src_stream=stream,
                 config=self.config,
                 interceptor=self.interceptor)
 
             logger.debug("Start new layer manager")
-            yield layer_manager.run_layers(initial_context)
+            yield self.layer_manager.run_layers(initial_context)
         except Exception as e:
             # NOTE: not handle exception, log it and close the stream
             logger.exception(e)
             stream.close()
 
     def start_listener(self):
-        self.listen(self.port, self.host)
+        self.listen(self.config["port"], self.config["host"])
         logger.info(
-            "proxy server is listening at {0}:{1}".format(self.host,
-                                                          self.port))
+            "proxy server is listening at {0}:{1}".format(self.config["host"],
+                                                          self.config["port"]))
 
 
 def start_proxy_server(config):
-    server = ProxyServer(config)
+    io_loop = curr_loop()
+    server = ProxyServer(config, io_loop=io_loop)
     server.start_listener()
 
     try:
