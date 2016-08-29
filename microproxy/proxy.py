@@ -110,14 +110,13 @@ class ProxyServer(tcpserver.TCPServer):
     @gen.coroutine
     def handle_stream(self, stream):
         try:
-            layer_manager = LayerManager(self.config)
             initial_context = LayerContext(
                 src_stream=stream,
                 config=self.config,
                 interceptor=self.interceptor)
 
             logger.debug("Start new layer manager")
-            yield layer_manager.run_layers(initial_context)
+            yield self.layer_manager.run_layers(initial_context)
         except Exception as e:
             # NOTE: not handle exception, log it and close the stream
             logger.exception(e)
