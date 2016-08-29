@@ -130,10 +130,22 @@ def create_console_viewer_options():
     console_viewer_option_info = {}
 
     define_option(option_info=console_viewer_option_info,
-                  option_name="viewer_channel",
-                  help_str="Specify the viewer channel. ex. tcp://127.0.0.1:5581",
+                  option_name="proxy_host",
+                  help_str="Specify the proxy host. ex. tcp://127.0.0.1",
                   option_type="string",
-                  cmd_flags="--viewer-channel")
+                  cmd_flags="--proxy-host")
+
+    define_option(option_info=console_viewer_option_info,
+                  option_name="viewer_port",
+                  help_str="Specify the viewer channel port. ex. 5581",
+                  option_type="int",
+                  cmd_flags="--viewer-channel-port")
+
+    define_option(option_info=console_viewer_option_info,
+                  option_name="events_port",
+                  help_str="Specify the events channel port. ex. 5582",
+                  option_type="int",
+                  cmd_flags="--events-channel-port")
 
     define_option(option_info=console_viewer_option_info,
                   option_name="verbose_level",
@@ -144,18 +156,18 @@ def create_console_viewer_options():
                   choices=["status", "header", "body", "all"])
 
     define_option(option_info=console_viewer_option_info,
-                  option_name="events_channel",
-                  help_str="Specify the events channel. ex. tcp://127.0.0.1:5582",
-                  option_type="string",
-                  default="tcp://127.0.0.1:5582",
-                  cmd_flags="--events-channel")
-
-    define_option(option_info=console_viewer_option_info,
                   option_name="replay_file",
-                  help_str="Specify a replay script file",
+                  help_str="Specify replay file",
                   option_type="string",
                   default="",
                   cmd_flags="--replay-file")
+
+    define_option(option_info=console_viewer_option_info,
+                  option_name="dump_file",
+                  help_str="Specify dump file",
+                  option_type="string",
+                  default="",
+                  cmd_flags="--dump-file")
 
     return console_viewer_option_info
 

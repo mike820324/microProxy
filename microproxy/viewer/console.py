@@ -179,7 +179,7 @@ def construct_color_msg(message, verbose_level):
         return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
 
 
-def create_msg_channel(channel):
+def create_msg_channel(channel):  # pragma: no cover
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
@@ -187,31 +187,47 @@ def create_msg_channel(channel):
     return socket
 
 
-def replay(config):
-    client = EventClient(config)
-    for line in open(config["replay_file"], "r"):
+def replay(channel_addr, replay_file):  # pragma: no cover
+    client = EventClient(channel_addr)
+    for line in open(replay_file, "r"):
         if line:
             client.send_event(json.loads(line))
 
 
-def start(config):
-    socket = create_msg_channel(config["viewer_channel"])
+def start(config):  # pragma: no cover
+    proxy_host = config["proxy_host"]
+    viewer_channel = "{0}:{1}".format(proxy_host, config["viewer_port"])
+    events_channel = "{0}:{1}".format(proxy_host, config["events_port"])
+    socket = create_msg_channel(viewer_channel)
     verbose_level = config["verbose_level"]
     print ColorText("MicroProxy Simple Viewer {}".format(VERSION),
                     fg_color="blue",
                     attrs=["bold"])
 
     if "replay_file" in config and config["replay_file"]:
-        replay(config)
+        replay(events_channel, config["replay_file"])
+
+    dump_file = None
+    if "dump_file" in config and config["dump_file"]:
+        dump_file = config["dump_file"]
+
+    if dump_file:
+        fp = open(dump_file, "w")
 
     while True:
         try:
             data = socket.recv()
             message = json.loads(data)
+            if dump_file:
+                fp.write(data)
+                fp.write("\n")
+
             print construct_color_msg(message, verbose_level)
             print
         except KeyboardInterrupt:
             print ColorText("Closing Simple Viewer",
                             fg_color="blue",
                             attrs=["bold"])
+            if dump_file:
+                fp.close()
             exit(0)
