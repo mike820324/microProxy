@@ -20,7 +20,8 @@ class Http2Layer(object):
             on_settings=self.on_src_settings,
             on_window_updates=self.on_src_window_updates,
             on_priority_updates=self.on_src_priority_updates,
-            on_reset=self.on_src_reset)
+            on_reset=self.on_src_reset,
+            readonly=context.config["mode"] == "replay")
         self.dest_conn = Connection(
             self.context.dest_stream, client_side=True,
             conn_type="destination",
@@ -117,6 +118,10 @@ class Http2Layer(object):
             layer_context=self.context, request=stream.request,
             response=stream.response)
         del self.streams[src_stream_id]
+
+        if self.context.config["mode"] == "replay":
+            self.context.src_stream.close()
+            self.context.dest_stream.close()
 
     def on_src_settings(self, changed_settings):
         new_settings = {
