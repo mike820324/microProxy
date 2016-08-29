@@ -7,6 +7,7 @@ from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
 from microproxy.context import LayerContext
+from microproxy.config import Config
 from microproxy.layer import Http1Layer
 from microproxy.exception import SrcStreamClosedError
 
@@ -38,7 +39,8 @@ class Http1LayerTest(AsyncTestCase):
         listener.close()
 
         self.context = LayerContext(src_stream=server_streams[0],
-                                    dest_stream=client_streams[1])
+                                    dest_stream=client_streams[1],
+                                    config=Config(dict(mode="socks")))
 
         self.interceptor = Mock()
         self.interceptor.publish = MagicMock(return_value=None)
