@@ -1,6 +1,8 @@
 import h11
 from h11 import Connection as H11Connection
-from h11 import Request, InformationalResponse, Response, Data, EndOfMessage
+from h11 import (
+    Request, InformationalResponse, Response, Data, EndOfMessage,
+    ConnectionClosed)
 
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.utils import get_logger
@@ -64,6 +66,9 @@ class Connection(H11Connection):
                     self._req = None
                     self._resp = None
                     self._body_chunks = []
+                elif isinstance(event, ConnectionClosed):
+                    self.io_stream.close()
+                    break
                 elif event is h11.NEED_DATA:
                     break
                 elif event is h11.PAUSED:
