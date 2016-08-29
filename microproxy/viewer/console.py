@@ -187,22 +187,25 @@ def create_msg_channel(channel):
     return socket
 
 
-def replay(config):
-    client = EventClient(config)
-    for line in open(config["replay_file"], "r"):
+def replay(channel_addr, replay_file):
+    client = EventClient(channel_addr)
+    for line in open(replay_file, "r"):
         if line:
             client.send_event(json.loads(line))
 
 
 def start(config):
-    socket = create_msg_channel(config["viewer_channel"])
+    proxy_host = config["proxy_host"]
+    viewer_channel = "{0}:{1}".format(proxy_host, config["viewer_port"])
+    events_channel = "{0}:{1}".format(proxy_host, config["events_port"])
+    socket = create_msg_channel(viewer_channel)
     verbose_level = config["verbose_level"]
     print ColorText("MicroProxy Simple Viewer {}".format(VERSION),
                     fg_color="blue",
                     attrs=["bold"])
 
     if "replay_file" in config and config["replay_file"]:
-        replay(config)
+        replay(events_channel, config["replay_file"])
 
     dump_file = None
     if "dump_file" in config and config["dump_file"]:
