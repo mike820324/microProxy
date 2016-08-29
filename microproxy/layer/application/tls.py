@@ -1,59 +1,15 @@
-from OpenSSL import SSL, crypto
+from OpenSSL import SSL
 from copy import copy
 from tornado import gen, concurrent
 
 from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
+from microproxy.protocol import tls
 logger = get_logger(__name__)
 
 
 class TlsLayer(object):
     SUPPORT_PROTOCOLS = ("http/1.1", "h2")
-    SUPPROT_CIPHERS_SUITES = (
-        "ECDHE-RSA-AES128-GCM-SHA256",
-        "ECDHE-ECDSA-AES128-GCM-SHA256",
-        "ECDHE-RSA-AES256-GCM-SHA384",
-        "ECDHE-ECDSA-AES256-GCM-SHA384",
-        "DHE-RSA-AES128-GCM-SHA256",
-        "DHE-DSS-AES128-GCM-SHA256",
-        "kEDH+AESGCM",
-        "ECDHE-RSA-AES128-SHA256",
-        "ECDHE-ECDSA-AES128-SHA256",
-        "ECDHE-RSA-AES128-SHA",
-        "ECDHE-ECDSA-AES128-SHA",
-        "ECDHE-RSA-AES256-SHA384",
-        "ECDHE-ECDSA-AES256-SHA384",
-        "ECDHE-RSA-AES256-SHA",
-        "ECDHE-ECDSA-AES256-SHA",
-        "DHE-RSA-AES128-SHA256",
-        "DHE-RSA-AES128-SHA",
-        "DHE-DSS-AES128-SHA256",
-        "DHE-RSA-AES256-SHA256",
-        "DHE-DSS-AES256-SHA",
-        "DHE-RSA-AES256-SHA",
-        "ECDHE-RSA-DES-CBC3-SHA",
-        "ECDHE-ECDSA-DES-CBC3-SHA",
-        "AES128-GCM-SHA256",
-        "AES256-GCM-SHA384",
-        "AES128-SHA256",
-        "AES256-SHA256",
-        "AES128-SHA",
-        "AES256-SHA",
-        "AES",
-        "DES-CBC3-SHA",
-        "HIGH",
-        "!aNULL",
-        "!eNULL",
-        "!EXPORT",
-        "!DES",
-        "!RC4",
-        "!MD5",
-        "!PSK",
-        "!aECDH",
-        "!EDH-DSS-DES-CBC3-SHA",
-        "!EDH-RSA-DES-CBC3-SHA",
-        "!KRB5-DES-CBC3-SHA"
-    )
 
     def __init__(self, context, cert_store):
         super(TlsLayer, self).__init__()
@@ -64,7 +20,7 @@ class TlsLayer(object):
         self._alpn_future = concurrent.Future()
 
     def connect_dest(self, support_alpn, hostname):
-        dest_context = self.create_dest_sslcontext(alpn=support_alpn)
+        dest_context = tls.create_dest_sslcontext(alpn=support_alpn)
         dest_sock = self.context.dest_stream.detach()
         dest_sock.setblocking(True)
 
@@ -101,9 +57,8 @@ class TlsLayer(object):
             # we use sni hostname instead. Since it's more reliable.
             if hostname and hostname != self.context.host:
                 cert, priv_key = self.cert_store.get_cert_and_pkey(hostname)
-                ssl_ctx = self.create_basic_sslcontext()
-                ssl_ctx.use_certificate(cert)
-                ssl_ctx.use_privatekey(priv_key)
+                ssl_ctx = tls.create_src_sslcontext(
+                    cert, priv_key)
                 src_ssl_conn.set_context(ssl_ctx)
 
             alpn_info = self.connect_dest(support_alpn, hostname)
@@ -129,45 +84,12 @@ class TlsLayer(object):
         logger.debug("handshake withouth alpn, using http/1.1")
         self.connect_dest(["http/1.1"], conn.get_servername())
 
-    def create_dest_sslcontext(self, alpn=None):
-        ssl_ctx = self.create_basic_sslcontext()
-        ssl_ctx.set_verify(SSL.VERIFY_NONE,
-                           lambda conn, x509, err_num, err_depth, err_code: True)
-        alpn = alpn or []
-        ssl_ctx.set_alpn_protos(alpn)
-
-        return ssl_ctx
-
-    def create_src_sslcontext(self):
-        ssl_ctx = self.create_basic_sslcontext()
-        # FIXME: Should be avaliable to remove this part.
-        # Currently, If we remove this part,
-        # the whole tls negotiation will failed.
-        cert, priv_key = self.cert_store.get_cert_and_pkey(self.context.host)
-        ssl_ctx.use_certificate(cert)
-        ssl_ctx.use_privatekey(priv_key)
-
-        ssl_ctx.set_alpn_select_callback(self.src_alpn_callback)
-        ssl_ctx.set_info_callback(self.src_info_callback)
-        return ssl_ctx
-
-    def create_basic_sslcontext(self):
-        ssl_ctx = SSL.Context(SSL.SSLv23_METHOD)
-        ssl_ctx.set_options(SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3 | SSL.OP_CIPHER_SERVER_PREFERENCE)
-
-        ssl_ctx.set_cipher_list(":".join(self.SUPPROT_CIPHERS_SUITES))
-
-        # NOTE: cipher suite related to ECDHE will need this
-        ssl_ctx.set_tmp_ecdh(crypto.get_elliptic_curve('prime256v1'))
-        return ssl_ctx
-
     @gen.coroutine
     def process_and_return_context(self):
-        if self.context.config["mode"] == "replay":
-            yield self.process_replay()
-            raise gen.Return(self.context)
-
-        src_ssl_ctx = self.create_src_sslcontext()
+        cert, priv_key = self.cert_store.get_cert_and_pkey(self.context.host)
+        src_ssl_ctx = tls.create_src_sslcontext(
+            cert, priv_key, alpn_callback=self.src_alpn_callback,
+            info_callback=self.src_info_callback)
         src_stream = yield self.context.src_stream.start_tls(
             server_side=True, ssl_options=src_ssl_ctx)
 
@@ -186,10 +108,3 @@ class TlsLayer(object):
             self.context.scheme = "https"
 
         raise gen.Return(self.context)
-
-    @gen.coroutine
-    def process_replay(self):
-        dest_ssl_ctx = self.create_dest_sslcontext()
-        dest_stream = yield self.context.dest_stream.start_tls(
-            server_side=False, ssl_options=dest_ssl_ctx)
-        self.context.dest_stream = dest_stream

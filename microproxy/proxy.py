@@ -68,7 +68,7 @@ class LayerManager(object):
         http_ports = [80] + context.config["http_port"]
         https_ports = [443] + context.config["https_port"]
 
-        if isinstance(current_layer, (SocksLayer, TransparentLayer, ReplayLayer)):
+        if isinstance(current_layer, (SocksLayer, TransparentLayer)):
             if context.port in http_ports:
                 context.scheme = "http"
                 return Http1Layer(context)
@@ -79,6 +79,14 @@ class LayerManager(object):
 
         if isinstance(current_layer, TlsLayer):
             if context.scheme == "https":
+                return Http1Layer(context)
+            elif context.scheme == "h2":
+                return Http2Layer(context)
+            else:
+                return ForwardLayer(context)
+
+        if isinstance(current_layer, ReplayLayer):
+            if context.scheme in ("http", "https"):
                 return Http1Layer(context)
             elif context.scheme == "h2":
                 return Http2Layer(context)
