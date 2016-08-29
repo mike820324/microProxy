@@ -179,7 +179,7 @@ def construct_color_msg(message, verbose_level):
         return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
 
 
-def create_msg_channel(channel):
+def create_msg_channel(channel):  # pragma: no cover
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
@@ -187,14 +187,14 @@ def create_msg_channel(channel):
     return socket
 
 
-def replay(channel_addr, replay_file):
+def replay(channel_addr, replay_file):  # pragma: no cover
     client = EventClient(channel_addr)
     for line in open(replay_file, "r"):
         if line:
             client.send_event(json.loads(line))
 
 
-def start(config):
+def start(config):  # pragma: no cover
     proxy_host = config["proxy_host"]
     viewer_channel = "{0}:{1}".format(proxy_host, config["viewer_port"])
     events_channel = "{0}:{1}".format(proxy_host, config["events_port"])
