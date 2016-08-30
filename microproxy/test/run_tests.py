@@ -10,7 +10,8 @@ TEST_MODULES = [
     "microproxy.test.layer.test_socks",
     "microproxy.test.viewer.test_console",
     "microproxy.test.event.test_manager",
-    "microproxy.test.event.test_client"
+    "microproxy.test.event.test_client",
+    "microproxy.test.protocol.test_http1"
 ]
 
 

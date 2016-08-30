@@ -59,17 +59,12 @@ class Http1LayerTest(AsyncTestCase):
                                             b"\r\n"]))
 
         req_header = yield self.dest_stream.read_until("\r\n\r\n")
-        # fixme: it seems that h11 would transform header key into lower case
-        # and not trnsfer back automatically, so we keep it here
-        # would try solve it later
         self.assertEqual(
             req_header,
             b"\r\n".join([b"GET /index HTTP/1.1",
-                          b"host: localhost",
+                          b"Host: localhost",
                           b"\r\n"]))
-        # fixme: same problem of lower case in header key
-        # also currently, no reason on response
-        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 ",
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
                                                    b"Transfer-Encoding: chunked\r\n",
                                                    b"4",
                                                    b"Body",
@@ -77,11 +72,9 @@ class Http1LayerTest(AsyncTestCase):
                                                    b"\r\n"]))
 
         resp = yield self.src_stream.read_until(b"0\r\n\r\n")
-        # fixme: same problem of lower case in header key
-        # also currently, no reason on response
         self.assertEqual(
             resp,
-            b"\r\n".join([b"HTTP/1.1 200 ",
+            b"\r\n".join([b"HTTP/1.1 200 OK",
                           b"transfer-encoding: chunked\r\n",
                           b"4",
                           b"Body",
@@ -131,10 +124,8 @@ class Http1LayerTest(AsyncTestCase):
                                             b"\r\n"]))
         self.src_stream.close()
         yield self.dest_stream.read_until("\r\n\r\n")
-        # fixme: same problem of lower case in header key
-        # also currently, no reason on response
-        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 ",
-                                                   b"transfer-encoding: chunked\r\n",
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
+                                                   b"Transfer-Encoding: chunked\r\n",
                                                    b"4",
                                                    b"Body",
                                                    b"0",

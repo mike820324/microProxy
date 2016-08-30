@@ -19,14 +19,16 @@ class HttpRequest(object):
         self.headers = HttpHeaders(headers)
 
     def serialize(self):
-        json = {}
-        json["timestamp"] = self.timestamp
-        json["version"] = self.version
-        json["method"] = self.method
-        json["path"] = self.path
+        json = dict(self.__dict__)
         json["body"] = self.body.encode("base64")
-        json["headers"] = self.headers.get_list()
+        json["headers"] = [h for h in self.headers]
         return json
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 class HttpResponse(object):
@@ -46,14 +48,16 @@ class HttpResponse(object):
         self.headers = HttpHeaders(headers)
 
     def serialize(self):
-        json = {}
-        json["timestamp"] = self.timestamp
-        json["version"] = self.version
-        json["code"] = self.code
-        json["reason"] = self.reason
+        json = dict(self.__dict__)
         json["body"] = self.body.encode("base64")
-        json["headers"] = self.headers.get_list()
+        json["headers"] = [h for h in self.headers]
         return json
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 class HttpHeaders(object):
@@ -72,8 +76,17 @@ class HttpHeaders(object):
     def __setitem__(self, key, value):
         self.headers.append(key, value)
 
-    def get_dict(self):
-        return OrderedDict(self.headers)
+    def __iter__(self):
+        return self.headers.__iter__()
 
-    def get_list(self):
-        return self.headers
+    def __repr__(self):
+        return "HttpHeaders({0})".format(self.__dict__)
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
