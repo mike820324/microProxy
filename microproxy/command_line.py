@@ -180,9 +180,12 @@ def main():
         from microproxy.proxy import start_tcp_server
         from microproxy.event import start_events_server
         from microproxy.utils import get_logger, curr_loop
+        from microproxy.cert import init_cert_store
+        from microproxy.interceptor import init_interceptor
 
         logger = get_logger(__name__)
-
+        init_cert_store(config)
+        init_interceptor(config)
         start_tcp_server(config)
         start_events_server(config)
         try:
