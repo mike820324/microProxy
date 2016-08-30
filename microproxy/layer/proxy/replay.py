@@ -15,7 +15,7 @@ class ReplayLayer(ProxyLayer):
 
         if self.context.scheme in ("https", "h2"):
             if self.context.scheme == "h2":
-                alpn = "h2"
+                alpn = ["h2"]
             else:
                 alpn = None
             dest_stream = yield dest_stream.start_tls(

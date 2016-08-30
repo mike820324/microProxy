@@ -5,6 +5,7 @@ from tornado import gen
 import h11
 
 from microproxy.protocol.http1 import Connection as Http1Connection
+from microproxy.protocol.http2 import Connection as Http2Connection
 from microproxy.utils import get_logger
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
@@ -26,7 +27,14 @@ class ReplayHandler(object):
             viewer_context = ViewerContext(**event)
             write_stream, read_stream = self._create_streams()
 
-            self._send_http1_request(write_stream, viewer_context)
+            if viewer_context.scheme in ("http", "https"):
+                self._send_http1_request(write_stream, viewer_context)
+            elif viewer_context.scheme == "h2":
+                self._send_http2_request(write_stream, viewer_context)
+            else:
+                raise ValueError("not support replay with: {0}".format(
+                    viewer_context.scheme))
+
             layer_context = LayerContext(
                 src_stream=read_stream,
                 host=viewer_context.host,
@@ -49,3 +57,9 @@ class ReplayHandler(object):
 
     def _send_http1_request(self, stream, context):
         Http1Connection(h11.CLIENT, stream).send_request(context.request)
+
+    def _send_http2_request(self, stream, context):
+        conn = Http2Connection(stream, client_side=True)
+        conn.initiate_connection()
+        stream_id = conn.get_next_available_stream_id()
+        conn.send_request(stream_id, context.request)

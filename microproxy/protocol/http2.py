@@ -3,9 +3,11 @@ from h2.events import (
     ResponseReceived, RequestReceived, DataReceived, StreamEnded,
     StreamReset, RemoteSettingsChanged, WindowUpdated,
     PushedStreamReceived, PriorityUpdated,
-    SettingsAcknowledged
+    SettingsAcknowledged, ConnectionTerminated
 )
 from h2.exceptions import ProtocolError, NoSuchStreamError
+
+from tornado import concurrent
 
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.utils import get_logger
@@ -22,7 +24,8 @@ class Connection(H2Connection):
     def __init__(self, stream, client_side=False, conn_type=None,
                  on_request=None, on_response=None, on_push=None,
                  on_settings=None, on_window_updates=None,
-                 on_priority_updates=None, on_reset=None, **kwargs):
+                 on_priority_updates=None, on_reset=None,
+                 on_terminate=None, readonly=False, **kwargs):
         super(Connection, self).__init__(client_side=client_side, **kwargs)
         self.stream = stream
         self.on_request = on_request
@@ -32,18 +35,25 @@ class Connection(H2Connection):
         self.on_priority_updates = on_priority_updates
         self.on_reset = on_reset
         self.on_window_updates = on_window_updates
+        self.on_terminate = on_terminate
         self.conn_type = conn_type or self._DEFAULT_TYPES[client_side]
+        self.readonly = readonly
         self.ongoings_streams = dict()
 
     def flush(self):
-        data = self.data_to_send()
-        return self.stream.write(data)
+        if not self.readonly:
+            data = self.data_to_send()
+            if data:
+                return self.stream.write(data)
+        else:
+            future = concurrent.Future()
+            future.set_result(None)
+            return future
 
     def receive(self, data):
         try:
             logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
             events = self.receive_data(data)
-            self.flush()
             self.handle_events(events)
         except Exception as e:
             logger.error("Unhandled exception occured at {0}".format(self.conn_type))
@@ -71,6 +81,8 @@ class Connection(H2Connection):
                 self.handle_pushed_stream(event)
             elif isinstance(event, PriorityUpdated):
                 self.handle_priority_updates(event)
+            elif isinstance(event, ConnectionTerminated):
+                self.on_terminate()
             elif isinstance(event, SettingsAcknowledged):
                 # Note: nothing need to do with this event
                 pass
@@ -138,16 +150,18 @@ class Connection(H2Connection):
         self.on_reset(event.stream_id, event.error_code)
 
     def send_request(self, stream_id, request, **kwargs):
-        logger.debug("sent request to {0}: {1}".format(
-            self.conn_type, dict(stream_id=stream_id, request=request.serialize())))
+        logger.debug("request sent to {0}: {1}".format(
+            self.conn_type, dict(stream_id=stream_id, request=dict(
+                headers=request.headers.get_list()))))
         self.send_headers(
             stream_id, request.headers, stream_ended=not bool(request.body), **kwargs)
         if request.body:
             self.send_data(stream_id, request.body)
 
     def send_response(self, stream_id, response):
-        logger.debug("sent response to {0}: {1}".format(
-            self.conn_type, dict(stream_id=stream_id, response=response.serialize())))
+        logger.debug("response sent to {0}: {1}".format(
+            self.conn_type, dict(stream_id=stream_id, response=dict(
+                headers=response.headers.get_list()))))
         self.send_headers(
             stream_id, response.headers,
             stream_ended=not bool(response.body))
@@ -220,4 +234,8 @@ class Connection(H2Connection):
         logger.debug("reset sent to {0}: {1}".format(
             self.conn_type, locals()))
         self.reset_stream(stream_id, error_code)
+        self.flush()
+
+    def send_terminate(self):
+        self.close_connection()
         self.flush()
