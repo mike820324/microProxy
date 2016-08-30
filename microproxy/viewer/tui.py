@@ -112,6 +112,7 @@ class Tui(gviewer.BaseDisplayer):
 
     def replay(self, parent, message):
         self.event_client.send_event(message)
+        parent.notify("sent replay event to server")
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
