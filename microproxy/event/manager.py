@@ -14,7 +14,9 @@ class EventManager(object):
         super(EventManager, self).__init__()
         self.handler = handler or EventHandler(config)
         self.zmq_stream = zmq_stream or self._create_stream(config)
-        self._start()
+
+    def start(self):
+        self.zmq_stream.on_recv(self._on_recv)
 
     def _create_stream(self, config):  # pragma: no cover
         context = zmq.Context()
@@ -22,9 +24,6 @@ class EventManager(object):
         socket.bind(config["events_channel"])
         logger.info("EventManager is listening at {0}".format(config["events_channel"]))
         return zmqstream.ZMQStream(socket)
-
-    def _start(self):
-        self.zmq_stream.on_recv(self._on_recv)
 
     def _on_recv(self, msg_parts):
         message = msg_parts[0]
@@ -44,3 +43,7 @@ class EventHandler(object):
 
     def handle_event(self, event):
         self.handler.handle(event)
+
+
+def start_events_server(config):
+    EventManager(config).start()

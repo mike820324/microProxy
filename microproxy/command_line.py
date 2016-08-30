@@ -177,8 +177,18 @@ def main():
     config = parse_config(config_field_info)
 
     if config["command_type"] == "proxy":
-        from microproxy import proxy
-        proxy.start_proxy_server(config)
+        from microproxy.proxy import start_tcp_server
+        from microproxy.event import start_events_server
+        from microproxy.utils import get_logger, curr_loop
+
+        logger = get_logger(__name__)
+
+        start_tcp_server(config)
+        start_events_server(config)
+        try:
+            curr_loop().start()
+        except KeyboardInterrupt:
+            logger.info("bye")
 
     elif config["command_type"] == "console-viewer":
         from microproxy.viewer import console as console_viewer

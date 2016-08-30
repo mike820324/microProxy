@@ -4,7 +4,6 @@ from tornado import gen
 from microproxy.context import LayerContext
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
-from microproxy.event import EventManager
 from microproxy.interceptor import get_interceptor
 from microproxy.layer_manager import run_layers
 
@@ -15,7 +14,6 @@ class ProxyServer(tcpserver.TCPServer):
     def __init__(self, config, **kwargs):
         super(ProxyServer, self).__init__(**kwargs)
         self.config = config
-        self.event_manager = EventManager(config)
 
     def _handle_connection(self, connection, address):
         try:
@@ -52,13 +50,7 @@ class ProxyServer(tcpserver.TCPServer):
                                                           self.config["port"]))
 
 
-def start_proxy_server(config):
+def start_tcp_server(config):
     io_loop = curr_loop()
     server = ProxyServer(config, io_loop=io_loop)
     server.start_listener()
-
-    try:
-        curr_loop().start()
-    except KeyboardInterrupt:
-        # TODO: gracefully stop everything
-        logger.info("bye")
