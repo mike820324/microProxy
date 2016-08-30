@@ -4,8 +4,8 @@ from tornado import gen
 from microproxy.context import LayerContext
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
-from microproxy.interceptor import Interceptor
 from microproxy.event import EventManager
+from microproxy.interceptor import get_interceptor
 from microproxy.layer_manager import run_layers
 
 logger = get_logger(__name__)
@@ -15,7 +15,6 @@ class ProxyServer(tcpserver.TCPServer):
     def __init__(self, config, **kwargs):
         super(ProxyServer, self).__init__(**kwargs)
         self.config = config
-        self.interceptor = Interceptor(config=config)
         self.event_manager = EventManager(config, self)
 
     def _handle_connection(self, connection, address):
@@ -37,7 +36,7 @@ class ProxyServer(tcpserver.TCPServer):
             initial_context = LayerContext(
                 src_stream=stream,
                 config=self.config,
-                interceptor=self.interceptor)
+                interceptor=get_interceptor(self.config))
 
             logger.debug("Start new layer manager")
             yield run_layers(initial_context)

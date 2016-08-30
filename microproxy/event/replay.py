@@ -9,6 +9,7 @@ from microproxy.utils import get_logger
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
 from microproxy import layer_manager
+from microproxy.interceptor import get_interceptor
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,7 @@ class ReplayHandler(object):
                 port=viewer_context.port,
                 config=self.config,
                 scheme=viewer_context.scheme,
-                interceptor=self.proxy_server.interceptor)
+                interceptor=get_interceptor(self.config))
             yield layer_manager.run_layers(layer_context)
         except Exception as e:
             logger.exception(e)
