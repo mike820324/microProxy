@@ -103,7 +103,7 @@ class Connection(H2Connection):
         self.ongoings_streams[event.stream_id] = (
             HttpResponse(
                 version=self._VERSION,
-                code=headers_dict[":status"],
+                code=str(headers_dict[":status"]),
                 headers=event.headers), [], None)
 
     def handle_data(self, event):
