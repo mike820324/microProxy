@@ -136,11 +136,11 @@ class Http2Layer(object):
         self.src_conn.send_update_settings(new_settings)
 
     def on_src_window_updates(self, stream_id, delta):
-        target_stream_id = self.src_to_dest_ids[stream_id]
+        target_stream_id = self.safe_mapping_id(self.src_to_dest_ids, stream_id)
         self.dest_conn.send_window_updates(target_stream_id, delta)
 
     def on_dest_window_updates(self, stream_id, delta):
-        target_stream_id = self.dest_to_src_ids[stream_id]
+        target_stream_id = self.safe_mapping_id(self.dest_to_src_ids, stream_id)
         self.src_conn.send_window_updates(target_stream_id, delta)
 
     def on_src_priority_updates(self, stream_id, depends_on,
