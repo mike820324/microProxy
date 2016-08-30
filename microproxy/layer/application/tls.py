@@ -5,16 +5,17 @@ from tornado import gen, concurrent
 from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
 from microproxy.protocol import tls
+from microproxy.cert import get_cert_store
 logger = get_logger(__name__)
 
 
 class TlsLayer(object):
     SUPPORT_PROTOCOLS = ("http/1.1", "h2")
 
-    def __init__(self, context, cert_store):
+    def __init__(self, context):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
-        self.cert_store = cert_store
+        self.cert_store = get_cert_store(self.context.config)
         # NOTE: tuple contains (dest_ssl_sock, hostname, alpn_info)
         # Throws exception if failed
         self._alpn_future = concurrent.Future()
