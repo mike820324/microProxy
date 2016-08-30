@@ -10,9 +10,9 @@ logger = get_logger(__name__)
 
 
 class EventManager(object):
-    def __init__(self, config, proxy_server, handler=None, zmq_stream=None):
+    def __init__(self, config, handler=None, zmq_stream=None):
         super(EventManager, self).__init__()
-        self.handler = handler or EventHandler(config, proxy_server)
+        self.handler = handler or EventHandler(config)
         self.zmq_stream = zmq_stream or self._create_stream(config)
         self._start()
 
@@ -38,10 +38,9 @@ class EventManager(object):
 
 
 class EventHandler(object):
-    def __init__(self, config, proxy_server):
+    def __init__(self, config):
         self.config = config
-        self.proxy_server = proxy_server
-        self.handler = ReplayHandler(self.config, self.proxy_server)
+        self.handler = ReplayHandler(self.config)
 
     def handle_event(self, event):
         self.handler.handle(event)
