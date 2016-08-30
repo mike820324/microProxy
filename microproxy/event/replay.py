@@ -19,6 +19,7 @@ class ReplayHandler(object):
         config_dict = dict(config)
         config_dict.update(dict(mode="replay"))
         self.config = Config(config_dict)
+        self.layer_manager = layer_manager
 
     @gen.coroutine
     def handle(self, event):
@@ -41,8 +42,8 @@ class ReplayHandler(object):
                 port=viewer_context.port,
                 config=self.config,
                 scheme=viewer_context.scheme,
-                interceptor=get_interceptor(self.config))
-            yield layer_manager.run_layers(layer_context)
+                interceptor=get_interceptor())
+            yield self.layer_manager.run_layers(layer_context)
         except Exception as e:
             logger.exception(e)
         else:

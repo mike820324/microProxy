@@ -34,7 +34,7 @@ class ProxyServer(tcpserver.TCPServer):
             initial_context = LayerContext(
                 src_stream=stream,
                 config=self.config,
-                interceptor=get_interceptor(self.config))
+                interceptor=get_interceptor())
 
             logger.debug("Start new layer manager")
             yield run_layers(initial_context)

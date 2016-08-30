@@ -62,9 +62,14 @@ class CertStore(object):
 _cert_store = None
 
 
+def init_cert_store(config):
+    global _cert_store
+    _cert_store = CertStore(config)
+
+
 def get_cert_store(config=None):
     global _cert_store
-    if _cert_store:
-        return _cert_store
-    _cert_store = CertStore(config)
+    if not _cert_store:
+        raise ValueError
+
     return _cert_store

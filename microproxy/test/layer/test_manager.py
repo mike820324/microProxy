@@ -3,6 +3,7 @@ from mock import Mock
 from tornado.testing import AsyncTestCase
 
 from microproxy import layer_manager
+from microproxy.cert import init_cert_store
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer, TransparentLayer, TlsLayer
 from microproxy.layer import Http1Layer, Http2Layer
@@ -18,6 +19,7 @@ class LayerManagerTest(AsyncTestCase):
             "certfile": "microproxy/test/test.crt",
             "keyfile": "microproxy/test/test.key"
         }
+        init_cert_store(self.config)
         self.src_stream = Mock()
 
     def test_get_socks_layer(self):

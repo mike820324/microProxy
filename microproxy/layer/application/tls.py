@@ -15,7 +15,7 @@ class TlsLayer(object):
     def __init__(self, context):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
-        self.cert_store = get_cert_store(self.context.config)
+        self.cert_store = get_cert_store()
         # NOTE: tuple contains (dest_ssl_sock, hostname, alpn_info)
         # Throws exception if failed
         self._alpn_future = concurrent.Future()
