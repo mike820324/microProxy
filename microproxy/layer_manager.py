@@ -85,3 +85,7 @@ def _next_layer(current_layer, context):
             return Http2Layer(context)
         else:
             return ForwardLayer(context)
+
+    if isinstance(current_layer, Http1Layer):
+        if context.scheme == "websocket":
+            return ForwardLayer(context)

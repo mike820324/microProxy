@@ -9,7 +9,7 @@ from tornado.netutil import add_accept_handler
 from microproxy.context import LayerContext
 from microproxy.config import Config
 from microproxy.layer import Http1Layer
-from microproxy.exception import SrcStreamClosedError
+from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 
 
 class Http1LayerTest(AsyncTestCase):
@@ -101,10 +101,13 @@ class Http1LayerTest(AsyncTestCase):
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                                   b"Host: localhost",
                                                   b"\r\n"]))
+
+        with self.assertRaises(DestStreamClosedError):
+            yield http_layer_future
+
         self.src_stream.close()
         self.context.src_stream.close()
         self.context.dest_stream.close()
-        yield http_layer_future
 
     @gen_test
     def test_read_resp_from_dest_failed(self):
@@ -113,10 +116,12 @@ class Http1LayerTest(AsyncTestCase):
                                                   b"Host: localhost",
                                                   b"\r\n"]))
         self.dest_stream.close()
+        with self.assertRaises(DestStreamClosedError):
+            yield http_layer_future
+
         self.src_stream.close()
         self.context.src_stream.close()
         self.context.dest_stream.close()
-        yield http_layer_future
 
     @gen_test
     def test_write_resp_to_src_failed(self):
