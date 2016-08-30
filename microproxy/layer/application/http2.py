@@ -20,7 +20,9 @@ class Http2Layer(object):
             on_settings=self.on_src_settings,
             on_window_updates=self.on_src_window_updates,
             on_priority_updates=self.on_src_priority_updates,
-            on_reset=self.on_src_reset)
+            on_reset=self.on_src_reset,
+            on_terminate=self.on_src_terminate,
+            readonly=context.config["mode"] == "replay")
         self.dest_conn = Connection(
             self.context.dest_stream, client_side=True,
             conn_type="destination",
@@ -29,6 +31,7 @@ class Http2Layer(object):
             on_settings=self.on_dest_settings,
             on_window_updates=self.on_dest_window_updates,
             on_priority_updates=self.on_dest_priority_updates,
+            on_terminate=self.on_dest_terminate,
             on_reset=self.on_dest_reset)
         self.streams = dict()
         self.src_to_dest_ids = dict([(0, 0)])
@@ -118,6 +121,10 @@ class Http2Layer(object):
             response=stream.response)
         del self.streams[src_stream_id]
 
+        if self.context.config["mode"] == "replay":
+            self.context.src_stream.close()
+            self.context.dest_stream.close()
+
     def on_src_settings(self, changed_settings):
         new_settings = {
             id: cs.new_value for (id, cs) in changed_settings.iteritems()
@@ -131,11 +138,11 @@ class Http2Layer(object):
         self.src_conn.send_update_settings(new_settings)
 
     def on_src_window_updates(self, stream_id, delta):
-        target_stream_id = self.src_to_dest_ids[stream_id]
+        target_stream_id = self.safe_mapping_id(self.src_to_dest_ids, stream_id)
         self.dest_conn.send_window_updates(target_stream_id, delta)
 
     def on_dest_window_updates(self, stream_id, delta):
-        target_stream_id = self.dest_to_src_ids[stream_id]
+        target_stream_id = self.safe_mapping_id(self.dest_to_src_ids, stream_id)
         self.src_conn.send_window_updates(target_stream_id, delta)
 
     def on_src_priority_updates(self, stream_id, depends_on,
@@ -172,6 +179,14 @@ class Http2Layer(object):
         target_stream_id = self.dest_to_src_ids[stream_id]
         if error_code == 0x8:
             self.src_conn.send_reset(target_stream_id, error_code)
+
+    def on_src_terminate(self):
+        self.dest_conn.send_terminate()
+        self.context.src_stream.close()
+
+    def on_dest_terminate(self):
+        self.src_conn.send_terminate()
+        self.context.dest_stream.close()
 
 
 class Stream(object):
