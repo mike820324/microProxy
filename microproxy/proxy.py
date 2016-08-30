@@ -15,7 +15,7 @@ class ProxyServer(tcpserver.TCPServer):
     def __init__(self, config, **kwargs):
         super(ProxyServer, self).__init__(**kwargs)
         self.config = config
-        self.event_manager = EventManager(config, self)
+        self.event_manager = EventManager(config)
 
     def _handle_connection(self, connection, address):
         try:

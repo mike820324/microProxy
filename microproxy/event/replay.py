@@ -5,7 +5,7 @@ from tornado import gen
 import h11
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
-from microproxy.utils import get_logger
+from microproxy.utils import get_logger, curr_loop
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
 from microproxy import layer_manager
@@ -15,11 +15,10 @@ logger = get_logger(__name__)
 
 
 class ReplayHandler(object):
-    def __init__(self, config, proxy_server):
+    def __init__(self, config):
         config_dict = dict(config)
         config_dict.update(dict(mode="replay"))
         self.config = Config(config_dict)
-        self.proxy_server = proxy_server
 
     @gen.coroutine
     def handle(self, event):
@@ -51,8 +50,9 @@ class ReplayHandler(object):
 
     def _create_streams(self):
         read_fd, write_fd = os.pipe()
-        write_stream = PipeIOStream(write_fd, io_loop=self.proxy_server.io_loop)
-        read_stream = PipeIOStream(read_fd, io_loop=self.proxy_server.io_loop)
+        io_loop = curr_loop()
+        write_stream = PipeIOStream(write_fd, io_loop=io_loop)
+        read_stream = PipeIOStream(read_fd, io_loop=io_loop)
         return (write_stream, read_stream)
 
     def _send_http1_request(self, stream, context):
