@@ -3,12 +3,12 @@ from tornado.iostream import PipeIOStream
 from tornado import gen
 
 import h11
-
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
 from microproxy.utils import get_logger
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
+from microproxy import layer_manager
 
 logger = get_logger(__name__)
 
@@ -42,8 +42,7 @@ class ReplayHandler(object):
                 config=self.config,
                 scheme=viewer_context.scheme,
                 interceptor=self.proxy_server.interceptor)
-            yield self.proxy_server.layer_manager.run_layers(
-                layer_context)
+            yield layer_manager.run_layers(layer_context)
         except Exception as e:
             logger.exception(e)
         else:
