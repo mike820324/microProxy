@@ -67,7 +67,7 @@ class Connection(H11Connection):
                         self.on_response(HttpResponse(
                             version=self._parse_version(self._resp),
                             reason=self._resp.reason,
-                            code=self._resp.status_code,
+                            code=str(self._resp.status_code),
                             headers=self._resp.headers,
                             body=b"".join(self._body_chunks)))
                     self._req = None
@@ -104,15 +104,17 @@ class Connection(H11Connection):
         self.send(h11.Request(
             method=request.method,
             target=request.path,
-            headers=request.headers.get_list()))
+            headers=request.headers,
+            keep_case=True))
         if request.body:
             self.send(h11.Data(data=request.body))
         self.send(h11.EndOfMessage())
 
     def send_response(self, response):
         self.send(h11.Response(
-            status_code=response.code,
-            headers=response.headers.get_list(),
+            status_code=int(response.code),
+            reason=response.reason,
+            headers=response.headers,
             keep_case=True))
         if response.body:
             self.send(h11.Data(data=response.body))

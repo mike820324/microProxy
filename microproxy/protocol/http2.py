@@ -152,7 +152,7 @@ class Connection(H2Connection):
     def send_request(self, stream_id, request, **kwargs):
         logger.debug("request sent to {0}: {1}".format(
             self.conn_type, dict(stream_id=stream_id, request=dict(
-                headers=request.headers.get_list()))))
+                headers=request.headers))))
         self.send_headers(
             stream_id, request.headers, stream_ended=not bool(request.body), **kwargs)
         if request.body:
@@ -161,7 +161,7 @@ class Connection(H2Connection):
     def send_response(self, stream_id, response):
         logger.debug("response sent to {0}: {1}".format(
             self.conn_type, dict(stream_id=stream_id, response=dict(
-                headers=response.headers.get_list()))))
+                headers=response.headers))))
         self.send_headers(
             stream_id, response.headers,
             stream_ended=not bool(response.body))
@@ -173,7 +173,7 @@ class Connection(H2Connection):
 
     def send_headers(self, stream_id, headers, stream_ended=False, **kwargs):
         try:
-            self._send_headers(stream_id, headers.get_list(), end_stream=stream_ended, **kwargs)
+            self._send_headers(stream_id, headers, end_stream=stream_ended, **kwargs)
             self.flush()
         except ProtocolError:
             logger.error("send headers failed on stream id: {0}".format(stream_id))
@@ -227,7 +227,7 @@ class Connection(H2Connection):
         self.push_stream(
             stream_id,
             promised_stream_id,
-            request.headers.get_list())
+            request.headers)
         self.flush()
 
     def send_reset(self, stream_id, error_code):
