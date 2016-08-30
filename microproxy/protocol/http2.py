@@ -3,7 +3,7 @@ from h2.events import (
     ResponseReceived, RequestReceived, DataReceived, StreamEnded,
     StreamReset, RemoteSettingsChanged, WindowUpdated,
     PushedStreamReceived, PriorityUpdated,
-    SettingsAcknowledged
+    SettingsAcknowledged, ConnectionTerminated
 )
 from h2.exceptions import ProtocolError, NoSuchStreamError
 
@@ -25,7 +25,7 @@ class Connection(H2Connection):
                  on_request=None, on_response=None, on_push=None,
                  on_settings=None, on_window_updates=None,
                  on_priority_updates=None, on_reset=None,
-                 readonly=False, **kwargs):
+                 on_terminate=None, readonly=False, **kwargs):
         super(Connection, self).__init__(client_side=client_side, **kwargs)
         self.stream = stream
         self.on_request = on_request
@@ -35,6 +35,7 @@ class Connection(H2Connection):
         self.on_priority_updates = on_priority_updates
         self.on_reset = on_reset
         self.on_window_updates = on_window_updates
+        self.on_terminate = on_terminate
         self.conn_type = conn_type or self._DEFAULT_TYPES[client_side]
         self.readonly = readonly
         self.ongoings_streams = dict()
@@ -80,6 +81,8 @@ class Connection(H2Connection):
                 self.handle_pushed_stream(event)
             elif isinstance(event, PriorityUpdated):
                 self.handle_priority_updates(event)
+            elif isinstance(event, ConnectionTerminated):
+                self.on_terminate()
             elif isinstance(event, SettingsAcknowledged):
                 # Note: nothing need to do with this event
                 pass
@@ -231,4 +234,8 @@ class Connection(H2Connection):
         logger.debug("reset sent to {0}: {1}".format(
             self.conn_type, locals()))
         self.reset_stream(stream_id, error_code)
+        self.flush()
+
+    def send_terminate(self):
+        self.close_connection()
         self.flush()
