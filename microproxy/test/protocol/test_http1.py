@@ -1,5 +1,6 @@
 import os
 import h11
+import mock
 from tornado.testing import AsyncTestCase, gen_test
 from tornado.iostream import PipeIOStream
 
@@ -65,3 +66,14 @@ class ConnectionTest(AsyncTestCase):
         self.assertEqual(self.response.reason, "OK")
         self.assertEqual(self.response.version, "HTTP/1.1")
         self.assertEqual(self.response.body, b"A")
+
+    def test_parse_version(self):
+        self.assertEqual(
+            Connection(h11.CLIENT, None)._parse_version(None),
+            "HTTP/1.1")
+
+        http_content = mock.Mock()
+        http_content.http_version = "1.1"
+        self.assertEqual(
+            Connection(h11.CLIENT, None)._parse_version(http_content),
+            "HTTP/1.1")

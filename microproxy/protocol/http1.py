@@ -5,6 +5,7 @@ from h11 import (
     ConnectionClosed)
 
 from microproxy.context import HttpRequest, HttpResponse
+from microproxy.exception import ProtocolError
 from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
@@ -38,8 +39,9 @@ class Connection(H11Connection):
                 event = self.next_event()
                 self._log_event(event)
                 if isinstance(event, Request):
-                    if self._req:
-                        raise RuntimeError("http1 connection had received request")
+                    if self._req:  # pragma: no cover
+                        # NOTE: guess that never happen because h11 should help us handle http state
+                        raise ProtocolError("http1 connection had received request")
                     self._req = event
                 elif isinstance(event, InformationalResponse):
                     self.on_info_response(HttpResponse(
@@ -53,8 +55,9 @@ class Connection(H11Connection):
                     self._body_chunks.append(bytes(event.data))
                 elif isinstance(event, EndOfMessage):
                     if self.our_role is h11.SERVER:
-                        if not self._req:
-                            raise RuntimeError("EndOfMessage received, but not request found")
+                        if not self._req:  # pragma: no cover
+                            # NOTE: guess that never happen because h11 should help us handle http state
+                            raise ProtocolError("EndOfMessage received, but not request found")
                         self.on_request(HttpRequest(
                             version=self._parse_version(self._req),
                             method=self._req.method,
@@ -62,27 +65,25 @@ class Connection(H11Connection):
                             headers=self._req.headers,
                             body=b"".join(self._body_chunks)))
                     else:
-                        if not self._resp:
-                            raise RuntimeError("EndOfMessage received, but not response found")
+                        if not self._resp:  # pragma: no cover
+                            # NOTE: guess that never happen because h11 should help us handle http state
+                            raise ProtocolError("EndOfMessage received, but not response found")
                         self.on_response(HttpResponse(
                             version=self._parse_version(self._resp),
                             reason=self._resp.reason,
                             code=str(self._resp.status_code),
                             headers=self._resp.headers,
                             body=b"".join(self._body_chunks)))
-                    self._req = None
-                    self._resp = None
-                    self._body_chunks = []
+                    self._cleanup_after_received()
                 elif isinstance(event, ConnectionClosed):
-                    self.io_stream.close()
-                    break
+                    raise ProtocolError("Should closed the connection")
                 elif event is h11.NEED_DATA:
                     break
-                elif event is h11.PAUSED:
+                elif event is h11.PAUSED:  # pragma: no cover
                     break
-                else:
+                else:  # pragma: no cover
                     logger.warning("event recevied was not handled from {0}: {1}".format(self.conn_type, repr(event)))
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             if raise_exception:
                 raise e
             logger.error("Exception on {0}".format(self.conn_type))
@@ -99,6 +100,13 @@ class Connection(H11Connection):
             return "HTTP/{0}".format(http_content.http_version)
         except:
             return "HTTP/1.1"
+
+    def _cleanup_after_received(self):
+        self._req = None
+        self._resp = None
+        self._body_chunks = []
+        if self.our_state is h11.MUST_CLOSE:
+            self.stream.close()
 
     def send_request(self, request):
         self.send(h11.Request(
