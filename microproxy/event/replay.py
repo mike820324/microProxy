@@ -3,22 +3,23 @@ from tornado.iostream import PipeIOStream
 from tornado import gen
 
 import h11
-
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
-from microproxy.utils import get_logger
+from microproxy.utils import get_logger, curr_loop
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.config import Config
+from microproxy import layer_manager
+from microproxy.interceptor import get_interceptor
 
 logger = get_logger(__name__)
 
 
 class ReplayHandler(object):
-    def __init__(self, config, proxy_server):
+    def __init__(self, config):
         config_dict = dict(config)
         config_dict.update(dict(mode="replay"))
         self.config = Config(config_dict)
-        self.proxy_server = proxy_server
+        self.layer_manager = layer_manager
 
     @gen.coroutine
     def handle(self, event):
@@ -41,9 +42,8 @@ class ReplayHandler(object):
                 port=viewer_context.port,
                 config=self.config,
                 scheme=viewer_context.scheme,
-                interceptor=self.proxy_server.interceptor)
-            yield self.proxy_server.layer_manager.run_layers(
-                layer_context)
+                interceptor=get_interceptor())
+            yield self.layer_manager.run_layers(layer_context)
         except Exception as e:
             logger.exception(e)
         else:
@@ -51,8 +51,9 @@ class ReplayHandler(object):
 
     def _create_streams(self):
         read_fd, write_fd = os.pipe()
-        write_stream = PipeIOStream(write_fd, io_loop=self.proxy_server.io_loop)
-        read_stream = PipeIOStream(read_fd, io_loop=self.proxy_server.io_loop)
+        io_loop = curr_loop()
+        write_stream = PipeIOStream(write_fd, io_loop=io_loop)
+        read_stream = PipeIOStream(read_fd, io_loop=io_loop)
         return (write_stream, read_stream)
 
     def _send_http1_request(self, stream, context):

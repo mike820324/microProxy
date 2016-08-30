@@ -7,17 +7,17 @@ logger = get_logger(__name__)
 
 class CertStore(object):
     def __init__(self, config):
-        self.config = config
-        self.ca_root, self.private_key = self._get_root()
+        self.ca_root, self.private_key = self._get_root(
+            config["certfile"], config["keyfile"])
         self.certs_cache = dict()
 
-    def _get_root(self):
-        root_ca_file = self.config["certfile"]
+    def _get_root(self, certfile, keyfile):
+        root_ca_file = certfile
         with open(root_ca_file, "rb") as fp:
             _buffer = fp.read()
         ca_root = crypto.load_certificate(crypto.FILETYPE_PEM, _buffer)
 
-        private_key_file = self.config["keyfile"]
+        private_key_file = keyfile
         with open(private_key_file, "rb") as fp:
             _buffer = fp.read()
         private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, _buffer)
@@ -58,3 +58,18 @@ class CertStore(object):
             return self.certs_cache[common_name]
         except KeyError:
             return None
+
+_cert_store = None
+
+
+def init_cert_store(config):
+    global _cert_store
+    _cert_store = CertStore(config)
+
+
+def get_cert_store(config=None):
+    global _cert_store
+    if not _cert_store:
+        raise ValueError
+
+    return _cert_store

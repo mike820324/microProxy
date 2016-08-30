@@ -10,7 +10,8 @@ class EventManagerTest(unittest.TestCase):
         self.zmq_stream = mock.Mock()
 
         self.event_manager = EventManager(
-            None, None, handler=self.handler, zmq_stream=self.zmq_stream)
+            None, handler=self.handler, zmq_stream=self.zmq_stream)
+        self.event_manager.start()
 
     def test_register_stream_call_invoked(self):
         self.zmq_stream.on_recv.assert_called_with(self.event_manager._on_recv)
