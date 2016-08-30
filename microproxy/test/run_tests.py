@@ -11,7 +11,8 @@ TEST_MODULES = [
     "microproxy.test.viewer.test_console",
     "microproxy.test.event.test_manager",
     "microproxy.test.event.test_client",
-    "microproxy.test.protocol.test_http1"
+    "microproxy.test.protocol.test_http1",
+    "microproxy.test.protocol.test_http2"
 ]
 
 
