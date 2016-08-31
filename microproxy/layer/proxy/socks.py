@@ -42,6 +42,7 @@ class SocksLayer(ProxyLayer):
                     raise error
 
                 break
+        self.context.src_stream.pause()
         raise gen.Return(self.context)
 
     def handle_greeting_request(self, event):
