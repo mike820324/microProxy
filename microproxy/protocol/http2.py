@@ -7,7 +7,7 @@ from h2.events import (
 )
 from h2.exceptions import ProtocolError, NoSuchStreamError
 
-from tornado import concurrent
+from tornado import concurrent, gen
 
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.utils import get_logger
@@ -25,20 +25,27 @@ class Connection(H2Connection):
                  on_request=None, on_response=None, on_push=None,
                  on_settings=None, on_window_updates=None,
                  on_priority_updates=None, on_reset=None,
-                 on_terminate=None, readonly=False, **kwargs):
+                 on_terminate=None, readonly=False,
+                 on_unhandled=None, **kwargs):
         super(Connection, self).__init__(client_side=client_side, **kwargs)
+        on_unhandled = on_unhandled or self._default_on_unhandled
         self.stream = stream
-        self.on_request = on_request
-        self.on_response = on_response
-        self.on_push = on_push
-        self.on_settings = on_settings
-        self.on_priority_updates = on_priority_updates
-        self.on_reset = on_reset
-        self.on_window_updates = on_window_updates
-        self.on_terminate = on_terminate
+        self.on_request = on_request or on_unhandled
+        self.on_response = on_response or on_unhandled
+        self.on_push = on_push or on_unhandled
+        self.on_settings = on_settings or on_unhandled
+        self.on_priority_updates = on_priority_updates or on_unhandled
+        self.on_reset = on_reset or on_unhandled
+        self.on_window_updates = on_window_updates or on_unhandled
+        self.on_terminate = on_terminate or on_unhandled
         self.conn_type = conn_type or self._DEFAULT_TYPES[client_side]
         self.readonly = readonly
         self.ongoings_streams = dict()
+        self.unhandled_event = []
+
+    def initiate_connection(self):
+        super(Connection, self).initiate_connection()
+        self.flush()
 
     def flush(self):
         if not self.readonly:
@@ -50,12 +57,18 @@ class Connection(H2Connection):
             future.set_result(None)
             return future
 
+    @gen.coroutine
+    def read_bytes(self):
+        data = yield self.stream.read_bytes(
+            self.stream.max_buffer_size, partial=True)
+        self.receive(data)
+
     def receive(self, data):
         try:
             logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
             events = self.receive_data(data)
             self.handle_events(events)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             logger.error("Unhandled exception occured at {0}".format(self.conn_type))
             logger.exception(e)
             self.stream.closed()
@@ -239,3 +252,7 @@ class Connection(H2Connection):
     def send_terminate(self):
         self.close_connection()
         self.flush()
+
+    def _default_on_unhandled(self, *args):  # pragma: no cover
+        logger.warn("unhandled event: {0}".format(args))
+        self.unhandled_event.append(args)
