@@ -16,6 +16,9 @@ class ConnectionTest(AsyncTestCase):
         self.request = None
         self.response = None
         self.settings = None
+        self.window_updates = None
+        self.priority_updates = None
+        self.push = None
 
     @gen_test
     def asyncSetUp(self):
@@ -36,13 +39,28 @@ class ConnectionTest(AsyncTestCase):
         listener.close()
 
     def on_request(self, stream_id, request, priority_updated):
-        self.request = request
+        self.request = (stream_id, request)
 
     def on_response(self, stream_id, response):
-        self.response = response
+        self.response = (stream_id, response)
 
     def on_settings(self, settings):
         self.settings = settings
+
+    def on_window_updates(self, stream_id, delta):
+        self.window_updates = (stream_id, delta)
+
+    def on_priority_updates(self, stream_id, depends_on,
+                            weight, exclusive):
+        self.priority_updates = dict(
+            stream_id=stream_id, depends_on=depends_on,
+            weight=weight, exclusive=exclusive)
+
+    def on_push(self, pushed_stream_id, parent_stream_id, request):
+        self.push = dict(
+            pushed_stream_id=pushed_stream_id,
+            parent_stream_id=parent_stream_id,
+            request=request)
 
     @gen_test
     def test_on_request(self):
@@ -59,19 +77,19 @@ class ConnectionTest(AsyncTestCase):
             self.server_stream, client_side=False, on_request=self.on_request,
             on_settings=self.on_settings)
         server_conn.initiate_connection()
-        data = yield self.server_stream.read_bytes(
-            self.server_stream.max_buffer_size, partial=True)
-        server_conn.receive(data)
+        yield server_conn.read_bytes()
 
         self.assertIsNotNone(self.request)
-        self.assertEqual(self.request.headers,
+        _, request = self.request
+        self.assertEqual(request.headers,
                          HttpHeaders([
                              (":method", "GET"),
                              (":path", "/"),
                              ("aaa", "bbb")]))
-        self.assertEqual(self.request.method, "GET")
-        self.assertEqual(self.request.path, "/")
-        self.assertEqual(self.request.version, "HTTP/2")
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.path, "/")
+        self.assertEqual(request.version, "HTTP/2")
+
         self.client_stream.close()
         self.server_stream.close()
 
@@ -79,7 +97,89 @@ class ConnectionTest(AsyncTestCase):
     def test_on_response(self):
         client_conn = Connection(
             self.client_stream, client_side=True, on_response=self.on_response,
-            on_settings=mock.Mock())
+            on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+        client_conn.send_request(
+            client_conn.get_next_available_stream_id(),
+            HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/"),
+                ("aaa", "bbb")]))
+
+        server_conn = Connection(
+            self.server_stream, client_side=False,
+            on_request=self.on_request, on_unhandled=mock.Mock())
+        server_conn.initiate_connection()
+        yield server_conn.read_bytes()
+        server_conn.send_response(
+            self.request[0],
+            HttpResponse(
+                headers=[(":status", "200"),
+                         ("aaa", "bbb")],
+                body=b"ccc"))
+
+        yield client_conn.read_bytes()
+
+        self.assertIsNotNone(self.response)
+        _, response = self.response
+        self.assertEqual(response.headers,
+                         HttpHeaders([
+                             (":status", "200"),
+                             ("aaa", "bbb")]))
+        self.assertEqual(response.code, "200")
+        self.assertEqual(response.version, "HTTP/2")
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_on_settings(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_settings=self.on_settings)
+        server_conn.initiate_connection()
+        yield server_conn.read_bytes()
+
+        # NOTE: h11 initiate_connection will send default settings
+        self.assertIsNotNone(self.settings)
+
+        self.settings = None
+        client_conn.send_update_settings({
+            4: 11111, 5: 22222})
+
+        yield server_conn.read_bytes()
+        self.assertIsNotNone(self.settings)
+        new_settings = {id: cs.new_value for (id, cs) in self.settings.iteritems()}
+        self.assertEqual(new_settings, {4: 11111, 5: 22222})
+
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_on_window_updates(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+        client_conn.send_window_updates(
+            0, 100)
+
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_settings=self.on_settings,
+            on_window_updates=self.on_window_updates)
+        server_conn.initiate_connection()
+        yield server_conn.read_bytes()
+        self.assertIsNotNone(self.window_updates)
+        self.assertEqual(self.window_updates, (0, 100))
+
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_on_priority_updates(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_unhandled=mock.Mock())
         client_conn.initiate_connection()
         stream_id = client_conn.get_next_available_stream_id()
         client_conn.send_request(
@@ -88,31 +188,57 @@ class ConnectionTest(AsyncTestCase):
                 (":method", "GET"),
                 (":path", "/"),
                 ("aaa", "bbb")]))
+        client_conn.send_priority_updates(
+            stream_id, 0, 10, False)
 
         server_conn = Connection(
             self.server_stream, client_side=False,
-            on_request=mock.Mock(), on_settings=mock.Mock())
+            on_priority_updates=self.on_priority_updates,
+            on_unhandled=mock.Mock())
         server_conn.initiate_connection()
-        data = yield self.server_stream.read_bytes(
-            self.server_stream.max_buffer_size, partial=True)
-        server_conn.receive(data)
-        server_conn.send_response(
+        yield server_conn.read_bytes()
+        self.assertIsNotNone(self.priority_updates)
+        self.assertEqual(
+            self.priority_updates,
+            dict(stream_id=stream_id, depends_on=0, weight=10, exclusive=False))
+
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_on_pushed_stream(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_push=self.on_push,
+            on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+        client_conn.send_request(
+            client_conn.get_next_available_stream_id(),
+            HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/")]))
+
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_request=self.on_request,
+            on_unhandled=mock.Mock())
+        server_conn.initiate_connection()
+        yield server_conn.read_bytes()
+        stream_id, _ = self.request
+        server_conn.send_pushed_stream(
             stream_id,
-            HttpResponse(
-                headers=[(":status", "200"),
-                         ("aaa", "bbb")],
-                body=b"ccc"))
+            2,
+            HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/resource")]))
 
-        data = yield self.client_stream.read_bytes(
-            self.client_stream.max_buffer_size, partial=True)
-        client_conn.receive(data)
+        yield client_conn.read_bytes()
+        self.assertIsNotNone(self.push)
+        self.assertEqual(self.push["parent_stream_id"], 1)
+        self.assertEqual(self.push["pushed_stream_id"], 2)
+        self.assertEqual(
+            self.push["request"].headers,
+            HttpHeaders([
+                (":method", "GET"),
+                (":path", "/resource")]))
 
-        self.assertIsNotNone(self.response)
-        self.assertEqual(self.response.headers,
-                         HttpHeaders([
-                             (":status", "200"),
-                             ("aaa", "bbb")]))
-        self.assertEqual(self.response.code, "200")
-        self.assertEqual(self.response.version, "HTTP/2")
         self.client_stream.close()
         self.server_stream.close()
