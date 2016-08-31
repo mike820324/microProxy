@@ -3,6 +3,7 @@ import tornado.testing
 
 TEST_MODULES = [
     "microproxy.test.test_config",
+    "microproxy.test.test_commandline",
     "microproxy.test.test_iostream",
     "microproxy.test.context.test_http",
     "microproxy.test.layer.test_manager",

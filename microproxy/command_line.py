@@ -172,7 +172,7 @@ def create_console_viewer_options():
     return console_viewer_option_info
 
 
-def main():
+def main():  # pragma: no cover
     config_field_info = create_options()
     config = parse_config(config_field_info)
 
