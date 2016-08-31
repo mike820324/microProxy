@@ -4,7 +4,7 @@ import unittest
 from microproxy.event import EventClient
 
 
-class EventClientTest(unittest.TestCase):
+class TestEventClient(unittest.TestCase):
     def setUp(self):
         self.zmq_socket = mock.Mock()
         self.event_client = EventClient(None, zmq_socket=self.zmq_socket)

@@ -9,9 +9,9 @@ from microproxy.layer import SocksLayer, TransparentLayer, TlsLayer
 from microproxy.layer import Http1Layer, Http2Layer
 
 
-class LayerManagerTest(AsyncTestCase):
+class TestLayerManager(AsyncTestCase):
     def setUp(self):
-        super(LayerManagerTest, self).setUp()
+        super(TestLayerManager, self).setUp()
         self.config = {
             "mode": "socks",
             "http_port": [],

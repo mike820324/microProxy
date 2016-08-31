@@ -2,7 +2,7 @@ import unittest
 from microproxy.context import HttpRequest, HttpResponse
 
 
-class HttpTest(unittest.TestCase):
+class TestHttp(unittest.TestCase):
 
     def test_req_serialize(self):
         http_message = HttpRequest(version="1.1",

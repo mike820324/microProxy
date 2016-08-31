@@ -9,9 +9,9 @@ from microproxy.context import LayerContext
 from microproxy.layer import ForwardLayer
 
 
-class ForwardLayerTest(AsyncTestCase):
+class TestForwardLayer(AsyncTestCase):
     def setUp(self):
-        super(ForwardLayerTest, self).setUp()
+        super(TestForwardLayer, self).setUp()
         self.asyncSetUp()
 
     @gen_test
