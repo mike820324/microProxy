@@ -12,19 +12,27 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
+def safe_resume_stream(src_stream):
+    if isinstance(src_stream, MicroProxyIOStream) and src_stream.is_pause:
+        src_stream.resume()
+
+
 class MicroProxyIOStream(IOStream):
     def __init__(self, sock, **kwargs):
         super(MicroProxyIOStream, self).__init__(sock, **kwargs)
+        self.is_pause = False
 
     def pause(self):
         self.socket.setblocking(True)
         self._state = None
         self.io_loop.remove_handler(self.socket)
+        self.is_pause = True
 
     def resume(self):
         self.socket.setblocking(False)
         self._add_io_state(ioloop.IOLoop.READ)
         self._add_io_state(ioloop.IOLoop.WRITE)
+        self.is_pause = False
 
     def detach(self):
         if (self._read_callback or self._read_future or

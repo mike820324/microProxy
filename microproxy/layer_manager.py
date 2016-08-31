@@ -1,8 +1,9 @@
 from tornado import gen
 from tornado import iostream
 
-from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
+from microproxy.iostream import safe_resume_stream
 from microproxy.utils import get_logger
+from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
 from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 
@@ -60,6 +61,7 @@ def _next_layer(current_layer, context):
     https_ports = [443] + context.config["https_port"]
 
     if isinstance(current_layer, (SocksLayer, TransparentLayer)):
+        safe_resume_stream(context.src_stream)
         if context.port in http_ports:
             context.scheme = "http"
             return Http1Layer(context)
