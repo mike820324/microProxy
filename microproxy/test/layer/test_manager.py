@@ -164,8 +164,12 @@ class TestLayerManager(unittest.TestCase):
         layer_manager._handle_layer_error(iostream.StreamClosedError("stream closed"), context)
         context.src_stream.close.assert_called_once_with()
 
+    def test_handle_unhandled_layer_error(self):
         context = LayerContext(
             src_stream=Mock(), config=self.config, port=443, scheme="h2")
-        with self.assertRaises(ValueError):
-            layer_manager._handle_layer_error(ValueError("stream closed"), context)
+        try:
+            raise ValueError("stream closed")
+        except ValueError as e:
+            with self.assertRaises(ValueError):
+                layer_manager._handle_layer_error(e, context)
         context.src_stream.close.assert_not_called()

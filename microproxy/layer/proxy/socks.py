@@ -98,7 +98,7 @@ class SocksLayer(ProxyLayer):
                 socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
                 event.atyp, event.addr, event.port)
 
-            error = DestNotConnectedError(error)
+            error = DestNotConnectedError((host, port))
             return (error, response_event)
 
         if isinstance(error, iostream.StreamClosedError):
@@ -136,17 +136,15 @@ class SocksLayer(ProxyLayer):
                         socks_version, RESP_STATUS["GENRAL_FAILURE"],
                         event.atyp, event.addr, event.port)
 
-                error = DestNotConnectedError(e)
+                error = DestNotConnectedError((host, port))
             else:
                 # NOTE: if real_error is None, it imply the source stream is closed.
-                error = SrcStreamClosedError(e)
+                error = SrcStreamClosedError(self)
                 response_event = None
 
             if dest_stream:
                 dest_stream.close()
             return (error, response_event)
-
-
         # NOTE: Unhandle exception type, raise it
         else:
             raise error
