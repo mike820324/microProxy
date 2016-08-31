@@ -1,21 +1,45 @@
 from __future__ import absolute_import, division, print_function, with_statement
+from tornado.concurrent import Future
 from tornado import gen
 from tornado import netutil
 from tornado.iostream import IOStream, SSLIOStream
-from microproxy.iostream import MicroProxyIOStream
 from tornado.stack_context import NullContext
 from tornado.testing import AsyncTestCase, bind_unused_port, gen_test
 from tornado.test.util import unittest, skipIfNonUnix, refusing_port
+
+from microproxy.iostream import MicroProxyIOStream
+from microproxy.protocol.tls import create_src_sslcontext
+from OpenSSL import crypto
+
 import errno
 import os
 import platform
 import socket
+import ssl
 import sys
 
 try:
     from unittest import mock  # type: ignore
 except ImportError:
     import mock  # type: ignore
+
+
+def _server_ssl_options():
+    cert_file = "microproxy/test/test.crt"
+    private_key_file = "microproxy/test/test.key"
+
+    with open(cert_file, "rb") as fp:
+        _buffer = fp.read()
+    ca_root = crypto.load_certificate(crypto.FILETYPE_PEM, _buffer)
+
+    with open(private_key_file, "rb") as fp:
+        _buffer = fp.read()
+    private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, _buffer)
+    return create_src_sslcontext(cert=ca_root, priv_key=private_key)
+    return dict(
+        certfile=os.path.join(os.path.dirname(__file__), 'test.crt'),
+        keyfile=os.path.join(os.path.dirname(__file__), 'test.key'),
+    )
 
 
 class TestIOStreamMixin(object):
@@ -645,3 +669,106 @@ class TestIOStream(TestIOStreamMixin, AsyncTestCase):
 
     def _make_client_iostream(self, connection, **kwargs):
         return IOStream(connection, **kwargs)
+
+
+class TestIOStreamStartTLS(AsyncTestCase):
+    def setUp(self):
+        try:
+            super(TestIOStreamStartTLS, self).setUp()
+            self.listener, self.port = bind_unused_port()
+            self.server_stream = None
+            self.server_accepted = Future()
+            netutil.add_accept_handler(self.listener, self.accept)
+            self.client_stream = IOStream(socket.socket())
+            self.io_loop.add_future(self.client_stream.connect(
+                ('127.0.0.1', self.port)), self.stop)
+            self.wait()
+            self.io_loop.add_future(self.server_accepted, self.stop)
+            self.wait()
+        except Exception as e:
+            print(e)
+            raise
+
+    def tearDown(self):
+        if self.server_stream is not None:
+            self.server_stream.close()
+        if self.client_stream is not None:
+            self.client_stream.close()
+        self.listener.close()
+        super(TestIOStreamStartTLS, self).tearDown()
+
+    def accept(self, connection, address):
+        if self.server_stream is not None:
+            self.fail("should only get one connection")
+        self.server_stream = MicroProxyIOStream(connection)
+        self.server_accepted.set_result(None)
+
+    @gen.coroutine
+    def client_send_line(self, line):
+        self.client_stream.write(line)
+        recv_line = yield self.server_stream.read_until(b"\r\n")
+        self.assertEqual(line, recv_line)
+
+    @gen.coroutine
+    def server_send_line(self, line):
+        self.server_stream.write(line)
+        recv_line = yield self.client_stream.read_until(b"\r\n")
+        self.assertEqual(line, recv_line)
+
+    def client_start_tls(self, ssl_options=None, server_hostname=None):
+        client_stream = self.client_stream
+        self.client_stream = None
+        return client_stream.start_tls(False, ssl_options, server_hostname)
+
+    def server_start_tls(self, ssl_options=None):
+        server_stream = self.server_stream
+        self.server_stream = None
+        return server_stream.start_tls(True, ssl_options)
+
+    @gen_test
+    def test_start_tls_smtp(self):
+        # This flow is simplified from RFC 3207 section 5.
+        # We don't really need all of this, but it helps to make sure
+        # that after realistic back-and-forth traffic the buffers end up
+        # in a sane state.
+        yield self.server_send_line(b"220 mail.example.com ready\r\n")
+        yield self.client_send_line(b"EHLO mail.example.com\r\n")
+        yield self.server_send_line(b"250-mail.example.com welcome\r\n")
+        yield self.server_send_line(b"250 STARTTLS\r\n")
+        yield self.client_send_line(b"STARTTLS\r\n")
+        yield self.server_send_line(b"220 Go ahead\r\n")
+        client_future = self.client_start_tls(dict(cert_reqs=ssl.CERT_NONE))
+
+        server_future = self.server_start_tls(_server_ssl_options())
+        self.client_stream = yield client_future
+        self.server_stream = yield server_future
+        self.assertTrue(isinstance(self.client_stream, SSLIOStream))
+        self.assertTrue(isinstance(self.server_stream, SSLIOStream))
+        yield self.client_send_line(b"EHLO mail.example.com\r\n")
+        yield self.server_send_line(b"250 mail.example.com welcome\r\n")
+
+    @gen_test
+    def test_handshake_fail(self):
+        server_future = self.server_start_tls(_server_ssl_options())
+        # Certificates are verified with the default configuration.
+        client_future = self.client_start_tls(server_hostname="localhost")
+        with self.assertRaises(ssl.SSLError):
+            yield client_future
+        with self.assertRaises((ssl.SSLError, socket.error)):
+            yield server_future
+
+    @gen_test
+    def test_check_hostname(self):
+        # Test that server_hostname parameter to start_tls is being used.
+        # The check_hostname functionality is only available in python 2.7 and
+        # up and in python 3.4 and up.
+        server_future = self.server_start_tls(_server_ssl_options())
+        client_future = self.client_start_tls(
+            ssl.create_default_context(),
+            server_hostname=b'127.0.0.1')
+        with self.assertRaises(ssl.SSLError):
+            # The client fails to connect with an SSL error.
+            yield client_future
+        with self.assertRaises(Exception):
+            # The server fails to connect, but the exact error is unspecified.
+            yield server_future
