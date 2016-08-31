@@ -43,7 +43,9 @@ class ReplayHandler(object):
                 config=self.config,
                 scheme=viewer_context.scheme,
                 interceptor=get_interceptor())
-            yield self.layer_manager.run_layers(layer_context)
+
+            initial_layer = self.layer_manager.get_first_layer(layer_context)
+            yield self.layer_manager.run_layers(initial_layer, layer_context)
         except Exception as e:
             logger.exception(e)
         else:
