@@ -254,10 +254,12 @@ class Connection(H2Connection):
         self.flush()
 
     def send_terminate(self, **kwargs):
-        logger.debug("terminate sent to {0}: {1}".format(
-            self.conn_type, kwargs))
-        self.close_connection(**kwargs)
-        self.flush()
+        if not self.stream.closed():
+            # NOTE: there is no need to send terimate to a closed connection
+            logger.debug("terminate sent to {0}: {1}".format(
+                self.conn_type, kwargs))
+            self.close_connection(**kwargs)
+            self.flush()
 
     def _default_on_unhandled(self, *args):  # pragma: no cover
         logger.warn("unhandled event: {0}".format(args))

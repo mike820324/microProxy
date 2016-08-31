@@ -1,20 +1,25 @@
-from tornado import iostream
-
-
 class ProtocolError(Exception):
     pass
 
 
-class SrcStreamClosedError(iostream.StreamClosedError):
+class StreamClosedError(Exception):
+    def __init__(self, layer, detail="closed"):
+        super(StreamClosedError, self).__init__(
+            "Stream is closed on {0}: {1}".format(type(layer).__name__, detail))
+
+
+class SrcStreamClosedError(StreamClosedError):
     pass
 
 
-class DestNotConnectedError(iostream.StreamClosedError):
+class DestStreamClosedError(StreamClosedError):
     pass
 
 
-class DestStreamClosedError(iostream.StreamClosedError):
-    pass
+class DestNotConnectedError(Exception):
+    def __init__(self, addr):
+        super(DestNotConnectedError, self).__init__(
+            "Address: {0}".format(addr))
 
 
 class Http2Error(Exception):

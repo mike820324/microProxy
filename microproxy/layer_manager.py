@@ -35,7 +35,6 @@ def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
             current_layer = _next_layer(current_layer, current_context)
         except Exception as error:
             _handle_layer_error(error, current_context)
-            raise
 
     raise gen.Return(None)
 
@@ -50,12 +49,12 @@ def _handle_layer_error(error, layer_context):
         return
 
     if isinstance(error, DestStreamClosedError):
-        logger.error("destination stream closed unexceptedly")
+        logger.error(error)
         layer_context.src_stream.close()
         return
 
     if isinstance(error, SrcStreamClosedError):
-        logger.error("source stream closed unexceptedly")
+        logger.error(error)
         return
 
     if isinstance(error, iostream.StreamClosedError):
@@ -63,7 +62,7 @@ def _handle_layer_error(error, layer_context):
         layer_context.src_stream.close()
         return
 
-    raise error
+    raise
 
 
 def _next_layer(current_layer, context):
