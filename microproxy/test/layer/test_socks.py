@@ -15,9 +15,9 @@ from socks5 import GreetingResponse, Response
 from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND, ADDR_TYPE
 
 
-class SocksProxyHandlerTest(AsyncTestCase):
+class TestSocksProxyHandler(AsyncTestCase):
     def setUp(self):
-        super(SocksProxyHandlerTest, self).setUp()
+        super(TestSocksProxyHandler, self).setUp()
         self.asyncSetUp()
 
     @gen_test

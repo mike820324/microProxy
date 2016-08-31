@@ -12,9 +12,9 @@ from microproxy.layer import Http1Layer
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 
 
-class Http1LayerTest(AsyncTestCase):
+class TestHttp1Layer(AsyncTestCase):
     def setUp(self):
-        super(Http1LayerTest, self).setUp()
+        super(TestHttp1Layer, self).setUp()
         self.asyncSetUp()
 
     @gen_test

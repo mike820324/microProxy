@@ -8,9 +8,9 @@ from microproxy.protocol.http1 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
 
 
-class ConnectionTest(AsyncTestCase):
+class TestConnection(AsyncTestCase):
     def setUp(self):
-        super(ConnectionTest, self).setUp()
+        super(TestConnection, self).setUp()
 
         (r, w) = os.pipe()
         self.read_stream = PipeIOStream(r, io_loop=self.io_loop)

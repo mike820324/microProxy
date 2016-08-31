@@ -9,9 +9,9 @@ from microproxy.protocol.http2 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
 
 
-class ConnectionTest(AsyncTestCase):
+class TestConnection(AsyncTestCase):
     def setUp(self):
-        super(ConnectionTest, self).setUp()
+        super(TestConnection, self).setUp()
         self.asyncSetUp()
         self.request = None
         self.response = None
