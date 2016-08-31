@@ -10,6 +10,7 @@ from h2.exceptions import ProtocolError, NoSuchStreamError
 from tornado import concurrent, gen
 
 from microproxy.context import HttpRequest, HttpResponse
+from microproxy.exception import Http2Error
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +69,9 @@ class Connection(H2Connection):
             logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
             events = self.receive_data(data)
             self.handle_events(events)
+        except Http2Error as e:  # pragma: no cover
+            logger.error("handled event failed on {0}: {1}".format(
+                self.conn_type, e))
         except Exception as e:  # pragma: no cover
             logger.error("Unhandled exception occured at {0}".format(self.conn_type))
             logger.exception(e)
@@ -99,7 +103,7 @@ class Connection(H2Connection):
             elif isinstance(event, SettingsAcknowledged):
                 # Note: nothing need to do with this event
                 pass
-            else:
+            else:  # pragma: no cover
                 logger.warn("not handled event: {0}".format(event))
 
     def handle_request(self, event):
@@ -188,8 +192,9 @@ class Connection(H2Connection):
         try:
             self._send_headers(stream_id, headers, end_stream=stream_ended, **kwargs)
             self.flush()
-        except ProtocolError:
-            logger.error("send headers failed on stream id: {0}".format(stream_id))
+        except ProtocolError as e:  # pragma: no cover
+            raise Http2Error(self.conn_type, e,
+                             "send headers failed", stream_id=stream_id)
 
     def _send_data(self, *args, **kwargs):
         super(Connection, self).send_data(*args, **kwargs)
@@ -209,9 +214,7 @@ class Connection(H2Connection):
                 self.end_stream(stream_id)
                 self.flush()
         except NoSuchStreamError as e:
-            logger.error("stream id not found on {0} with {1}".format(
-                self.conn_type, stream_id))
-            logger.exception(e)
+            raise Http2Error(self.conn_type, e, "send data failed", stream_id=stream_id)
 
     def send_update_settings(self, new_settings):
         logger.debug("settings update sent to {0}: {1}".format(
