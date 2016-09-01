@@ -137,12 +137,15 @@ class SocksLayer(ProxyLayer):
                         event.atyp, event.addr, event.port)
 
                 error = DestNotConnectedError(e)
-                return (error, response_event)
             else:
                 # NOTE: if real_error is None, it imply the source stream is closed.
-                if dest_stream:
-                    dest_stream.close()
-                return (SrcStreamClosedError(e), None)
+                error = SrcStreamClosedError(e)
+                response_event = None
+
+            if dest_stream:
+                dest_stream.close()
+            return (error, response_event)
+
 
         # NOTE: Unhandle exception type, raise it
         else:
