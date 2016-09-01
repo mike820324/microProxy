@@ -24,6 +24,7 @@ def get_first_layer(context):
 
 @gen.coroutine
 def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
+    current_context = initial_layer_context
     current_layer = initial_layer
 
     while current_layer:
