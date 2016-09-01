@@ -35,8 +35,9 @@ class SocksLayer(ProxyLayer):
 
             elif isinstance(_event, Request):
                 error, event = yield self.handle_request(_event)
-                data = self.socks_conn.send(event)
-                yield self.context.src_stream.write(data)
+                if event:
+                    data = self.socks_conn.send(event)
+                    yield self.context.src_stream.write(data)
 
                 if error:
                     raise error
@@ -67,60 +68,82 @@ class SocksLayer(ProxyLayer):
 
         host = event.addr
         port = event.port
+        dest_stream = None
         try:
             dest_stream = yield self.create_dest_stream((host, port))
 
-        except gen.TimeoutError as e:
+        except Exception as e:
+            err, response_event = self.handle_connection_error(
+                e, event, dest_stream)
+
+        else:
+            self.context.dest_stream = dest_stream
+            self.context.host = host
+            self.context.port = port
+            err = None
+            response_event = Response(
+                socks_version, RESP_STATUS["SUCCESS"],
+                event.atyp, event.addr, event.port)
+
+        raise gen.Return((err, response_event))
+
+    def handle_connection_error(self, error, event, dest_stream):
+        host = event.addr
+        port = event.port
+
+        if isinstance(error, gen.TimeoutError):
             logger.debug("connection timout {0}:{1}".format(
                 host, port))
             response_event = Response(
                 socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
                 event.atyp, event.addr, event.port)
 
-            error = DestNotConnectedError(e)
-            raise gen.Return((error, response_event))
+            error = DestNotConnectedError(error)
+            return (error, response_event)
 
-        except iostream.StreamClosedError as e:
+        if isinstance(error, iostream.StreamClosedError):
+            e = error
             if e.real_error:
                 err_num = abs(e.real_error[0])
-                logger.debug("connect to {0}:{1} with error code {2}".format(
-                    host, port, errno.errorcode[err_num]))
+                try:
+                    logger.debug("connect to {0}:{1} with error code {2}".format(
+                        host, port, errno.errorcode[err_num]))
 
-                # NOTE: if we submit an incorrect address type,
-                # the error code will be:
-                # - ENOEXEC in macos.
-                # - EBADF in linux.
-                if err_num == errno.ENOEXEC or err_num == errno.EBADF:
-                    response_event = Response(
-                        socks_version,
-                        RESP_STATUS["ADDRESS_TYPE_NOT_SUPPORTED"],
-                        event.atyp, event.addr, event.port)
+                    # NOTE: if we submit an incorrect address type,
+                    # the error code will be:
+                    # - ENOEXEC in macos.
+                    # - EBADF in linux.
+                    if err_num == errno.ENOEXEC or err_num == errno.EBADF:
+                        response_event = Response(
+                            socks_version,
+                            RESP_STATUS["ADDRESS_TYPE_NOT_SUPPORTED"],
+                            event.atyp, event.addr, event.port)
 
-                elif err_num == errno.ETIMEDOUT:
-                    response_event = Response(
-                        socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
-                        event.atyp, event.addr, event.port)
+                    elif err_num == errno.ETIMEDOUT:
+                        response_event = Response(
+                            socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
+                            event.atyp, event.addr, event.port)
 
-                else:
-                    logger.error("unhandle error code {0} received".format(
-                        errno.errorcode[err_num]))
+                    else:
+                        logger.error("unhandled error code {0} received".format(errno.errorcode[err_num]))
+                        response_event = Response(
+                            socks_version, RESP_STATUS["GENRAL_FAILURE"],
+                            event.atyp, event.addr, event.port)
+
+                except KeyError:
+                    logger.error("unknown error code {0} received".format(err_num))
                     response_event = Response(
                         socks_version, RESP_STATUS["GENRAL_FAILURE"],
                         event.atyp, event.addr, event.port)
+
                 error = DestNotConnectedError(e)
-                raise gen.Return((error, response_event))
+                return (error, response_event)
             else:
                 # NOTE: if real_error is None, it imply the source stream is closed.
-                dest_stream.close()
-                raise SrcStreamClosedError(e)
+                if dest_stream:
+                    dest_stream.close()
+                return (SrcStreamClosedError(e), None)
 
-        self.context.dest_stream = dest_stream
-        self.context.host = host
-        self.context.port = port
-
-        error = None
-        response_event = Response(
-            socks_version, RESP_STATUS["SUCCESS"],
-            event.atyp, event.addr, event.port)
-
-        raise gen.Return((None, response_event))
+        # NOTE: Unhandle exception type, raise it
+        else:
+            raise error
