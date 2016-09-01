@@ -1,4 +1,4 @@
-from tornado import concurrent, gen
+from tornado import gen
 from tornado.iostream import StreamClosedError
 import h11
 
@@ -24,32 +24,31 @@ class Http1Layer(object):
             conn_type="dest",
             on_response=self.on_response,
             on_info_response=self.on_info_response)
-        self._future = concurrent.Future()
         self.req = None
         self.resp = None
 
     @gen.coroutine
     def process_and_return_context(self):
-        try:
-            yield self.run_first_request()
-        except StreamClosedError:
-            self.context.src_stream.close()
-            self.context.dest_stream.close()
-            raise
-        else:
-            if self._future.running():
-                self.context.src_stream.read_until_close(
-                    streaming_callback=self.src_conn.receive)
-                self.context.src_stream.set_close_callback(self.on_src_close)
+        while not self.finished():
+            self.req = None
+            self.resp = None
+            try:
+                yield self.run_request()
+                yield self.run_response()
+            except SrcStreamClosedError:
+                self.context.dest_stream.close()
+                if self.req:
+                    raise
+            except DestStreamClosedError:
+                self.context.src_stream.close()
+                raise
 
-                self.context.dest_stream.read_until_close(
-                    streaming_callback=self.dest_conn.receive)
-                self.context.dest_stream.set_close_callback(self.on_dest_close)
-            context = yield self._future
-            raise gen.Return(context)
+        if self.is_websocket():
+            self.context.scheme = "websocket"
+        raise gen.Return(self.context)
 
     @gen.coroutine
-    def run_first_request(self):
+    def run_request(self):
         # NOTE: run first request to handle protocol change
         while not self.req:
             try:
@@ -60,6 +59,8 @@ class Http1Layer(object):
             else:
                 self.src_conn.receive(data, raise_exception=True)
 
+    @gen.coroutine
+    def run_response(self):
         while not self.resp:
             try:
                 data = yield self.context.dest_stream.read_bytes(
@@ -68,23 +69,6 @@ class Http1Layer(object):
                 raise DestStreamClosedError
             else:
                 self.dest_conn.receive(data, raise_exception=True)
-
-        if self.is_websocket():
-            self.context.scheme = "websocket"
-            self._future.set_result(self.context)
-        raise gen.Return(None)
-
-    def on_src_close(self):
-        logger.debug("source connection is closed")
-        self.context.dest_stream.close()
-        if self._future.running():
-            self._future.set_result(self.context)
-
-    def on_dest_close(self):
-        logger.debug("destination connection is closed")
-        self.context.src_stream.close()
-        if self._future.running():
-            self._future.set_result(self.context)
 
     def on_request(self, request):
         plugin_result = self.context.interceptor.request(
@@ -118,8 +102,16 @@ class Http1Layer(object):
         self.finish(switch_protocol=True)
 
     def is_websocket(self):
+        if not self.req or not self.resp:
+            return False
+
         return (("Upgrade", "websocket") in self.req.headers.get_list() and
                 ("Upgrade", "websocket") in self.resp.headers.get_list())
+
+    def finished(self):
+        return (self.is_websocket() or
+                self.context.src_stream.closed() or
+                self.context.dest_stream.closed())
 
     def finish(self, switch_protocol=False):
         self.context.interceptor.publish(
