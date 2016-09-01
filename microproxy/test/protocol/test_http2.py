@@ -1,5 +1,7 @@
 import socket
 import mock
+from datetime import timedelta
+from tornado import gen
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Event
 from tornado.iostream import IOStream
@@ -19,6 +21,7 @@ class TestConnection(AsyncTestCase):
         self.window_updates = None
         self.priority_updates = None
         self.push = None
+        self.reset = None
 
     @gen_test
     def asyncSetUp(self):
@@ -62,6 +65,9 @@ class TestConnection(AsyncTestCase):
             parent_stream_id=parent_stream_id,
             request=request)
 
+    def on_reset(self, stream_id, error_code):
+        self.reset = (stream_id, error_code)
+
     @gen_test
     def test_on_request(self):
         client_conn = Connection(self.client_stream, client_side=True)
@@ -89,9 +95,6 @@ class TestConnection(AsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.version, "HTTP/2")
-
-        self.client_stream.close()
-        self.server_stream.close()
 
     @gen_test
     def test_on_response(self):
@@ -128,8 +131,6 @@ class TestConnection(AsyncTestCase):
                              ("aaa", "bbb")]))
         self.assertEqual(response.code, "200")
         self.assertEqual(response.version, "HTTP/2")
-        self.client_stream.close()
-        self.server_stream.close()
 
     @gen_test
     def test_on_settings(self):
@@ -154,9 +155,6 @@ class TestConnection(AsyncTestCase):
         new_settings = {id: cs.new_value for (id, cs) in self.settings.iteritems()}
         self.assertEqual(new_settings, {4: 11111, 5: 22222})
 
-        self.client_stream.close()
-        self.server_stream.close()
-
     @gen_test
     def test_on_window_updates(self):
         client_conn = Connection(
@@ -172,9 +170,6 @@ class TestConnection(AsyncTestCase):
         yield server_conn.read_bytes()
         self.assertIsNotNone(self.window_updates)
         self.assertEqual(self.window_updates, (0, 100))
-
-        self.client_stream.close()
-        self.server_stream.close()
 
     @gen_test
     def test_on_priority_updates(self):
@@ -201,9 +196,6 @@ class TestConnection(AsyncTestCase):
         self.assertEqual(
             self.priority_updates,
             dict(stream_id=stream_id, depends_on=0, weight=10, exclusive=False))
-
-        self.client_stream.close()
-        self.server_stream.close()
 
     @gen_test
     def test_on_pushed_stream(self):
@@ -240,5 +232,92 @@ class TestConnection(AsyncTestCase):
                 (":method", "GET"),
                 (":path", "/resource")]))
 
+    @gen_test
+    def test_on_reset(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_reset=self.on_reset,
+            on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+        client_conn.send_request(
+            client_conn.get_next_available_stream_id(),
+            HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/")]))
+
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_request=self.on_request,
+            on_unhandled=mock.Mock())
+        yield server_conn.read_bytes()
+        stream_id, _ = self.request
+        server_conn.send_reset(stream_id, 2)
+
+        yield client_conn.read_bytes()
+        self.assertIsNotNone(self.reset)
+        self.assertEqual(self.reset, (stream_id, 2))
+
+    @gen_test
+    def test_on_terminate(self):
+        client_conn = Connection(
+            self.client_stream, client_side=True, on_unhandled=mock.Mock())
+        client_conn.initiate_connection()
+
+        on_terminate = mock.Mock()
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_terminate=on_terminate,
+            on_unhandled=mock.Mock())
+        server_conn.initiate_connection()
+
+        yield server_conn.read_bytes()
+        client_conn.send_terminate()
+        yield server_conn.read_bytes()
+
+        on_terminate.assert_called_with()
+
+    @gen_test
+    def test_on_post_request(self):
+        client_conn = Connection(self.client_stream, client_side=True)
+        client_conn.initiate_connection()
+        client_conn.send_request(
+            client_conn.get_next_available_stream_id(),
+            HttpRequest(headers=[
+                (":method", "POST"),
+                (":path", "/"),
+                ("aaa", "bbb")], body=b"aaaa"))
+
+        server_conn = Connection(
+            self.server_stream, client_side=False, on_request=self.on_request,
+            on_settings=self.on_settings)
+        server_conn.initiate_connection()
+        yield server_conn.read_bytes()
+
+        self.assertIsNotNone(self.request)
+        _, request = self.request
+        self.assertEqual(request.headers,
+                         HttpHeaders([
+                             (":method", "POST"),
+                             (":path", "/"),
+                             ("aaa", "bbb")]))
+        self.assertEqual(request.method, "POST")
+        self.assertEqual(request.path, "/")
+        self.assertEqual(request.version, "HTTP/2")
+        self.assertEqual(request.body, b"aaaa")
+
+    @gen_test
+    def test_readonly(self):
+        client_conn = Connection(self.client_stream, client_side=True, readonly=True)
+        client_conn.initiate_connection()
+        client_conn.send_request(
+            client_conn.get_next_available_stream_id(),
+            HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/"),
+                ("aaa", "bbb")]))
+
+        with self.assertRaises(gen.TimeoutError):
+            yield gen.with_timeout(
+                timedelta(milliseconds=100),
+                self.server_stream.read_bytes(1))
+
+    def tearDown(self):
         self.client_stream.close()
         self.server_stream.close()

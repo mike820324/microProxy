@@ -4,6 +4,8 @@ from h11 import (
     Request, InformationalResponse, Response, Data, EndOfMessage,
     ConnectionClosed)
 
+from tornado import gen
+
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.exception import ProtocolError
 from microproxy.utils import get_logger
@@ -31,6 +33,12 @@ class Connection(H11Connection):
         if not self.readonly:
             self.io_stream.write(data)
 
+    @gen.coroutine
+    def read_bytes(self):
+        data = yield self.io_stream.read_bytes(
+            self.io_stream.max_buffer_size, partial=True)
+        self.receive(data)
+
     def receive(self, data, raise_exception=False):
         try:
             logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
@@ -47,7 +55,7 @@ class Connection(H11Connection):
                     self.on_info_response(HttpResponse(
                         version=self._parse_version(event),
                         reason=event.reason,
-                        code=event.status_code,
+                        code=str(event.status_code),
                         headers=event.headers))
                 elif isinstance(event, Response):
                     self._resp = event
@@ -130,6 +138,7 @@ class Connection(H11Connection):
 
     def send_info_response(self, response):
         self.send(h11.InformationalResponse(
-            status_code=response.code,
-            headers=response.headers.get_list(),
+            status_code=int(response.code),
+            headers=response.headers,
+            reason=response.reason,
             keep_case=True))
