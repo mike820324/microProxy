@@ -45,16 +45,16 @@ class URlEncodedFormatter(object):
         )
 
     def format_body(self, body):
-        urlencoed_list = urlparse.parse_qs(body)
+        urlencoed_list = urlparse.parse_qsl(body)
         max_length = 0
-        for key in urlencoed_list:
-            if len(key) > max_length:
-                max_length = len(key)
+        for entity in urlencoed_list:
+            if len(entity[0]) > max_length:
+                max_length = len(entity[0])
 
         pretty_string = [
             "{0}: {1}".format(key.ljust(max_length), value)
             for key, value in
-            urlencoed_list.iteritems()]
+            urlencoed_list]
 
         return "\n".join(pretty_string)
 
