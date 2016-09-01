@@ -70,6 +70,9 @@ class HttpHeaders(object):
         else:
             raise ValueError("HttpHeaders not support with: " + str(type(headers)))
 
+    def __contains__(self, key):
+        return key in self.headers
+
     def __getitem__(self, key):
         return [v for k, v in self.headers if k == key]
 

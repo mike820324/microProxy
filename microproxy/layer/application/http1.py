@@ -105,8 +105,8 @@ class Http1Layer(object):
         if not self.req or not self.resp:
             return False
 
-        return (("Upgrade", "websocket") in self.req.headers.get_list() and
-                ("Upgrade", "websocket") in self.resp.headers.get_list())
+        return (("Upgrade", "websocket") in self.req.headers and
+                ("Upgrade", "websocket") in self.resp.headers)
 
     def finished(self):
         return (self.is_websocket() or
