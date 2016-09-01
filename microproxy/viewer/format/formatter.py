@@ -7,6 +7,11 @@ import lxml.html
 import lxml.etree
 import json
 
+try:
+    from urllib import parse as urlparse
+except ImportError:
+    import urlparse
+
 import decompress
 
 cssutils.log.setLevel(logging.CRITICAL)
@@ -31,6 +36,27 @@ class JsFormatter(object):
 
     def format_body(self, body):
         return jsbeautifier.beautify(body)
+
+
+class URlEncodedFormatter(object):
+    def match(self, content_type):
+        return content_type in (
+            "application/x-www-form-urlencoded",
+        )
+
+    def format_body(self, body):
+        urlencoed_list = urlparse.parse_qs(body)
+        max_length = 0
+        for key in urlencoed_list:
+            if len(key) > max_length:
+                max_length = len(key)
+
+        pretty_string = [
+            "{0}: {1}".format(key.ljust(max_length), value)
+            for key, value in
+            urlencoed_list.iteritems()]
+
+        return "\n".join(pretty_string)
 
 
 class HttpFormatter(object):
@@ -90,6 +116,7 @@ class Formatter(object):
             HttpFormatter(),
             JsonFormatter(),
             XmlFormatter(),
+            URlEncodedFormatter(),
             PlainTextFormatter()
         ]
 
