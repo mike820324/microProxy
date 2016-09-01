@@ -6,7 +6,7 @@ from microproxy import layer_manager
 from microproxy.cert import init_cert_store
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
-from microproxy.layer import TlsLayer, Http1Layer, Http2Layer
+from microproxy.layer import TlsLayer, Http1Layer, Http2Layer, ForwardLayer
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 
 
@@ -44,6 +44,14 @@ class TestLayerManager(unittest.TestCase):
         context = LayerContext(config=config, port=443)
         layer = layer_manager.get_first_layer(context)
         self.assertIsInstance(layer, ReplayLayer)
+
+    def test_get_layer_error(self):
+        config = self.config
+        config["mode"] = "test"
+
+        context = LayerContext(config=config)
+        with self.assertRaises(ValueError):
+            layer_manager.get_first_layer(context)
 
     def test_get_tls_layer(self):
         context = LayerContext(config=self.config, port=443)
@@ -88,6 +96,29 @@ class TestLayerManager(unittest.TestCase):
         layer = layer_manager._next_layer(tls_layer, context)
         self.assertIsInstance(layer, Http2Layer)
 
+    def test_get_forward_layer(self):
+        context = LayerContext(config=self.config, port=5555)
+
+        socks_layer = SocksLayer(context)
+        layer = layer_manager._next_layer(socks_layer, context)
+        self.assertIsInstance(layer, ForwardLayer)
+
+        transparent_layer = TransparentLayer(context)
+        layer = layer_manager._next_layer(transparent_layer, context)
+        self.assertIsInstance(layer, ForwardLayer)
+
+        context.scheme = "test"
+        replay_layer = ReplayLayer(context)
+        layer = layer_manager._next_layer(replay_layer, context)
+        self.assertIsInstance(layer, ForwardLayer)
+
+        context.scheme = "test"
+        tls_layer = TlsLayer(context)
+        layer = layer_manager._next_layer(tls_layer, context)
+        self.assertIsInstance(layer, ForwardLayer)
+
+
+
     def test_handle_layer_error(self):
         context = LayerContext(
             src_stream=Mock(), config=self.config, port=443, scheme="h2")
@@ -97,8 +128,18 @@ class TestLayerManager(unittest.TestCase):
 
         context = LayerContext(
             src_stream=Mock(), config=self.config, port=443, scheme="h2")
+        layer_manager._handle_layer_error(DestNotConnectedError("stream closed"), context)
+        context.src_stream.close.assert_not_called()
+
+        context = LayerContext(
+            src_stream=Mock(), config=self.config, port=443, scheme="h2")
         layer_manager._handle_layer_error(DestStreamClosedError("stream closed"), context)
         context.src_stream.close.assert_called_once_with()
+
+        context = LayerContext(
+            src_stream=Mock(), config=self.config, port=443, scheme="h2")
+        layer_manager._handle_layer_error(SrcStreamClosedError("stream closed"), context)
+        context.src_stream.close.assert_not_called()
 
         context = LayerContext(
             src_stream=Mock(), config=self.config, port=443, scheme="h2")
