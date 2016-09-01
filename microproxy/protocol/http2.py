@@ -213,7 +213,7 @@ class Connection(H2Connection):
             if stream_ended:
                 self.end_stream(stream_id)
                 self.flush()
-        except NoSuchStreamError as e:
+        except NoSuchStreamError as e:  # pragma: no cover
             raise Http2Error(self.conn_type, e, "send data failed", stream_id=stream_id)
 
     def send_update_settings(self, new_settings):
