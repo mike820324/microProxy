@@ -83,7 +83,7 @@ class Connection(H11Connection):
                             headers=self._resp.headers,
                             body=b"".join(self._body_chunks)))
                     self._cleanup_after_received()
-                elif isinstance(event, ConnectionClosed):
+                elif isinstance(event, ConnectionClosed):  # pragma: no cover
                     raise ProtocolError("Should closed the connection")
                 elif event is h11.NEED_DATA:
                     break
@@ -114,7 +114,7 @@ class Connection(H11Connection):
         self._resp = None
         self._body_chunks = []
         if self.our_state is h11.MUST_CLOSE:
-            self.stream.close()
+            self.io_stream.close()
 
     def send_request(self, request):
         self.send(h11.Request(
@@ -135,6 +135,8 @@ class Connection(H11Connection):
         if response.body:
             self.send(h11.Data(data=response.body))
         self.send(h11.EndOfMessage())
+        if self.our_state is h11.MUST_CLOSE:
+            self.io_stream.close()
 
     def send_info_response(self, response):
         self.send(h11.InformationalResponse(

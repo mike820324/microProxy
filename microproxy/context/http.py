@@ -24,12 +24,6 @@ class HttpRequest(object):
         json["headers"] = [h for h in self.headers]
         return json
 
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
 
 class HttpResponse(object):
     def __init__(self,
@@ -52,12 +46,6 @@ class HttpResponse(object):
         json["body"] = self.body.encode("base64")
         json["headers"] = [h for h in self.headers]
         return json
-
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
 
 
 class HttpHeaders(object):

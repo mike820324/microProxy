@@ -1,5 +1,5 @@
 import socket
-from mock import Mock, MagicMock
+from mock import Mock
 
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Semaphore
@@ -43,10 +43,11 @@ class TestHttp1Layer(AsyncTestCase):
                                     config=Config(dict(mode="socks")))
 
         self.interceptor = Mock()
-        self.interceptor.publish = MagicMock(return_value=None)
-        self.interceptor.request = MagicMock(return_value=None)
-        self.interceptor.response = MagicMock(return_value=None)
+        self.interceptor.publish = Mock(return_value=None)
+        self.interceptor.request = Mock(return_value=None)
+        self.interceptor.response = Mock(return_value=None)
         self.context.interceptor = self.interceptor
+
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
         self.http_layer = Http1Layer(self.context)
@@ -98,23 +99,15 @@ class TestHttp1Layer(AsyncTestCase):
         with self.assertRaises(DestStreamClosedError):
             yield http_layer_future
 
-        self.src_stream.close()
-        self.context.src_stream.close()
-        self.context.dest_stream.close()
-
     @gen_test
     def test_read_resp_from_dest_failed(self):
         http_layer_future = self.http_layer.process_and_return_context()
+        self.dest_stream.close()
         yield self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
                                                   b"Host: localhost",
                                                   b"\r\n"]))
-        self.dest_stream.close()
         with self.assertRaises(DestStreamClosedError):
             yield http_layer_future
-
-        self.src_stream.close()
-        self.context.src_stream.close()
-        self.context.dest_stream.close()
 
     @gen_test
     def test_write_resp_to_src_failed(self):
@@ -133,6 +126,51 @@ class TestHttp1Layer(AsyncTestCase):
         with self.assertRaises(SrcStreamClosedError):
             yield http_layer_future
 
+        self.dest_stream.close()
+        self.context.src_stream.close()
+        self.context.dest_stream.close()
+
+    @gen_test
+    def test_replay(self):
+        self.context.config = Config(dict(mode="replay"))
+
+        http_layer_future = self.http_layer.process_and_return_context()
+        self.src_stream.write(b"\r\n".join([b"GET /index HTTP/1.1",
+                                            b"Host: localhost",
+                                            b"\r\n"]))
+        yield self.dest_stream.read_until("\r\n\r\n")
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 200 OK",
+                                                   b"Transfer-Encoding: chunked\r\n",
+                                                   b"4",
+                                                   b"Body",
+                                                   b"0",
+                                                   b"\r\n"]))
+        yield self.src_stream.read_until(b"0\r\n\r\n")
+
+        yield http_layer_future
+        self.assertTrue(self.context.src_stream.closed())
+        self.assertTrue(self.context.dest_stream.closed())
+
+    @gen_test
+    def test_on_websocket(self):
+        http_layer_future = self.http_layer.process_and_return_context()
+        self.src_stream.write(b"\r\n".join([b"GET /chat HTTP/1.1",
+                                            b"Host: localhost",
+                                            b"Upgrade: websocket",
+                                            b"\r\n"]))
+
+        yield self.dest_stream.read_until("\r\n\r\n")
+        yield self.dest_stream.write(b"\r\n".join([b"HTTP/1.1 101 Switch Protocols",
+                                                   b"Upgrade: websocket",
+                                                   b"Connection: Upgrade",
+                                                   b"\r\n"]))
+
+        yield http_layer_future
+        self.assertFalse(self.context.src_stream.closed())
+        self.assertFalse(self.context.dest_stream.closed())
+
+    def tearDown(self):
+        self.src_stream.close()
         self.dest_stream.close()
         self.context.src_stream.close()
         self.context.dest_stream.close()
