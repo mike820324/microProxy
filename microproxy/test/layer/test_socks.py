@@ -215,7 +215,7 @@ class TestSocksProxyHandler(AsyncTestCase):
         for code, expect_status in error_cases:
             dest_stream = Mock()
             error, event = self.layer.handle_connection_error(
-                StreamClosedError((code, )), socks_request, dest_stream)
+                StreamClosedError((code, )), socks_request, None)
 
             self.assertIsInstance(error, DestNotConnectedError)
             self.assertIsInstance(event, Response)
@@ -223,7 +223,6 @@ class TestSocksProxyHandler(AsyncTestCase):
             self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
             self.assertEqual(event.addr, "1.2.3.4")
             self.assertEqual(event.port, self.port)
-            dest_stream.close.assert_not_called()
 
         # Test no error code
         dest_stream = Mock()
