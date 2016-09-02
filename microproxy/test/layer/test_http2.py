@@ -5,6 +5,7 @@ from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Semaphore
 from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
+from tornado.gen import coroutine
 
 from microproxy.context import LayerContext
 from microproxy.config import Config
@@ -65,6 +66,12 @@ class TestHttp2Layer(AsyncTestCase):
     def ignore_event(self, *args):
         pass
 
+    @coroutine
+    def read_until_new_event(self, conn, events):
+        curr_count = len(events)
+        while curr_count == len(events):
+            yield conn.read_bytes()
+
     @gen_test
     def test_req_and_resp(self):
         self.client_conn = Connection(
@@ -80,26 +87,19 @@ class TestHttp2Layer(AsyncTestCase):
         self.client_conn.initiate_connection()
         self.server_conn.initiate_connection()
 
-        yield self.client_conn.read_bytes()
-        yield self.server_conn.read_bytes()
-
         self.client_conn.send_request(
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
                 ("aaa", "bbb")]))
 
-        yield self.server_conn.read_bytes()
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
 
         self.server_conn.send_response(
             1, HttpResponse(headers=[(":status", "200"), ("aaa", "bbb")],
                             body=b"ccc"))
 
-        yield self.client_conn.read_bytes()
-        yield self.client_conn.read_bytes()
-
-        print self.src_events
-        print self.dest_events
+        yield self.read_until_new_event(self.client_conn, self.src_events)
 
         self.src_stream.close()
         self.dest_stream.close()
