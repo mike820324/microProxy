@@ -271,7 +271,7 @@ class TestConnection(AsyncTestCase):
         client_conn.send_terminate()
         yield server_conn.read_bytes()
 
-        on_terminate.assert_called_with()
+        on_terminate.assert_called_with(None, 0, 0)
 
     @gen_test
     def test_on_post_request(self):

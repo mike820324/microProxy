@@ -98,7 +98,9 @@ class Connection(H2Connection):
             elif isinstance(event, PriorityUpdated):
                 self.handle_priority_updates(event)
             elif isinstance(event, ConnectionTerminated):
-                self.on_terminate()
+                self.on_terminate(
+                    event.additional_data, event.error_code,
+                    event.last_stream_id)
             elif isinstance(event, SettingsAcknowledged):
                 # Note: nothing need to do with this event
                 pass
@@ -251,8 +253,10 @@ class Connection(H2Connection):
         self.reset_stream(stream_id, error_code)
         self.flush()
 
-    def send_terminate(self):
-        self.close_connection()
+    def send_terminate(self, **kwargs):
+        logger.debug("terminate sent to {0}: {1}".format(
+            self.conn_type, kwargs))
+        self.close_connection(**kwargs)
         self.flush()
 
     def _default_on_unhandled(self, *args):  # pragma: no cover
