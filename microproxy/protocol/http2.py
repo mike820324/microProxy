@@ -53,10 +53,9 @@ class Connection(H2Connection):
             data = self.data_to_send()
             if data:
                 return self.stream.write(data)
-        else:
-            future = concurrent.Future()
-            future.set_result(None)
-            return future
+        future = concurrent.Future()
+        future.set_result(None)
+        return future
 
     @gen.coroutine
     def read_bytes(self):
