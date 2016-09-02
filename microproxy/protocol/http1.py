@@ -15,17 +15,19 @@ logger = get_logger(__name__)
 class Connection(H11Connection):
     def __init__(self, our_role, io_stream, conn_type=None,
                  readonly=False, on_request=None, on_response=None,
-                 on_info_response=None, **kwargs):
+                 on_info_response=None, on_unhandled=None, **kwargs):
         super(Connection, self).__init__(our_role, **kwargs)
+        on_unhandled = on_unhandled or self._default_on_unhandled
         self.io_stream = io_stream
         self.conn_type = conn_type or str(our_role)
         self.readonly = readonly
-        self.on_request = on_request
-        self.on_response = on_response
-        self.on_info_response = on_info_response
+        self.on_request = on_request or on_unhandled
+        self.on_response = on_response or on_unhandled
+        self.on_info_response = on_info_response or on_unhandled
         self._req = None
         self._resp = None
         self._body_chunks = []
+        self.unhandled_events = None
 
     def send(self, event):
         logger.debug("event send to {0}: {1}".format(self.conn_type, type(event)))
@@ -144,3 +146,7 @@ class Connection(H11Connection):
             headers=response.headers,
             reason=response.reason,
             keep_case=True))
+
+    def _default_on_unhandled(self, *args):  # pragma: no cover
+        logger.warn("unhandled event: {0}".format(args))
+        self.unhandled_events.append(args)

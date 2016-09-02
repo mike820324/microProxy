@@ -11,9 +11,11 @@ TEST_MODULES = [
     "microproxy.test.layer.test_http1",
     "microproxy.test.layer.test_http2",
     "microproxy.test.layer.test_socks",
+    "microproxy.test.layer.test_replay",
     "microproxy.test.viewer.test_console",
     "microproxy.test.event.test_manager",
     "microproxy.test.event.test_client",
+    "microproxy.test.event.test_replay",
     "microproxy.test.protocol.test_http1",
     "microproxy.test.protocol.test_http2"
 ]

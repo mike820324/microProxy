@@ -435,6 +435,51 @@ class TestHttp2Layer(AsyncTestCase):
 
         yield result_future
 
+    @gen_test
+    def test_replay(self):
+        self.context.config["mode"] = "replay"
+
+        self.client_conn = Connection(
+            self.src_stream, client_side=True,
+            on_unhandled=self.ignore_event)
+        self.server_conn = Connection(
+            self.dest_stream, client_side=False,
+            on_request=self.record_dest_event,
+            on_unhandled=self.ignore_event)
+
+        result_future = self.http_layer.process_and_return_context()
+        self.client_conn.initiate_connection()
+        self.server_conn.initiate_connection()
+
+        self.client_conn.send_request(
+            1, HttpRequest(headers=[
+                (":method", "GET"),
+                (":path", "/"),
+                ("aaa", "bbb")]))
+
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
+
+        self.server_conn.send_response(
+            1, HttpResponse(headers=[(":status", "200"), ("aaa", "bbb")],
+                            body=b"ccc"))
+
+        result = yield result_future
+
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, LayerContext)
+
+        self.assertEqual(len(self.dest_events), 1)
+        stream_id, request, _ = self.dest_events[0]
+        self.assertEqual(stream_id, 1)
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.path, "/")
+        self.assertEqual(request.version, "HTTP/2")
+        self.assertEqual(
+            request.headers,
+            HttpHeaders([(":method", "GET"),
+                         (":path", "/"),
+                         ("aaa", "bbb")]))
+
     def tearDown(self):
         self.src_stream.close()
         self.dest_stream.close()
