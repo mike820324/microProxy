@@ -1,8 +1,8 @@
 test:
-	@PYTHONPATH=. python microproxy/test/run_tests.py
+	python -m unittest discover
 
 lint:
 	@flake8 && echo "Static Check Without Error"
 
 coverage:
-	@PYTHONPATH=. coverage run --source microproxy microproxy/test/run_tests.py
+	@coverage run --source=microproxy -m unittest discover
