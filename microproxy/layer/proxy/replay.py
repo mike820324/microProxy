@@ -4,15 +4,13 @@ from microproxy.protocol import tls
 from base import ProxyLayer
 
 
-class ReplayLayer(object):
-    def __init__(self, context, proxy_layer=None):
-        super(ReplayLayer, self).__init__()
-        self.context = context
-        self.proxy_layer = proxy_layer or ProxyLayer(context)
+class ReplayLayer(ProxyLayer):
+    def __init__(self, context, **kwargs):
+        super(ReplayLayer, self).__init__(context, **kwargs)
 
     @gen.coroutine
     def process_and_return_context(self):
-        dest_stream = yield self.proxy_layer.create_dest_stream(
+        dest_stream = yield self.create_dest_stream(
             (self.context.host, self.context.port))
 
         if self.context.scheme in ("https", "h2"):
