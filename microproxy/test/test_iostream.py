@@ -16,6 +16,7 @@ import os
 import platform
 import socket
 import ssl
+from OpenSSL import SSL
 import sys
 
 try:
@@ -754,7 +755,7 @@ class TestIOStreamStartTLS(AsyncTestCase):
         client_future = self.client_start_tls(server_hostname="localhost")
         with self.assertRaises(ssl.SSLError):
             yield client_future
-        with self.assertRaises((ssl.SSLError, socket.error)):
+        with self.assertRaises((SSL.Error, socket.error)):
             yield server_future
 
     @gen_test
