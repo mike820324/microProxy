@@ -116,6 +116,9 @@ class Http1Layer(object):
             self.context.dest_stream.close()
         elif switch_protocol:
             self.switch_protocol = True
+        elif self.src_conn.closed() or self.dest_conn.closed():
+            self.context.src_stream.close()
+            self.context.dest_stream.close()
         else:
             self.src_conn.start_next_cycle()
             self.dest_conn.start_next_cycle()
