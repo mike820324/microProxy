@@ -10,41 +10,7 @@ from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 logger = get_logger(__name__)
 
 
-@gen.coroutine
-def run_layers(initial_layer_context):
-    current_layer = _get_first_layer(initial_layer_context)
-    src_stream = initial_layer_context.src_stream
-
-    while current_layer:
-        try:
-            logger.debug("Enter {0} Layer".format(current_layer))
-            current_context = yield current_layer.process_and_return_context()
-            logger.debug("Leave {0} Layer".format(current_layer))
-            current_layer = _next_layer(current_layer, current_context)
-        except gen.TimeoutError:
-            src_stream.close()
-            break
-        except DestNotConnectedError:
-            logger.debug("destination not conected")
-            break
-        except DestStreamClosedError:
-            logger.error("destination stream closed unexceptedly")
-            src_stream.close()
-            break
-        except SrcStreamClosedError:
-            logger.error("source stream closed unexceptedly")
-            break
-        except iostream.StreamClosedError:
-            logger.error("stream closed")
-            src_stream.close()
-            break
-        except Exception:
-            raise
-
-    raise gen.Return(None)
-
-
-def _get_first_layer(context):
+def get_first_layer(context):
     mode = context.config["mode"]
     if mode == "socks":
         return SocksLayer(context)
@@ -54,6 +20,50 @@ def _get_first_layer(context):
         return ReplayLayer(context)
     else:
         raise ValueError("Unsupport proxy mode: {0}".format(mode))
+
+
+@gen.coroutine
+def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
+    current_context = initial_layer_context
+    current_layer = initial_layer
+
+    while current_layer:
+        try:
+            logger.debug("Enter {0} Layer".format(current_layer))
+            current_context = yield current_layer.process_and_return_context()
+            logger.debug("Leave {0} Layer".format(current_layer))
+            current_layer = _next_layer(current_layer, current_context)
+        except Exception as error:
+            _handle_layer_error(error, current_context)
+            raise
+
+    raise gen.Return(None)
+
+
+def _handle_layer_error(error, layer_context):
+    if isinstance(error, gen.TimeoutError):
+        layer_context.src_stream.close()
+        return
+
+    if isinstance(error, DestNotConnectedError):
+        logger.debug("destination not conected")
+        return
+
+    if isinstance(error, DestStreamClosedError):
+        logger.error("destination stream closed unexceptedly")
+        layer_context.src_stream.close()
+        return
+
+    if isinstance(error, SrcStreamClosedError):
+        logger.error("source stream closed unexceptedly")
+        return
+
+    if isinstance(error, iostream.StreamClosedError):
+        logger.error("stream closed")
+        layer_context.src_stream.close()
+        return
+
+    raise error
 
 
 def _next_layer(current_layer, context):

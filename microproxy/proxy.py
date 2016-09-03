@@ -1,11 +1,11 @@
 from tornado import tcpserver
 from tornado import gen
 
+from microproxy import layer_manager
 from microproxy.context import LayerContext
 from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import get_interceptor
-from microproxy.layer_manager import run_layers
 
 logger = get_logger(__name__)
 
@@ -14,6 +14,7 @@ class ProxyServer(tcpserver.TCPServer):
     def __init__(self, config, **kwargs):
         super(ProxyServer, self).__init__(**kwargs)
         self.config = config
+        self.layer_manager = layer_manager
 
     def _handle_connection(self, connection, address):
         try:
@@ -37,7 +38,8 @@ class ProxyServer(tcpserver.TCPServer):
                 interceptor=get_interceptor())
 
             logger.debug("Start new layer manager")
-            yield run_layers(initial_context)
+            initial_layer = self.layer_manager.get_first_layer(initial_context)
+            yield self.layer_manager.run_layers(initial_layer, initial_context)
         except Exception as e:
             # NOTE: not handle exception, log it and close the stream
             logger.exception(e)

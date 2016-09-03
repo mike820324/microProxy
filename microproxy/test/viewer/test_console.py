@@ -6,7 +6,7 @@ from microproxy.viewer.console import ColorText, TextList, StatusText, Header
 from microproxy.viewer.console import Request, Response
 
 
-class ColorTextTest(TestCase):
+class TestColorText(TestCase):
     def test_clear_text(self):
         self.assertEqual("clear text", str(ColorText("clear text")))
 
@@ -35,7 +35,7 @@ class ColorTextTest(TestCase):
                          str(ColorText("fg bg test", fg_color="blue", bg_color="blue", attrs=["bold"])))
 
 
-class TextListTest(TestCase):
+class TestTextList(TestCase):
     def test_default_delimiter(self):
         self.assertEqual("test\n123",
                          str(TextList([ColorText("test"), ColorText(123)])))
@@ -48,7 +48,7 @@ class TextListTest(TestCase):
         self.assertEqual("", str(TextList([])))
 
 
-class StatusTextTest(TestCase):
+class TestStatusText(TestCase):
     def test_status_ok(self):
         self.assertEqual(TextList([ColorText(200, fg_color="green", attrs=["bold"]),
                                    "GET", "http://github.com/index"],
@@ -62,7 +62,7 @@ class StatusTextTest(TestCase):
                          StatusText(400, "GET", "http://github.com", "/index").__dict__)
 
 
-class HeaderTest(TestCase):
+class TestHeader(TestCase):
     def test_one_header(self):
         expected = TextList([ColorText("Host: github.com", bg_color="blue")])
         self.assertEqual(
@@ -78,7 +78,7 @@ class HeaderTest(TestCase):
             Header([("Header", "Value"), ("Host", "github.com")]).__dict__)
 
 
-class RequestTest(TestCase):
+class TestRequest(TestCase):
     def test_simple_request(self):
         request = {"headers": [("Host", "github.com")]}
         expected = TextList(

@@ -8,7 +8,7 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-class Http2Layer(object):
+class Http2Layer(object):  # pragma: no cover
     def __init__(self, context):
         super(Http2Layer, self).__init__()
         self.context = context
@@ -51,7 +51,7 @@ class Http2Layer(object):
                 event.delta, event.stream_id or None)
 
 
-class Connection(H2Connection):
+class Connection(H2Connection):  # pragma: no cover
     def __init__(self, from_stream, to_stream, is_server, layer, *args, **kwargs):
         super(Connection, self).__init__(*args, **kwargs)
         self.from_stream = from_stream

@@ -7,9 +7,12 @@ from microproxy import iostream
 
 
 class ProxyLayer(object):
-    def __init__(self, context):
+    def __init__(self, context, **kwargs):
         super(ProxyLayer, self).__init__()
         self.context = copy(context)
+
+        for k, v in kwargs.iteritems():
+            self.__setattr__(k, v)
 
     def process_and_return_context(self):
         raise NotImplementedError

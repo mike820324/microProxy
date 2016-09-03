@@ -63,7 +63,11 @@ def create_dest_sslcontext(alpn=None):
 
     ssl_ctx.set_verify(SSL.VERIFY_NONE,
                        lambda conn, x509, err_num, err_depth, err_code: True)
-    ssl_ctx.set_alpn_protos(alpn or [])
+    try:
+        ssl_ctx.set_alpn_protos(alpn or [])
+    except NotImplementedError:
+        pass
+
     return ssl_ctx
 
 

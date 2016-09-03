@@ -4,7 +4,7 @@ import unittest
 from microproxy.event import EventManager
 
 
-class EventManagerTest(unittest.TestCase):
+class TestEventManager(unittest.TestCase):
     def setUp(self):
         self.handler = mock.Mock()
         self.zmq_stream = mock.Mock()

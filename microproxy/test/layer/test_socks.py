@@ -1,13 +1,16 @@
+import errno
 import socket
+from mock import Mock
 
+from tornado import gen
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from tornado.locks import Event
-from tornado.iostream import IOStream
+from tornado.iostream import IOStream, StreamClosedError
 from tornado.netutil import add_accept_handler
 
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
-from microproxy.exception import ProtocolError, DestNotConnectedError
+from microproxy.exception import ProtocolError, DestNotConnectedError, SrcStreamClosedError
 
 import socks5
 from socks5 import GreetingRequest, Request
@@ -15,9 +18,9 @@ from socks5 import GreetingResponse, Response
 from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND, ADDR_TYPE
 
 
-class SocksProxyHandlerTest(AsyncTestCase):
+class TestSocksProxyHandler(AsyncTestCase):
     def setUp(self):
-        super(SocksProxyHandlerTest, self).setUp()
+        super(TestSocksProxyHandler, self).setUp()
         self.asyncSetUp()
 
     @gen_test
@@ -171,21 +174,64 @@ class SocksProxyHandlerTest(AsyncTestCase):
         self.client_stream.close()
         self.server_stream.close()
 
-    # @gen_test(timeout=10)
-    # def test_request_failed_timeout(self):
-    #     socks_request = Request(
-    #         socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["IPV4"],
-    #         "1.2.3.4", self.port)
+    @gen_test
+    def test_handle_connection_timeout(self):
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["IPV4"],
+            "1.2.3.4", self.port)
 
-    #     addr_future = self.layer.handle_request(socks_request)
-    #     error, event = yield addr_future
+        dest_stream = Mock()
+        error, event = self.layer.handle_connection_error(
+            gen.TimeoutError("time out"), socks_request, dest_stream)
 
-    #     self.assertIsInstance(error, DestNotConnectedError)
-    #     self.assertIsInstance(event, Response)
-    #     self.assertEqual(event.status, RESP_STATUS["NETWORK_UNREACHABLE"])
-    #     self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
-    #     self.assertEqual(event.addr, "1.2.3.4")
-    #     self.assertEqual(event.port, self.port)
+        self.assertIsInstance(error, DestNotConnectedError)
+        self.assertIsInstance(event, Response)
+        self.assertEqual(event.status, RESP_STATUS["NETWORK_UNREACHABLE"])
+        self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
+        self.assertEqual(event.addr, "1.2.3.4")
+        self.assertEqual(event.port, self.port)
+        dest_stream.close.assert_not_called()
 
-    #     self.client_stream.close()
-    #     self.server_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
+
+    @gen_test
+    def test_handle_stream_closed(self):
+        socks_request = Request(
+            socks5.VERSION, REQ_COMMAND["CONNECT"], ADDR_TYPE["IPV4"],
+            "1.2.3.4", self.port)
+
+        addr_not_support_status = RESP_STATUS["ADDRESS_TYPE_NOT_SUPPORTED"]
+        network_unreach_status = RESP_STATUS["NETWORK_UNREACHABLE"]
+        general_fail_status = RESP_STATUS["GENRAL_FAILURE"]
+
+        error_cases = [
+            (errno.ENOEXEC, addr_not_support_status),
+            (errno.EBADF, addr_not_support_status),
+            (errno.ETIMEDOUT, network_unreach_status),
+            (errno.EADDRINUSE, general_fail_status),
+            (55566, general_fail_status)]
+
+        for code, expect_status in error_cases:
+            dest_stream = Mock()
+            error, event = self.layer.handle_connection_error(
+                StreamClosedError((code, )), socks_request, None)
+
+            self.assertIsInstance(error, DestNotConnectedError)
+            self.assertIsInstance(event, Response)
+            self.assertEqual(event.status, expect_status)
+            self.assertEqual(event.atyp, ADDR_TYPE["IPV4"])
+            self.assertEqual(event.addr, "1.2.3.4")
+            self.assertEqual(event.port, self.port)
+
+        # Test no error code
+        dest_stream = Mock()
+        error, event = self.layer.handle_connection_error(
+            StreamClosedError(), socks_request, dest_stream)
+
+        self.assertIsInstance(error, SrcStreamClosedError)
+        self.assertIsNone(event)
+        dest_stream.close.assert_called_once_with()
+
+        self.client_stream.close()
+        self.server_stream.close()

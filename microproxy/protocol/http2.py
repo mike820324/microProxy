@@ -7,9 +7,10 @@ from h2.events import (
 )
 from h2.exceptions import ProtocolError, NoSuchStreamError
 
-from tornado import concurrent
+from tornado import concurrent, gen
 
 from microproxy.context import HttpRequest, HttpResponse
+from microproxy.exception import Http2Error
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
@@ -25,37 +26,52 @@ class Connection(H2Connection):
                  on_request=None, on_response=None, on_push=None,
                  on_settings=None, on_window_updates=None,
                  on_priority_updates=None, on_reset=None,
-                 on_terminate=None, readonly=False, **kwargs):
+                 on_terminate=None, readonly=False,
+                 on_unhandled=None, **kwargs):
         super(Connection, self).__init__(client_side=client_side, **kwargs)
+        on_unhandled = on_unhandled or self._default_on_unhandled
         self.stream = stream
-        self.on_request = on_request
-        self.on_response = on_response
-        self.on_push = on_push
-        self.on_settings = on_settings
-        self.on_priority_updates = on_priority_updates
-        self.on_reset = on_reset
-        self.on_window_updates = on_window_updates
-        self.on_terminate = on_terminate
+        self.on_request = on_request or on_unhandled
+        self.on_response = on_response or on_unhandled
+        self.on_push = on_push or on_unhandled
+        self.on_settings = on_settings or on_unhandled
+        self.on_priority_updates = on_priority_updates or on_unhandled
+        self.on_reset = on_reset or on_unhandled
+        self.on_window_updates = on_window_updates or on_unhandled
+        self.on_terminate = on_terminate or on_unhandled
         self.conn_type = conn_type or self._DEFAULT_TYPES[client_side]
         self.readonly = readonly
         self.ongoings_streams = dict()
+        self.unhandled_event = []
+
+    def initiate_connection(self):
+        super(Connection, self).initiate_connection()
+        self.flush()
 
     def flush(self):
         if not self.readonly:
             data = self.data_to_send()
             if data:
                 return self.stream.write(data)
-        else:
-            future = concurrent.Future()
-            future.set_result(None)
-            return future
+        future = concurrent.Future()
+        future.set_result(None)
+        return future
+
+    @gen.coroutine
+    def read_bytes(self):
+        data = yield self.stream.read_bytes(
+            self.stream.max_buffer_size, partial=True)
+        self.receive(data)
 
     def receive(self, data):
         try:
             logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
             events = self.receive_data(data)
             self.handle_events(events)
-        except Exception as e:
+        except Http2Error as e:  # pragma: no cover
+            logger.error("handled event failed on {0}: {1}".format(
+                self.conn_type, e))
+        except Exception as e:  # pragma: no cover
             logger.error("Unhandled exception occured at {0}".format(self.conn_type))
             logger.exception(e)
             self.stream.closed()
@@ -82,11 +98,13 @@ class Connection(H2Connection):
             elif isinstance(event, PriorityUpdated):
                 self.handle_priority_updates(event)
             elif isinstance(event, ConnectionTerminated):
-                self.on_terminate()
+                self.on_terminate(
+                    event.additional_data, event.error_code,
+                    event.last_stream_id)
             elif isinstance(event, SettingsAcknowledged):
                 # Note: nothing need to do with this event
                 pass
-            else:
+            else:  # pragma: no cover
                 logger.warn("not handled event: {0}".format(event))
 
     def handle_request(self, event):
@@ -103,7 +121,7 @@ class Connection(H2Connection):
         self.ongoings_streams[event.stream_id] = (
             HttpResponse(
                 version=self._VERSION,
-                code=headers_dict[":status"],
+                code=str(headers_dict[":status"]),
                 headers=event.headers), [], None)
 
     def handle_data(self, event):
@@ -152,7 +170,7 @@ class Connection(H2Connection):
     def send_request(self, stream_id, request, **kwargs):
         logger.debug("request sent to {0}: {1}".format(
             self.conn_type, dict(stream_id=stream_id, request=dict(
-                headers=request.headers.get_list()))))
+                headers=request.headers))))
         self.send_headers(
             stream_id, request.headers, stream_ended=not bool(request.body), **kwargs)
         if request.body:
@@ -161,7 +179,7 @@ class Connection(H2Connection):
     def send_response(self, stream_id, response):
         logger.debug("response sent to {0}: {1}".format(
             self.conn_type, dict(stream_id=stream_id, response=dict(
-                headers=response.headers.get_list()))))
+                headers=response.headers))))
         self.send_headers(
             stream_id, response.headers,
             stream_ended=not bool(response.body))
@@ -173,10 +191,11 @@ class Connection(H2Connection):
 
     def send_headers(self, stream_id, headers, stream_ended=False, **kwargs):
         try:
-            self._send_headers(stream_id, headers.get_list(), end_stream=stream_ended, **kwargs)
+            self._send_headers(stream_id, headers, end_stream=stream_ended, **kwargs)
             self.flush()
-        except ProtocolError:
-            logger.error("send headers failed on stream id: {0}".format(stream_id))
+        except ProtocolError as e:  # pragma: no cover
+            raise Http2Error(self.conn_type, e,
+                             "send headers failed", stream_id=stream_id)
 
     def _send_data(self, *args, **kwargs):
         super(Connection, self).send_data(*args, **kwargs)
@@ -195,10 +214,8 @@ class Connection(H2Connection):
             if stream_ended:
                 self.end_stream(stream_id)
                 self.flush()
-        except NoSuchStreamError as e:
-            logger.error("stream id not found on {0} with {1}".format(
-                self.conn_type, stream_id))
-            logger.exception(e)
+        except NoSuchStreamError as e:  # pragma: no cover
+            raise Http2Error(self.conn_type, e, "send data failed", stream_id=stream_id)
 
     def send_update_settings(self, new_settings):
         logger.debug("settings update sent to {0}: {1}".format(
@@ -227,7 +244,7 @@ class Connection(H2Connection):
         self.push_stream(
             stream_id,
             promised_stream_id,
-            request.headers.get_list())
+            request.headers)
         self.flush()
 
     def send_reset(self, stream_id, error_code):
@@ -236,6 +253,12 @@ class Connection(H2Connection):
         self.reset_stream(stream_id, error_code)
         self.flush()
 
-    def send_terminate(self):
-        self.close_connection()
+    def send_terminate(self, **kwargs):
+        logger.debug("terminate sent to {0}: {1}".format(
+            self.conn_type, kwargs))
+        self.close_connection(**kwargs)
         self.flush()
+
+    def _default_on_unhandled(self, *args):  # pragma: no cover
+        logger.warn("unhandled event: {0}".format(args))
+        self.unhandled_event.append(args)
