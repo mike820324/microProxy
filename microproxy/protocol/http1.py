@@ -150,3 +150,6 @@ class Connection(H11Connection):
     def _default_on_unhandled(self, *args):  # pragma: no cover
         logger.warn("unhandled event: {0}".format(args))
         self.unhandled_events.append(args)
+
+    def closed(self):
+        return self.our_state is h11.MUST_CLOSE or self.io_stream.closed()
