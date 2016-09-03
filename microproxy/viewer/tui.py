@@ -23,8 +23,9 @@ class Tui(gviewer.BaseDisplayer):
         self.data_store = self.create_data_store()
         self.viewer = gviewer.GViewer(
             self.data_store, self,
-            summary_actions=dict(e=self.export_replay,
-                                 r=self.replay),
+            summary_actions=gviewer.Actions([
+                ("e", "export replay script", self.export_replay),
+                ("r", "replay", self.replay)]),
             palette=self.PALETTE,
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
