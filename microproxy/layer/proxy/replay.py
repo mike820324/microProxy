@@ -5,8 +5,8 @@ from base import ProxyLayer
 
 
 class ReplayLayer(ProxyLayer):
-    def __init__(self, context):
-        super(ReplayLayer, self).__init__(context)
+    def __init__(self, context, **kwargs):
+        super(ReplayLayer, self).__init__(context, **kwargs)
 
     @gen.coroutine
     def process_and_return_context(self):

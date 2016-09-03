@@ -5,7 +5,7 @@ import logging.config
 logging.config.fileConfig('logging.cfg')
 
 
-def curr_loop():
+def curr_loop():  # pragma: no cover
     return IOLoop.current()
 
 

@@ -6,7 +6,7 @@ from microproxy.config import (
     define_option, define_section, verify_config, gen_config_dict)
 
 
-class DefineSectionTest(unittest.TestCase):
+class TestDefineSection(unittest.TestCase):
     def test_no_error(self):
         option_info = {}
         config_field_info = {}
@@ -35,7 +35,7 @@ class DefineSectionTest(unittest.TestCase):
                            option_info=None)
 
 
-class DefineOptionTest(unittest.TestCase):
+class TestDefineOption(unittest.TestCase):
     def test_non_list_type_option_without_default(self):
         config_info = {}
         define_option(option_info=config_info,
@@ -150,7 +150,7 @@ class DefineOptionTest(unittest.TestCase):
                           choices="hello")
 
 
-class ConfigTest(unittest.TestCase):
+class TestConfig(unittest.TestCase):
     def setUp(self):
         proxy_option_info = {}
         define_option(option_info=proxy_option_info,

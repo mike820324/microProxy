@@ -30,7 +30,6 @@ class Http2Layer(object):
             on_push=self.on_push,
             on_settings=self.on_dest_settings,
             on_window_updates=self.on_dest_window_updates,
-            on_priority_updates=self.on_dest_priority_updates,
             on_terminate=self.on_dest_terminate,
             on_reset=self.on_dest_reset)
         self.streams = dict()
@@ -69,9 +68,6 @@ class Http2Layer(object):
         self.context.src_stream.close()
         if self._future.running():
             self._future.set_result(self.context)
-
-    def get_target_conn(self, from_conn):
-        return self.dest_conn if from_conn is self.src_conn else self.src_conn
 
     def update_ids(self, src_stream_id, dest_stream_id):
         self.src_to_dest_ids[src_stream_id] = dest_stream_id
@@ -151,18 +147,8 @@ class Http2Layer(object):
             self.src_to_dest_ids, stream_id)
         target_depends_on = self.safe_mapping_id(
             self.src_to_dest_ids, depends_on)
-        if target_stream_id and target_depends_on:
+        if target_stream_id:
             self.dest_conn.send_priority_updates(
-                target_stream_id, target_depends_on, weight, exclusive)
-
-    def on_dest_priority_updates(self, stream_id, depends_on,
-                                 weight, exclusive):
-        target_stream_id = self.safe_mapping_id(
-            self.dest_to_src_ids, stream_id)
-        target_depends_on = self.safe_mapping_id(
-            self.dest_to_src_ids, depends_on)
-        if target_stream_id and target_depends_on:
-            self.src_conn.send_priority_updates(
                 target_stream_id, target_depends_on, weight, exclusive)
 
     def safe_mapping_id(self, ids, stream_id):
@@ -172,21 +158,23 @@ class Http2Layer(object):
 
     def on_src_reset(self, stream_id, error_code):
         target_stream_id = self.src_to_dest_ids[stream_id]
-        if error_code == 0x8:
-            self.dest_conn.send_reset(target_stream_id, error_code)
+        self.dest_conn.send_reset(target_stream_id, error_code)
 
     def on_dest_reset(self, stream_id, error_code):
         target_stream_id = self.dest_to_src_ids[stream_id]
-        if error_code == 0x8:
-            self.src_conn.send_reset(target_stream_id, error_code)
+        self.src_conn.send_reset(target_stream_id, error_code)
 
-    def on_src_terminate(self):
-        self.dest_conn.send_terminate()
-        self.context.src_stream.close()
+    def on_src_terminate(self, additional_data, error_code, last_stream_id):
+        self.dest_conn.send_terminate(
+            error_code=error_code,
+            additional_data=additional_data,
+            last_stream_id=last_stream_id)
 
-    def on_dest_terminate(self):
-        self.src_conn.send_terminate()
-        self.context.dest_stream.close()
+    def on_dest_terminate(self, additional_data, error_code, last_stream_id):
+        self.src_conn.send_terminate(
+            error_code=error_code,
+            additional_data=additional_data,
+            last_stream_id=last_stream_id)
 
 
 class Stream(object):

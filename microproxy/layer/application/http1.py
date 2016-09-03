@@ -26,6 +26,7 @@ class Http1Layer(object):
             on_info_response=self.on_info_response)
         self.req = None
         self.resp = None
+        self.switch_protocol = False
 
     @gen.coroutine
     def process_and_return_context(self):
@@ -43,8 +44,8 @@ class Http1Layer(object):
                 self.context.src_stream.close()
                 raise
 
-        if self.is_websocket():
-            self.context.scheme = "websocket"
+        if self.switch_protocol:
+            self.context.scheme = self.req.headers["Upgrade"]
         raise gen.Return(self.context)
 
     @gen.coroutine
@@ -101,15 +102,8 @@ class Http1Layer(object):
         self.src_conn.send_info_response(self.resp)
         self.finish(switch_protocol=True)
 
-    def is_websocket(self):
-        if not self.req or not self.resp:
-            return False
-
-        return (("Upgrade", "websocket") in self.req.headers.get_list() and
-                ("Upgrade", "websocket") in self.resp.headers.get_list())
-
     def finished(self):
-        return (self.is_websocket() or
+        return (self.switch_protocol or
                 self.context.src_stream.closed() or
                 self.context.dest_stream.closed())
 
@@ -121,7 +115,7 @@ class Http1Layer(object):
             self.context.src_stream.close()
             self.context.dest_stream.close()
         elif switch_protocol:
-            pass
+            self.switch_protocol = True
         else:
             self.src_conn.start_next_cycle()
             self.dest_conn.start_next_cycle()
