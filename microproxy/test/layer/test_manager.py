@@ -1,4 +1,5 @@
 import unittest
+import sys
 from mock import Mock
 
 from tornado import gen, iostream
@@ -29,13 +30,23 @@ class TestLayerManager(unittest.TestCase):
         layer = layer_manager.get_first_layer(context)
         self.assertIsInstance(layer, SocksLayer)
 
-    def test_get_transparent_layer(self):
+    @unittest.skipIf('linux' not in sys.platform, "TransparentLayer only in linux")
+    def test_get_transparent_layer_linux(self):
         config = self.config
         config["mode"] = "transparent"
 
         context = LayerContext(config=config, port=443)
         layer = layer_manager.get_first_layer(context)
         self.assertIsInstance(layer, TransparentLayer)
+
+    @unittest.skipIf('linux' in sys.platform, "TransparentLayer only in linux")
+    def test_get_transparent_layer_non_linux(self):
+        config = self.config
+        config["mode"] = "transparent"
+
+        context = LayerContext(config=config, port=443)
+        with self.assertRaises(NotImplementedError):
+            layer_manager.get_first_layer(context)
 
     def test_get_replay_layer(self):
         config = self.config
@@ -53,26 +64,25 @@ class TestLayerManager(unittest.TestCase):
         with self.assertRaises(ValueError):
             layer_manager.get_first_layer(context)
 
-    def test_get_tls_layer(self):
+    def test_get_tls_layer_from_socks(self):
         context = LayerContext(config=self.config, port=443)
 
         socks_layer = SocksLayer(context)
         layer = layer_manager._next_layer(socks_layer, context)
         self.assertIsInstance(layer, TlsLayer)
 
+    @unittest.skipIf('linux' not in sys.platform, "TransparentLayer only in linux")
+    def test_get_tls_layer_from_transparent(self):
+        context = LayerContext(config=self.config, port=443)
         transparent_layer = TransparentLayer(context)
         layer = layer_manager._next_layer(transparent_layer, context)
         self.assertIsInstance(layer, TlsLayer)
 
-    def test_get_http1_layer(self):
+    def test_get_http1_layer_from_socks_replay(self):
         context = LayerContext(config=self.config, port=80)
 
         socks_layer = SocksLayer(context)
         layer = layer_manager._next_layer(socks_layer, context)
-        self.assertIsInstance(layer, Http1Layer)
-
-        transparent_layer = TransparentLayer(context)
-        layer = layer_manager._next_layer(transparent_layer, context)
         self.assertIsInstance(layer, Http1Layer)
 
         context.scheme = "http"
@@ -83,6 +93,13 @@ class TestLayerManager(unittest.TestCase):
         context.scheme = "https"
         tls_layer = TlsLayer(context)
         layer = layer_manager._next_layer(tls_layer, context)
+        self.assertIsInstance(layer, Http1Layer)
+
+    @unittest.skipIf('linux' not in sys.platform, "TransparentLayer only in linux")
+    def test_get_http1_layer_from_transparent(self):
+        context = LayerContext(config=self.config, port=80)
+        transparent_layer = TransparentLayer(context)
+        layer = layer_manager._next_layer(transparent_layer, context)
         self.assertIsInstance(layer, Http1Layer)
 
     def test_get_http2_layer(self):
@@ -96,15 +113,11 @@ class TestLayerManager(unittest.TestCase):
         layer = layer_manager._next_layer(tls_layer, context)
         self.assertIsInstance(layer, Http2Layer)
 
-    def test_get_forward_layer(self):
+    def test_get_forward_layer_from_socks_replay(self):
         context = LayerContext(config=self.config, port=5555)
 
         socks_layer = SocksLayer(context)
         layer = layer_manager._next_layer(socks_layer, context)
-        self.assertIsInstance(layer, ForwardLayer)
-
-        transparent_layer = TransparentLayer(context)
-        layer = layer_manager._next_layer(transparent_layer, context)
         self.assertIsInstance(layer, ForwardLayer)
 
         context.scheme = "test"
@@ -117,7 +130,12 @@ class TestLayerManager(unittest.TestCase):
         layer = layer_manager._next_layer(tls_layer, context)
         self.assertIsInstance(layer, ForwardLayer)
 
-
+    @unittest.skipIf('linux' not in sys.platform, "TransparentLayer only in linux")
+    def test_get_forward_layer_from_transparent(self):
+        context = LayerContext(config=self.config, port=5555)
+        transparent_layer = TransparentLayer(context)
+        layer = layer_manager._next_layer(transparent_layer, context)
+        self.assertIsInstance(layer, ForwardLayer)
 
     def test_handle_layer_error(self):
         context = LayerContext(
