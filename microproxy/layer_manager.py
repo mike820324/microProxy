@@ -27,14 +27,14 @@ def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
     current_context = initial_layer_context
     current_layer = initial_layer
 
-    while current_layer:
-        try:
+    try:
+        while current_layer:
             logger.debug("Enter {0} Layer".format(current_layer))
             current_context = yield current_layer.process_and_return_context()
             logger.debug("Leave {0} Layer".format(current_layer))
             current_layer = _next_layer(current_layer, current_context)
-        except Exception as error:
-            _handle_layer_error(error, current_context)
+    except Exception as error:
+        _handle_layer_error(error, current_context)
 
     raise gen.Return(None)
 
@@ -59,6 +59,8 @@ def _handle_layer_error(error, layer_context):
 
     if isinstance(error, iostream.StreamClosedError):
         logger.error("stream closed")
+        # NOTE: unhandled StreamClosedError, print stack to find out where
+        logger.exception(error)
         layer_context.src_stream.close()
         return
 
