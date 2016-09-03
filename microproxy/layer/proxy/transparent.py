@@ -18,7 +18,7 @@ class TransparentLayer(ProxyLayer):
         if platform.system() == "Linux":
             return self._linux_get_dest_addr
         else:
-            return self._default_dest_addr_resolver
+            raise NotImplementedError
 
     def _linux_get_dest_addr(self):  # pragma: no cover
         src_stream = self.context.src_stream
@@ -28,9 +28,6 @@ class TransparentLayer(ProxyLayer):
         _, port, a1, a2, a3, a4 = struct.unpack("!HHBBBBxxxxxxxx", sock_opt)
         address = "%d.%d.%d.%d" % (a1, a2, a3, a4)
         return (address, port)
-
-    def _default_dest_addr_resolver(self):  # pragma: no cover
-        raise NotImplementedError
 
     @gen.coroutine
     def process_and_return_context(self):
