@@ -95,7 +95,7 @@ class Connection(H11Connection):
                     logger.warning("event recevied was not handled from {0}: {1}".format(self.conn_type, repr(event)))
         except Exception as e:  # pragma: no cover
             if raise_exception:
-                raise e
+                raise
             logger.error("Exception on {0}".format(self.conn_type))
             logger.exception(e)
 

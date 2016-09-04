@@ -25,24 +25,26 @@ class SocksLayer(ProxyLayer):
     def process_and_return_context(self):
         self.socks_conn.initiate_connection()
         while True:
-            data = yield self.context.src_stream.read_bytes(1024, partial=True)
-            _event = self.socks_conn.receive(data)
+            try:
+                data = yield self.context.src_stream.read_bytes(1024, partial=True)
+            except iostream.StreamClosedError:
+                raise SrcStreamClosedError(
+                    self, detail="client closed while socks handshaking")
 
+            _event = self.socks_conn.receive(data)
             if isinstance(_event, GreetingRequest):
                 event = self.handle_greeting_request(_event)
                 data = self.socks_conn.send(event)
                 yield self.context.src_stream.write(data)
-
             elif isinstance(_event, Request):
                 error, event = yield self.handle_request(_event)
                 if event:
                     data = self.socks_conn.send(event)
                     yield self.context.src_stream.write(data)
-
                 if error:
                     raise error
-
                 break
+
         self.context.src_stream.pause()
         raise gen.Return(self.context)
 
@@ -98,7 +100,7 @@ class SocksLayer(ProxyLayer):
                 socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
                 event.atyp, event.addr, event.port)
 
-            error = DestNotConnectedError(error)
+            error = DestNotConnectedError((host, port))
             return (error, response_event)
 
         if isinstance(error, iostream.StreamClosedError):
@@ -136,17 +138,15 @@ class SocksLayer(ProxyLayer):
                         socks_version, RESP_STATUS["GENRAL_FAILURE"],
                         event.atyp, event.addr, event.port)
 
-                error = DestNotConnectedError(e)
+                error = DestNotConnectedError((host, port))
             else:
                 # NOTE: if real_error is None, it imply the source stream is closed.
-                error = SrcStreamClosedError(e)
+                error = SrcStreamClosedError(self)
                 response_event = None
 
             if dest_stream:
                 dest_stream.close()
             return (error, response_event)
-
-
         # NOTE: Unhandle exception type, raise it
         else:
             raise error
