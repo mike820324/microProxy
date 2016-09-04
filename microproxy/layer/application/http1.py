@@ -8,6 +8,10 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
+def _wrap_req_path(context, req):
+    return "http://{0}:{1}{2}".format(context.host, context.port, req.path)
+
+
 class Http1Layer(object):
     def __init__(self, context):
         super(Http1Layer, self).__init__()
@@ -56,7 +60,7 @@ class Http1Layer(object):
                 data = yield self.context.src_stream.read_bytes(
                     self.context.src_stream.max_buffer_size, partial=True)
             except StreamClosedError:
-                raise SrcStreamClosedError
+                raise SrcStreamClosedError(self, detail="read request failed")
             else:
                 self.src_conn.receive(data, raise_exception=True)
 
@@ -67,7 +71,9 @@ class Http1Layer(object):
                 data = yield self.context.dest_stream.read_bytes(
                     self.context.dest_stream.max_buffer_size, partial=True)
             except StreamClosedError:
-                raise DestStreamClosedError
+                raise DestStreamClosedError(
+                    self, detail="read response failed with {0}".format(
+                        _wrap_req_path(self.req)))
             else:
                 self.dest_conn.receive(data, raise_exception=True)
 
@@ -79,7 +85,8 @@ class Http1Layer(object):
         try:
             self.dest_conn.send_request(self.req)
         except StreamClosedError:
-            raise DestStreamClosedError
+            raise DestStreamClosedError(self, detail="send request failed with {0}".format(
+                _wrap_req_path(self.context, self.req)))
 
     def on_response(self, response):
         plugin_result = self.context.interceptor.response(
@@ -90,7 +97,8 @@ class Http1Layer(object):
         try:
             self.src_conn.send_response(self.resp)
         except StreamClosedError:
-            raise SrcStreamClosedError
+            raise SrcStreamClosedError(self, detail="send response failed {0}".format(
+                _wrap_req_path(self.context, self.req)))
 
         self.finish()
 
@@ -99,7 +107,12 @@ class Http1Layer(object):
             layer_context=self.context,
             request=self.req, response=response)
         self.resp = plugin_result.response if plugin_result else response
-        self.src_conn.send_info_response(self.resp)
+        try:
+            self.src_conn.send_info_response(self.resp)
+        except StreamClosedError:
+            raise SrcStreamClosedError(self, detail="send response failed {0}".format(
+                _wrap_req_path(self.context, self.req)))
+
         self.finish(switch_protocol=True)
 
     def finished(self):
