@@ -1,4 +1,9 @@
 from OpenSSL import SSL, crypto
+from service_identity import VerificationError
+from service_identity.pyopenssl import verify_hostname
+
+from microproxy.utils import get_logger
+logger = get_logger(__name__)
 
 _SUPPROT_CIPHERS_SUITES = (
     "ECDHE-RSA-AES128-GCM-SHA256",
@@ -58,11 +63,20 @@ def create_basic_sslcontext():
     return ssl_ctx
 
 
-def create_dest_sslcontext(alpn=None):
+def certificate_verify_cb(conn, x509, err_num, err_depth, verify_status):
+    return verify_status
+
+
+def create_dest_sslcontext(insecure=False, trusted_ca_certs="", alpn=None):
     ssl_ctx = create_basic_sslcontext()
 
-    ssl_ctx.set_verify(SSL.VERIFY_NONE,
-                       lambda conn, x509, err_num, err_depth, err_code: True)
+    if not insecure and trusted_ca_certs:
+        verify_mode = SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT
+        ssl_ctx.load_verify_locations(trusted_ca_certs)
+    else:
+        verify_mode = SSL.VERIFY_NONE
+
+    ssl_ctx.set_verify(verify_mode, certificate_verify_cb)
     try:
         ssl_ctx.set_alpn_protos(alpn or [])
     except NotImplementedError:
