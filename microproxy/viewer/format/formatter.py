@@ -39,6 +39,13 @@ class JsFormatter(object):
 
 
 class URlEncodedFormatter(object):
+    JSON_SUSPECT_PREFIX = ["{", "["]
+    XML_SUSPECT_PREFIX = ["<"]
+
+    def __init__(self):
+        self.xml_formatter = XmlFormatter()
+        self.json_formatter = JsonFormatter()
+
     def match(self, content_type):
         return content_type in (
             "application/x-www-form-urlencoded",
@@ -52,11 +59,22 @@ class URlEncodedFormatter(object):
                 max_length = len(entity[0])
 
         pretty_string = [
-            "{0}: {1}".format(key.ljust(max_length), value)
+            "{0}: {1}".format(key.ljust(max_length), self._try_parse_value(value))
             for key, value in
             urlencoed_list]
 
         return "\n".join(pretty_string)
+
+    def _try_parse_value(self, value):
+        if not value:
+            return value
+        try:
+            if value[0] in self.JSON_SUSPECT_PREFIX:
+                return "\n" + self.json_formatter.format_body(value)
+            if value[0] in self.XML_SUSPECT_PREFIX:
+                return "\n" + self.xml_formatter.format_body(value)
+        except:
+            return value
 
 
 class HttpFormatter(object):
