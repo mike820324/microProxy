@@ -1,5 +1,7 @@
-from OpenSSL import SSL
 from copy import copy
+from OpenSSL import SSL
+from service_identity import VerificationError
+from service_identity.pyopenssl import verify_hostname
 from tornado import gen, concurrent
 
 from microproxy.iostream import MicroProxySSLIOStream
@@ -15,13 +17,19 @@ class TlsLayer(object):
     def __init__(self, context):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
+        self.config = self.context.config
         self.cert_store = get_cert_store()
         # NOTE: tuple contains (dest_ssl_sock, hostname, alpn_info)
         # Throws exception if failed
         self._alpn_future = concurrent.Future()
+        self._server_hostname = None
 
     def connect_dest(self, support_alpn, hostname):
-        dest_context = tls.create_dest_sslcontext(alpn=support_alpn)
+        dest_context = tls.create_dest_sslcontext(
+            insecure=(self.config["insecure"] == "yes"),
+            trusted_ca_certs=self.config["client_certs"],
+            alpn=support_alpn)
+
         dest_sock = self.context.dest_stream.detach()
         dest_sock.setblocking(True)
 
@@ -32,7 +40,18 @@ class TlsLayer(object):
             ssl_sock.set_tlsext_host_name(hostname)
 
         ssl_sock.set_connect_state()
-        ssl_sock.do_handshake()
+
+        try:
+            ssl_sock.do_handshake()
+        except SSL.Error:
+            raise
+
+        if self.config["insecure"] == "no":
+            try:
+                verify_hostname(ssl_sock, unicode(hostname))
+            except VerificationError as e:
+                logger.warning("Invalid SSL certificate: {0}".format(e))
+                raise
 
         alpn_info = ssl_sock.get_alpn_proto_negotiated() or b"http/1.1"
 
