@@ -68,10 +68,13 @@ class URlEncodedFormatter(object):
     def _try_parse_value(self, value):
         try:
             if value[0] in self.JSON_SUSPECT_PREFIX:
-                value = "\n" + self.json_formatter.format_body(value)
-            if value[0] in self.XML_SUSPECT_PREFIX:
-                value = "\n" + self.xml_formatter.format_body(value)
-        finally:
+                return "\n" + self.json_formatter.format_body(value)
+            elif value[0] in self.XML_SUSPECT_PREFIX:
+                return "\n" + self.xml_formatter.format_body(value)
+            else:
+                return value
+
+        except:
             return value
 
 
