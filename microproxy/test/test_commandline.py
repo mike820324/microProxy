@@ -77,6 +77,21 @@ class CommandLineTest(unittest.TestCase):
                       default="tcp://127.0.0.1:5582",  # Note: Make default to only accept local to access it
                       cmd_flags="--events-channel")
 
+        define_option(option_info=proxy_options,
+                      option_name="insecure",
+                      help_str="Specify the private key file",
+                      option_type="string",
+                      default="no",
+                      choices=["yes", "no"],
+                      cmd_flags="--insecure")
+
+        define_option(option_info=proxy_options,
+                      option_name="client_certs",
+                      help_str="Specify the location of trusted ca pem file",
+                      option_type="string",
+                      default="",
+                      cmd_flags="--client-certs")
+
         config = create_proxy_options()
         for options_key in config:
             self.assertIn(options_key, proxy_options)

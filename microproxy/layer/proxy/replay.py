@@ -18,8 +18,9 @@ class ReplayLayer(ProxyLayer):
                 alpn = ["h2"]
             else:
                 alpn = None
+
             dest_stream = yield dest_stream.start_tls(
-                server_side=False, ssl_options=tls.create_dest_sslcontext(alpn))
+                server_side=False, ssl_options=tls.create_dest_sslcontext(alpn=alpn))
 
         self.context.dest_stream = dest_stream
         raise gen.Return(self.context)
