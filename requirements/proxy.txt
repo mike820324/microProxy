@@ -3,6 +3,7 @@ pyzmq==15.2.0
 watchdog==0.8.3
 pyOpenSSL==16.0.0
 service-identity==16.0.0
+certifi==2016.8.8
 h2==2.4.0
 
 -e git+https://github.com/chhsiao90/h11.git#egg=h11

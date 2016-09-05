@@ -102,7 +102,7 @@ def create_proxy_options():
                   option_name="insecure",
                   help_str="Specify the private key file",
                   option_type="string",
-                  default="yes",
+                  default="no",
                   choices=["yes", "no"],
                   cmd_flags="--insecure")
 

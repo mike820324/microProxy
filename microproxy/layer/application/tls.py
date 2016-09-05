@@ -1,5 +1,6 @@
 from copy import copy
 from OpenSSL import SSL
+import certifi
 from service_identity import VerificationError
 from service_identity.pyopenssl import verify_hostname
 from tornado import gen, concurrent
@@ -27,9 +28,15 @@ class TlsLayer(object):
         self._server_hostname = None
 
     def connect_dest(self, support_alpn, hostname):
+        if self.config["client_certs"]:
+            trusted_ca_certs = self.config["client_certs"]
+
+        else:
+            trusted_ca_certs = certifi.where()
+
         dest_context = tls.create_dest_sslcontext(
             insecure=(self.config["insecure"] == "yes"),
-            trusted_ca_certs=self.config["client_certs"],
+            trusted_ca_certs=trusted_ca_certs,
             alpn=support_alpn)
 
         dest_sock = self.context.dest_stream.detach()
