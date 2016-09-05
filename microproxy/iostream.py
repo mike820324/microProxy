@@ -62,6 +62,7 @@ class MicroProxyIOStream(IOStream):
 
         future = TracebackFuture()
         ssl_stream = MicroProxySSLIOStream(socket,
+                                           server_hostname,
                                            ssl_options=ssl_options,
                                            io_loop=self.io_loop)
 
@@ -79,8 +80,23 @@ class MicroProxyIOStream(IOStream):
 
 
 class MicroProxySSLIOStream(SSLIOStream):
-    def __init__(self, sock, **kwargs):
+    def __init__(self, sock, server_hostname=None, **kwargs):
         super(MicroProxySSLIOStream, self).__init__(sock, **kwargs)
+        self._server_hostname = unicode(server_hostname) if server_hostname else None
+
+    def _handle_connect(self):
+        super(SSLIOStream, self)._handle_connect()
+        if self.closed():
+            return
+        self.io_loop.remove_handler(self.socket)
+        old_state = self._state
+        self._state = None
+        try:
+            self.socket = SSL.Connection(self._ssl_options, self.socket)
+        except Exception as e:
+            print e
+        self.socket.set_connect_state()
+        self._add_io_state(old_state)
 
     def _do_ssl_handshake(self):
         try:
@@ -112,15 +128,16 @@ class MicroProxySSLIOStream(SSLIOStream):
 
         except AttributeError:
             return self.close(exc_info=True)
+
         else:
             self._ssl_accepting = False
             verify_mode = self.socket.get_context().get_verify_mode()
-            if (verify_mode is not SSL.VERIFY_NONE and
+            if (verify_mode != SSL.VERIFY_NONE and
                     self._server_hostname is not None):
                 try:
                     verify_hostname(self.socket, self._server_hostname)
                 except VerificationError as e:
-                    logger.warning("Invalid SSL certificate: %s" % e)
+                    logger.warning("Invalid SSL certificate: {0}".format(e))
                     self.close()
                     return
 
@@ -150,8 +167,14 @@ class MicroProxySSLIOStream(SSLIOStream):
         except SSL.WantReadError:
             return None
 
-        except SSL.Error:
+        except SSL.SysCallError as e:
+            err_num = abs(e[0])
+            if err_num == errno.EBADF:
                 raise
+            return None
+
+        except SSL.Error as e:
+            raise
 
         except socket.error as e:
             if e.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
