@@ -11,7 +11,6 @@ ioloop.install()
 
 
 class Tui(gviewer.BaseDisplayer):
-    SUMMARY_MAX_LENGTH = 100
     PALETTE = [
         ("code ok", "light green", "black", "bold"),
         ("code error", "light red", "black", "bold")
@@ -49,16 +48,21 @@ class Tui(gviewer.BaseDisplayer):
         return ("code error", str(code))
 
     def _fold_path(self, path):
-        return path if len(path) < self.SUMMARY_MAX_LENGTH else path[:self.SUMMARY_MAX_LENGTH - 1] + "..."
+        max_length = self.config["max_width"] - 14
+        return path if len(path) < max_length else path[:max_length - 1] + "..."
 
     def summary(self, message):
+        pretty_path = self._fold_path("{0}://{1}{2}".format(
+            message["scheme"],
+            message["host"],
+            message["path"])
+        )
         return [
             self._code_text_markup(message["response"]["code"]),
-            " {0:7} {1}://{2}{3}".format(
+            " {0:7} {1}".format(
                 message["request"]["method"],
-                message["scheme"],
-                message["host"],
-                self._fold_path(message["path"]))]
+                pretty_path)
+        ]
 
     def get_views(self):
         return [("Request", self.request_view),
