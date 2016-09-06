@@ -62,6 +62,7 @@ class MicroProxyIOStream(IOStream):
 
         future = TracebackFuture()
         ssl_stream = MicroProxySSLIOStream(socket,
+                                           server_hostname,
                                            ssl_options=ssl_options,
                                            io_loop=self.io_loop)
 
@@ -79,8 +80,20 @@ class MicroProxyIOStream(IOStream):
 
 
 class MicroProxySSLIOStream(SSLIOStream):
-    def __init__(self, sock, **kwargs):
+    def __init__(self, sock, server_hostname=None, **kwargs):
         super(MicroProxySSLIOStream, self).__init__(sock, **kwargs)
+        self._server_hostname = unicode(server_hostname) if server_hostname else None
+
+    def _handle_connect(self):
+        super(SSLIOStream, self)._handle_connect()
+        if self.closed():
+            return
+        self.io_loop.remove_handler(self.socket)
+        old_state = self._state
+        self._state = None
+        self.socket = SSL.Connection(self._ssl_options, self.socket)
+        self.socket.set_connect_state()
+        self._add_io_state(old_state)
 
     def _do_ssl_handshake(self):
         try:
@@ -96,6 +109,13 @@ class MicroProxySSLIOStream(SSLIOStream):
             self._handshake_writing = True
             return
 
+        except SSL.SysCallError as e:
+            err_num = abs(e[0])
+            if err_num in (errno.EBADF, errno.ENOTCONN, errno.EPERM):
+                return self.close(exc_info=True)
+
+            raise
+
         except SSL.Error as err:
             try:
                 peer = self.socket.getpeername()
@@ -105,22 +125,18 @@ class MicroProxySSLIOStream(SSLIOStream):
                                self.socket.fileno(), peer, err)
             return self.close(exc_info=True)
 
-        except socket.error as err:
-            if (self._is_connreset(err) or err.args[0] in (errno.EBADF, errno.ENOTCONN)):
-                return self.close(exc_info=True)
-            raise
-
         except AttributeError:
             return self.close(exc_info=True)
+
         else:
             self._ssl_accepting = False
             verify_mode = self.socket.get_context().get_verify_mode()
-            if (verify_mode is not SSL.VERIFY_NONE and
+            if (verify_mode != SSL.VERIFY_NONE and
                     self._server_hostname is not None):
                 try:
                     verify_hostname(self.socket, self._server_hostname)
                 except VerificationError as e:
-                    logger.warning("Invalid SSL certificate: %s" % e)
+                    logger.warning("Invalid SSL certificate: {0}".format(e))
                     self.close()
                     return
 
@@ -136,28 +152,34 @@ class MicroProxySSLIOStream(SSLIOStream):
 
     def read_from_fd(self):
         if self._ssl_accepting:
-            # If the handshake hasn't finished yet, there can't be anything
-            # to read (attempting to read may or may not raise an exception
-            # depending on the SSL version)
             return None
         try:
-            # SSLSocket objects have both a read() and recv() method,
-            # while regular sockets only have recv().
-            # The recv() method blocks (at least in python 2.6) if it is
-            # called when there is nothing to read, so we have to use
-            # read() instead.
             chunk = self.socket.read(self.read_chunk_size)
         except SSL.WantReadError:
             return None
 
-        except SSL.Error:
-                raise
+        except SSL.ZeroReturnError:
+            self.close(exc_info=True)
+            return None
 
-        except socket.error as e:
-            if e.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
+        except SSL.SysCallError as e:
+            err_num = abs(e[0])
+            if err_num in (errno.EWOULDBLOCK, errno.EAGAIN):
                 return None
-            else:
-                raise
+
+            # NOTE: We will handle the self.close in here.
+            # _read_to_buffer of BaseIOStream will not chceck SSL.SysCallError
+            if err_num == errno.EPERM:
+                self.close(exc_info=True)
+                return None
+
+            self.close(exc_info=True)
+            raise
+
+        # NOTE: Just in case we missed some SSL Error type.
+        except SSL.Error as e:
+            raise
+
         if not chunk:
             self.close()
             return None
