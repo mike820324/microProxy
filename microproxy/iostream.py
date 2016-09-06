@@ -167,6 +167,10 @@ class MicroProxySSLIOStream(SSLIOStream):
         except SSL.WantReadError:
             return None
 
+        except SSL.ZeroReturnError:
+            self.close(exc_info=True)
+            return None
+
         except SSL.SysCallError as e:
             err_num = abs(e[0])
             if err_num == errno.EPERM:
