@@ -199,26 +199,30 @@ def run_proxy_mode(config):
     from microproxy.interceptor import init_interceptor
     from microproxy.interceptor.msg_publisher import MsgPublisher
 
-    logger = get_logger(__name__)
-    init_cert_store(config)
-
     publish_socket = create_publish_channel(config["viewer_channel"])
-    register_log_publisher(publish_socket)
+    register_log_publisher(publish_socket, get_logger())
     msg_publisher = MsgPublisher(config, zmq_socket=publish_socket)
 
     init_interceptor(config, msg_publisher=msg_publisher)
-    start_tcp_server(config)
 
     event_socket = create_event_channel(config["events_channel"])
     start_events_server(config, event_socket)
 
+    init_cert_store(config)
+    start_tcp_server(config)
+
     try:
         curr_loop().start()
     except KeyboardInterrupt:
+        logger = get_logger(__name__)
         logger.info("bye")
 
 
 def main():  # pragma: no cover
+    # NOTE: logger must start before everything else
+    from microproxy.utils import init_system_logger
+    init_system_logger()
+
     config_field_info = create_options()
     config = parse_config(config_field_info)
 
