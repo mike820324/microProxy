@@ -73,7 +73,7 @@ class Http1Layer(object):
             except StreamClosedError:
                 raise DestStreamClosedError(
                     self, detail="read response failed with {0}".format(
-                        _wrap_req_path(self.req)))
+                        _wrap_req_path(self.context, self.req)))
             else:
                 self.dest_conn.receive(data, raise_exception=True)
 
