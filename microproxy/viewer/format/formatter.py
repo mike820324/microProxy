@@ -78,7 +78,7 @@ class URlEncodedFormatter(object):
             return value
 
 
-class HttpFormatter(object):
+class HtmlFormatter(object):
     def __init__(self):
         self.parser = lxml.etree.HTMLParser()
 
@@ -132,7 +132,7 @@ class Formatter(object):
         self.formatters = [
             CssFormatter(),
             JsFormatter(),
-            HttpFormatter(),
+            HtmlFormatter(),
             JsonFormatter(),
             XmlFormatter(),
             URlEncodedFormatter(),
@@ -146,9 +146,9 @@ class Formatter(object):
         if self._is_gzip(headers_dict):
             body = decompress.ungzip(body)
 
-        body = self.format_body(headers_dict, body)
+        formatter, body = self.format_body(headers_dict, body)
 
-        return self._process_final_body(body)
+        return formatter, self._process_final_body(body)
 
     def format_response(self, response):
         headers_dict = dict(response["headers"])
@@ -157,9 +157,9 @@ class Formatter(object):
         if self._is_gzip(headers_dict):
             body = decompress.ungzip(body)
 
-        body = self.format_body(headers_dict, body)
+        formatter, body = self.format_body(headers_dict, body)
 
-        return self._process_final_body(body)
+        return formatter, self._process_final_body(body)
 
     def format_body(self, headers, body):
         if "Content-Type" in headers.keys():
@@ -176,10 +176,10 @@ class Formatter(object):
         for formatter in self.formatters:
             if formatter.match(content_type):
                 try:
-                    return formatter.format_body(body)
+                    return (type(formatter), formatter.format_body(body))
                 except:
-                    return body
-        return ""
+                    return (None, body)
+        return (None, "")
 
     def _process_final_body(self, body):
         body = self._tab_to_space(body)
