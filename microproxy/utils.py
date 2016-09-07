@@ -1,4 +1,5 @@
 import zmq
+from zmq.eventloop import zmqstream
 from zmq.log.handlers import PUBHandler
 from zmq.eventloop.ioloop import IOLoop
 import logging
@@ -28,3 +29,10 @@ def register_log_publisher(socket):  # pragma: no cover
     handler.root_topic = "logger"
     logger = logging.getLogger()
     logger.addHandler(handler)
+
+
+def create_event_channel(channel):  # pragma: no cover
+    context = zmq.Context()
+    socket = context.socket(zmq.PULL)
+    socket.bind(channel)
+    return zmqstream.ZMQStream(socket)

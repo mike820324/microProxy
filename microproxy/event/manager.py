@@ -1,6 +1,3 @@
-import zmq
-from zmq.eventloop import zmqstream
-
 import json
 
 from microproxy.utils import get_logger
@@ -10,20 +7,13 @@ logger = get_logger(__name__)
 
 
 class EventManager(object):
-    def __init__(self, config, handler=None, zmq_stream=None):
+    def __init__(self, config, zmq_stream, handler=None):
         super(EventManager, self).__init__()
         self.handler = handler or EventHandler(config)
-        self.zmq_stream = zmq_stream or self._create_stream(config)
+        self.zmq_stream = zmq_stream
 
     def start(self):
         self.zmq_stream.on_recv(self._on_recv)
-
-    def _create_stream(self, config):  # pragma: no cover
-        context = zmq.Context()
-        socket = context.socket(zmq.PULL)
-        socket.bind(config["events_channel"])
-        logger.info("EventManager is listening at {0}".format(config["events_channel"]))
-        return zmqstream.ZMQStream(socket)
 
     def _on_recv(self, msg_parts):
         message = msg_parts[0]
@@ -45,5 +35,5 @@ class EventHandler(object):
         self.handler.handle(event)
 
 
-def start_events_server(config):
-    EventManager(config).start()
+def start_events_server(config, zmq_stream):
+    EventManager(config, zmq_stream).start()
