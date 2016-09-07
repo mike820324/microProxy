@@ -23,7 +23,8 @@ ioloop.install()
 class Tui(gviewer.BaseDisplayer):
     PALETTE = [
         ("code ok", "light green", "black", "bold"),
-        ("code error", "light red", "black", "bold")
+        ("code error", "light red", "black", "bold"),
+        ("indicator", "yellow", "black", "bold")
     ]
     DEFAULT_EXPORT_REPLAY_FILE = "replay.script"
     PYGMENTS_MAPPING = dict([
@@ -47,7 +48,7 @@ class Tui(gviewer.BaseDisplayer):
         self.formatter = Formatter()
         self.config = config
         self.event_client = EventClient(config["events_channel"])
-        self.terminal_width, _ =  get_terminal_size()
+        self.terminal_width, _ = get_terminal_size()
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
@@ -66,16 +67,18 @@ class Tui(gviewer.BaseDisplayer):
         return ("code error", str(code))
 
     def _fold_path(self, path):
-        max_width = self.terminal_width - 14
+        max_width = self.terminal_width - 16
         return path if len(path) < max_width else path[:max_width - 1] + "..."
 
-    def summary(self, message):
+    def summary(self, message, exported=False):
+        mark = "V " if exported else "  "
         pretty_path = self._fold_path("{0}://{1}{2}".format(
             message["scheme"],
             message["host"],
             message["path"])
         )
         return [
+            ("indicator", mark),
             self._code_text_markup(message["response"]["code"]),
             " {0:7} {1}".format(
                 message["request"]["method"],
@@ -142,6 +145,7 @@ class Tui(gviewer.BaseDisplayer):
         with open(export_file, "a") as f:
             f.write(json.dumps(message))
             f.write("\n")
+        widget.set_title(self.summary(message, exported=True))
         parent.notify("replay script export to {0}".format(export_file))
 
     def replay(self, parent, message, widget, *args, **kwargs):
