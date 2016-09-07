@@ -188,31 +188,43 @@ def create_console_viewer_options():
     return console_viewer_option_info
 
 
+def run_proxy_mode(config):
+    from microproxy.proxy import start_tcp_server
+    from microproxy.event import start_events_server
+    from microproxy.utils import (
+        get_logger, curr_loop, create_publish_channel,
+        register_log_publisher)
+    from microproxy.cert import init_cert_store
+    from microproxy.interceptor import init_interceptor
+    from microproxy.interceptor.msg_publisher import MsgPublisher
+
+    logger = get_logger(__name__)
+    init_cert_store(config)
+
+    publish_socket = create_publish_channel(
+        config["viewer_channel"])
+    register_log_publisher(publish_socket)
+    msg_publisher = MsgPublisher(config, zmq_socket=publish_socket)
+
+    init_interceptor(config, msg_publisher=msg_publisher)
+    start_tcp_server(config)
+    start_events_server(config)
+
+    try:
+        curr_loop().start()
+    except KeyboardInterrupt:
+        logger.info("bye")
+
+
 def main():  # pragma: no cover
     config_field_info = create_options()
     config = parse_config(config_field_info)
 
     if config["command_type"] == "proxy":
-        from microproxy.proxy import start_tcp_server
-        from microproxy.event import start_events_server
-        from microproxy.utils import get_logger, curr_loop
-        from microproxy.cert import init_cert_store
-        from microproxy.interceptor import init_interceptor
-
-        logger = get_logger(__name__)
-        init_cert_store(config)
-        init_interceptor(config)
-        start_tcp_server(config)
-        start_events_server(config)
-        try:
-            curr_loop().start()
-        except KeyboardInterrupt:
-            logger.info("bye")
-
+        run_proxy_mode(config)
     elif config["command_type"] == "console-viewer":
         from microproxy.viewer import console as console_viewer
         console_viewer.start(config)
-
     elif config["command_type"] == "tui-viewer":
         from microproxy.viewer import tui as tui_viewer
         tui_viewer.start(config)

@@ -34,24 +34,27 @@ class Tui(gviewer.BaseDisplayer):
         (CssFormatter, CssLexer()),
         (JsFormatter, JavascriptLexer())])
 
-    def __init__(self, stream, config):
-        self.stream = stream
-        self.data_store = self.create_data_store()
+    def __init__(self, config):
+        socket = create_msg_channel(config["viewer_channel"], "message")
+        stream = zmqstream.ZMQStream(socket)
+        data_store = MessageAsyncDataStore(stream.on_recv)
+
+        context = gviewer.DisplayerContext(
+            data_store, self, actions=gviewer.Actions([
+                ("e", "export replay script", self.export_replay),
+                ("r", "replay", self.replay),
+                ("L", "log", self.log)]))
+
+        self.log_context = LogDisplayer(config).context
         self.viewer = gviewer.GViewer(
-            gviewer.DisplayerContext(
-                self.data_store, self, actions=gviewer.Actions([
-                    ("e", "export replay script", self.export_replay),
-                    ("r", "replay", self.replay)])),
-            palette=self.PALETTE,
+            context, palette=self.PALETTE,
+            other_contexts=[self.log_context],
             config=gviewer.Config(auto_scroll=True),
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
         self.config = config
         self.event_client = EventClient(config["events_channel"])
         self.terminal_width, _ = get_terminal_size()
-
-    def create_data_store(self):
-        return ZmqAsyncDataStore(self.stream.on_recv)
 
     def start(self):
         if "replay_file" in self.config and self.config["replay_file"]:
@@ -153,22 +156,46 @@ class Tui(gviewer.BaseDisplayer):
         if parent:
             parent.notify("sent replay event to server")
 
+    def log(self, controller, message, widget, *args, **kwargs):
+        controller.open_view_by_context(self.log_context)
 
-class ZmqAsyncDataStore(gviewer.AsyncDataStore):
+
+class MessageAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
-        return json.loads(message[0])
+        return json.loads(message[1])
 
 
-def create_msg_channel(channel):
+class LogDisplayer(gviewer.BaseDisplayer):
+    def __init__(self, config):
+        socket = create_msg_channel(config["viewer_channel"], "logger")
+        stream = zmqstream.ZMQStream(socket)
+        data_store = gviewer.AsyncDataStore(stream.on_recv)
+        self.context = gviewer.DisplayerContext(
+            data_store, self)
+
+    def summary(self, message):
+        if "\n" in message[1]:
+            return message[1].split("\n")[0]
+        else:
+            return message[1]
+
+    def get_views(self):
+        return [("", self.show)]
+
+    def show(self, message):
+        lines = message[1].split("\n")
+        lines = map(lambda l: gviewer.Text(l), lines)
+        return gviewer.View([gviewer.Group("", lines)])
+
+
+def create_msg_channel(channel, topic):
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
-    socket.setsockopt(zmq.SUBSCRIBE, "")
+    socket.setsockopt(zmq.SUBSCRIBE, topic)
     return socket
 
 
 def start(config):
-    socket = create_msg_channel(config["viewer_channel"])
-    stream = zmqstream.ZMQStream(socket)
-    tui = Tui(stream, config)
+    tui = Tui(config)
     tui.start()
