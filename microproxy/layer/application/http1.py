@@ -71,9 +71,10 @@ class Http1Layer(object):
                 data = yield self.context.dest_stream.read_bytes(
                     self.context.dest_stream.max_buffer_size, partial=True)
             except StreamClosedError:
-                raise DestStreamClosedError(
-                    self, detail="read response failed with {0}".format(
-                        _wrap_req_path(self.context, self.req)))
+                # NOTE: for HTTP protocol, there is some condition that response finish when they didn't send data
+                # It may happen when there is no "Content-Length" or "Content-Encoding: chunked" defined in there header
+                self.dest_conn.receive(b"", raise_exception=False)
+                break
             else:
                 self.dest_conn.receive(data, raise_exception=True)
 
