@@ -138,6 +138,7 @@ def create_tui_viewer_options():
                   option_type="string",
                   default="",
                   cmd_flags="--replay-file")
+
     return tui_viewer_option_info
 
 
