@@ -22,11 +22,12 @@ class Tui(gviewer.BaseDisplayer):
         self.stream = stream
         self.data_store = self.create_data_store()
         self.viewer = gviewer.GViewer(
-            self.data_store, self,
-            summary_actions=gviewer.Actions([
-                ("e", "export replay script", self.export_replay),
-                ("r", "replay", self.replay)]),
+            gviewer.DisplayerContext(
+                self.data_store, self, actions=gviewer.Actions([
+                    ("e", "export replay script", self.export_replay),
+                    ("r", "replay", self.replay)])),
             palette=self.PALETTE,
+            config=gviewer.Config(auto_scroll=True),
             event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
         self.formatter = Formatter()
         self.config = config
@@ -85,7 +86,7 @@ class Tui(gviewer.BaseDisplayer):
         if request["body"]:
             groups.append(gviewer.Group(
                 "Request Body",
-                [gviewer.Line(s) for s in self.formatter.format_request(request)]))
+                [gviewer.Text(s) for s in self.formatter.format_request(request)]))
         return gviewer.View(groups)
 
     def response_view(self, message):
@@ -103,10 +104,10 @@ class Tui(gviewer.BaseDisplayer):
         if response["body"]:
             groups.append(gviewer.Group(
                 "Response Body",
-                [gviewer.Line(s) for s in self.formatter.format_response(response)]))
+                [gviewer.Text(s) for s in self.formatter.format_response(response)]))
         return gviewer.View(groups)
 
-    def export_replay(self, parent, message):
+    def export_replay(self, parent, message, widget, *args, **kwargs):
         if "out_file" in self.config:
             export_file = self.config["out_file"]
         else:
@@ -117,7 +118,7 @@ class Tui(gviewer.BaseDisplayer):
             f.write("\n")
         parent.notify("replay script export to {0}".format(export_file))
 
-    def replay(self, parent, message):
+    def replay(self, parent, message, widget, *args, **kwargs):
         self.event_client.send_event(message)
         parent.notify("sent replay event to server")
 
