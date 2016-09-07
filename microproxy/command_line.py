@@ -139,12 +139,6 @@ def create_tui_viewer_options():
                   default="",
                   cmd_flags="--replay-file")
 
-    define_option(option_info=tui_viewer_option_info,
-                  option_name="max_width",
-                  help_str="Specify a replay script file",
-                  option_type="int",
-                  default=80,
-                  cmd_flags="--max-width")
     return tui_viewer_option_info
 
 

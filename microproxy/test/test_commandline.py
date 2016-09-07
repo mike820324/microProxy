@@ -167,13 +167,6 @@ class CommandLineTest(unittest.TestCase):
                       default="",
                       cmd_flags="--replay-file")
 
-        define_option(option_info=options,
-                      option_name="max_width",
-                      help_str="Specify a replay script file",
-                      option_type="int",
-                      default=80,
-                      cmd_flags="--max-width")
-
         config = create_tui_viewer_options()
 
         for option_key in config:

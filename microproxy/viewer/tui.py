@@ -2,6 +2,7 @@ import zmq
 from zmq.eventloop import ioloop, zmqstream
 import urwid
 import json
+from backports.shutil_get_terminal_size import get_terminal_size
 
 import gviewer
 from microproxy.event import EventClient
@@ -30,6 +31,7 @@ class Tui(gviewer.BaseDisplayer):
         self.formatter = Formatter()
         self.config = config
         self.event_client = EventClient(config["events_channel"])
+        self.terminal_width, _ =  get_terminal_size()
 
     def create_data_store(self):
         return ZmqAsyncDataStore(self.stream.on_recv)
@@ -48,8 +50,8 @@ class Tui(gviewer.BaseDisplayer):
         return ("code error", str(code))
 
     def _fold_path(self, path):
-        max_length = self.config["max_width"] - 14
-        return path if len(path) < max_length else path[:max_length - 1] + "..."
+        max_width = self.terminal_width - 14
+        return path if len(path) < max_width else path[:max_width - 1] + "..."
 
     def summary(self, message):
         pretty_path = self._fold_path("{0}://{1}{2}".format(
