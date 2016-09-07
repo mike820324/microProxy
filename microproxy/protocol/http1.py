@@ -85,6 +85,7 @@ class Connection(H11Connection):
                             headers=self._resp.headers,
                             body=b"".join(self._body_chunks)))
                     self._cleanup_after_received()
+                    break
                 elif isinstance(event, ConnectionClosed):  # pragma: no cover
                     raise ProtocolError("Should closed the connection")
                 elif event is h11.NEED_DATA:
