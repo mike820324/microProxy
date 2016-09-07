@@ -117,7 +117,8 @@ class Request(TextList):
         content.append(Header(request["headers"]))
         if show_body and request["body"]:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            content = content + _formatter.format_request(request)
+            _, body = _formatter.format_request(request)
+            content = content + body
         super(Request, self).__init__(content)
 
     def __eq__(self, other):
@@ -142,7 +143,8 @@ class Response(TextList):
         content.append(Header(response["headers"]))
         if show_body and response["body"]:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            content = content + _formatter.format_request(response)
+            _, body = _formatter.format_response(response)
+            content = content + body
         super(Response, self).__init__(content)
 
     def __eq__(self, other):
