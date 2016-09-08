@@ -120,6 +120,7 @@ class Connection(H11Connection):
             self.io_stream.close()
 
     def send_request(self, request):
+        logger.debug("sent request to {0}: {1}".format(self.conn_type, request))
         self.send(h11.Request(
             method=request.method,
             target=request.path,
@@ -130,6 +131,7 @@ class Connection(H11Connection):
         self.send(h11.EndOfMessage())
 
     def send_response(self, response):
+        logger.debug("sent response to {0}: {1}".format(self.conn_type, response))
         self.send(h11.Response(
             status_code=int(response.code),
             reason=response.reason,
@@ -142,6 +144,7 @@ class Connection(H11Connection):
             self.io_stream.close()
 
     def send_info_response(self, response):
+        logger.debug("sent info response to {0}: {1}".format(self.conn_type, response))
         self.send(h11.InformationalResponse(
             status_code=int(response.code),
             headers=response.headers,
