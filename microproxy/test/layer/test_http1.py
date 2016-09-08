@@ -101,7 +101,7 @@ class TestHttp1Layer(AsyncTestCase):
 
         self.server_conn.send_response(HttpResponse(
             version="HTTP/1.1", code="200", reason="OK",
-            headers=[("Content-Type", "plain/text")]))
+            headers=[("Content-Type", "plain/text")], body="body"))
 
         yield self.read_until_new_event(self.client_conn, self.src_events)
         self.assertEqual(len(self.src_events), 1)
@@ -113,6 +113,7 @@ class TestHttp1Layer(AsyncTestCase):
         self.assertEqual(
             response.headers,
             HttpHeaders([("content-type", "plain/text"), ("transfer-encoding", "chunked")]))
+        self.assertEqual(response.body, "body")
 
         self.assertTrue(http_layer_future.running())
 
@@ -192,7 +193,7 @@ class TestHttp1Layer(AsyncTestCase):
 
         self.server_conn.send_response(HttpResponse(
             version="HTTP/1.1", code="200", reason="OK",
-            headers=[("Content-Type", "plain/text")]))
+            headers=[("Content-Type", "plain/text")], body="body"))
 
         yield self.read_until_new_event(self.client_conn, self.src_events)
         self.assertEqual(len(self.src_events), 1)
@@ -204,6 +205,7 @@ class TestHttp1Layer(AsyncTestCase):
         self.assertEqual(
             response.headers,
             HttpHeaders([("content-type", "plain/text"), ("transfer-encoding", "chunked")]))
+        self.assertEqual(response.body, "body")
 
         self.assertTrue(http_layer_future.done())
 
@@ -249,6 +251,71 @@ class TestHttp1Layer(AsyncTestCase):
         yield http_layer_future
         self.assertFalse(self.context.src_stream.closed())
         self.assertFalse(self.context.dest_stream.closed())
+
+    @gen_test
+    def test_read_response_without_chunked_and_content_length(self):
+        http_layer_future = self.http_layer.process_and_return_context()
+        self.client_conn.send_request(HttpRequest(
+            version="HTTP/1.1", method="GET", path="/index",
+            headers=[("Host", "localhost")]))
+
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
+        self.assertEqual(len(self.dest_events), 1)
+        request, = self.dest_events[0]
+        self.assertIsInstance(request, HttpRequest)
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.version, "HTTP/1.1")
+        self.assertEqual(request.path, "/index")
+        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost")]))
+
+        yield self.dest_stream.write(
+            (b"HTTP/1.1 200 OK\r\n"
+             b"Connection: closed\r\n\r\n"
+             b"body"))
+
+        self.dest_stream.close()
+
+        yield self.read_until_new_event(self.client_conn, self.src_events)
+        self.assertEqual(len(self.src_events), 1)
+        response, = self.src_events[0]
+        self.assertIsInstance(response, HttpResponse)
+        self.assertEqual(response.code, "200")
+        self.assertEqual(response.version, "HTTP/1.1")
+        self.assertEqual(response.reason, "OK")
+        self.assertEqual(
+            response.headers,
+            HttpHeaders([("connection", "closed"), ('transfer-encoding', 'chunked')]))
+        self.assertEqual(response.body, "body")
+
+        self.assertTrue(http_layer_future.done())
+
+        yield http_layer_future
+
+    @gen_test
+    def test_write_info_resp_to_src_failed(self):
+        http_layer_future = self.http_layer.process_and_return_context()
+
+        self.client_conn.send_request(HttpRequest(
+            version="HTTP/1.1", method="GET", path="/chat",
+            headers=[("Host", "localhost"), ("Upgrade", "websocket")]))
+
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
+        self.assertEqual(len(self.dest_events), 1)
+        request, = self.dest_events[0]
+        self.assertIsInstance(request, HttpRequest)
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.version, "HTTP/1.1")
+        self.assertEqual(request.path, "/chat")
+        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost"), ("Upgrade", "websocket")]))
+
+        self.src_stream.close()
+
+        self.server_conn.send_info_response(HttpResponse(
+            version="HTTP/1.1", code="101", reason="Switching Protocol",
+            headers=[("Content-Type", "plain/text")]))
+
+        with self.assertRaises(SrcStreamClosedError):
+            yield http_layer_future
 
     def tearDown(self):
         self.src_stream.close()
