@@ -4,8 +4,8 @@ from microproxy.context import ViewerContext, PluginContext
 
 
 class Interceptor(object):
-    def __init__(self, config):
-        self.msg_publisher = MsgPublisher(config)
+    def __init__(self, config, msg_publisher=None):
+        self.msg_publisher = msg_publisher or MsgPublisher(config)
         self.plugin_manager = PluginManager(config)
 
     def request(self, layer_context, request):
