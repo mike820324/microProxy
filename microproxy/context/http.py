@@ -24,6 +24,10 @@ class HttpRequest(object):
         json["headers"] = [h for h in self.headers]
         return json
 
+    def __str__(self):
+        return "HttpRequest(version={0}, method={1}, path={2}, headers={3})".format(
+            self.version, self.method, self.path, self.headers)
+
 
 class HttpResponse(object):
     def __init__(self,
@@ -46,6 +50,10 @@ class HttpResponse(object):
         json["body"] = self.body.encode("base64")
         json["headers"] = [h for h in self.headers]
         return json
+
+    def __str__(self):
+        return "HttpResponse(version={0}, code={1}, reason={2}, headers={3})".format(
+            self.version, self.code, self.reason, self.headers)
 
 
 class HttpHeaders(object):

@@ -60,9 +60,15 @@ class ReplayHandler(object):
         return (write_stream, read_stream)
 
     def _send_http1_request(self, stream, context):
+        logger.debug("replay http1 request: {0}".format(context.request))
+        if context.request.body:
+            context.request.body = context.request.body.decode("base64")
         Http1Connection(h11.CLIENT, stream).send_request(context.request)
 
     def _send_http2_request(self, stream, context):
+        logger.debug("replay http2 request: {0}".format(context.request))
+        if context.request.body:
+            context.request.body = context.request.body.decode("base64")
         conn = Http2Connection(stream, client_side=True)
         conn.initiate_connection()
         stream_id = conn.get_next_available_stream_id()

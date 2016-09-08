@@ -148,9 +148,10 @@ class Tui(gviewer.BaseDisplayer):
         widget.set_title(self.summary(message, exported=True))
         parent.notify("replay script export to {0}".format(export_file))
 
-    def replay(self, parent, message, widget, *args, **kwargs):
+    def replay(self, parent, message, *args, **kwargs):
         self.event_client.send_event(message)
-        parent.notify("sent replay event to server")
+        if parent:
+            parent.notify("sent replay event to server")
 
 
 class ZmqAsyncDataStore(gviewer.AsyncDataStore):
