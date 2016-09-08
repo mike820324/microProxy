@@ -129,3 +129,35 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.path, "/")
         self.assertEqual(req.headers, HttpHeaders([
             (":method", "GET"), (":path", "/")]))
+
+    @gen_test
+    def test_http2_post_body(self):
+        body = b"this is body"
+        body_length = len(body)
+        event = dict(
+            host="localhost", port=8080, scheme="h2", path="/",
+            request=dict(
+                method="POST", path="/", version="HTTP/2",
+                headers=[(":method", "POST"), (":path", "/"), ("content-length", str(body_length))],
+                body=body.encode("base64")),
+            response=None)
+        yield self.replay_handler.handle(event)
+
+        self.assertIsNotNone(self.context)
+        self.layer_manager.get_first_layer.assert_called_with(
+            self.context)
+        self.layer_manager.run_layers.assert_called_with(
+            self.layer_manager.first_layer, self.context)
+
+        conn = Http2Connection(
+            self.context.src_stream, client_side=False, on_request=self.collect_event, on_unhandled=mock.Mock())
+        yield self.read_until(conn, 1)
+
+        _, req, _ = self.http_events[0]
+        self.assertIsInstance(req, HttpRequest)
+        self.assertEqual(req.method, "POST")
+        self.assertEqual(req.version, "HTTP/2")
+        self.assertEqual(req.path, "/")
+        self.assertEqual(req.headers, HttpHeaders([
+            (":method", "POST"), (":path", "/"), ("content-length", str(body_length))]))
+        self.assertEqual(req.body, body)
