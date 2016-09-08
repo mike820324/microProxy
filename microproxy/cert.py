@@ -67,7 +67,7 @@ def init_cert_store(config):
     _cert_store = CertStore(config)
 
 
-def get_cert_store(config=None):
+def get_cert_store():
     global _cert_store
     if not _cert_store:
         raise ValueError
