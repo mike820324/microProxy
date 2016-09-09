@@ -139,32 +139,20 @@ class Formatter(object):
             PlainTextFormatter()
         ]
 
-    def format_request(self, request):
-        headers_dict = dict(request["headers"])
-        body = request["body"].decode("base64")
+    def format_body(self, body, headers):
+        body = body.decode("base64")
 
-        if self._is_gzip(headers_dict):
+        if self._is_gzip(headers):
             body = ungzip(body)
 
-        formatter, body = self.format_body(headers_dict, body)
+        formatter, body = self.run_formatters(headers, body)
 
         return formatter, self._process_final_body(body)
 
-    def format_response(self, response):
-        headers_dict = dict(response["headers"])
-        body = response["body"].decode("base64")
-
-        if self._is_gzip(headers_dict):
-            body = ungzip(body)
-
-        formatter, body = self.format_body(headers_dict, body)
-
-        return formatter, self._process_final_body(body)
-
-    def format_body(self, headers, body):
-        if "Content-Type" in headers.keys():
+    def run_formatters(self, headers, body):
+        if "Content-Type" in headers:
             content_type = headers["Content-Type"]
-        elif "content-type" in headers.keys():
+        elif "content-type" in headers:
             content_type = headers["content-type"]
         else:
             # NOTE: cannot figure out content type
@@ -189,8 +177,7 @@ class Formatter(object):
         return body.replace("\t", "    ")
 
     def _is_gzip(self, headers):
-        if "Content-Encoding" in headers.keys():
-            return headers["Content-Encoding"] == "gzip"
-        if "content-encoding" in headers.keys():
-            return headers["content-encoding"] == "gzip"
+        for key, value in headers:
+            if key.lower() == "content-encoding":
+                return value == "gzip"
         return False

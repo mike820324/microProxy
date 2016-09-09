@@ -63,6 +63,10 @@ class HttpHeaders(object):
             self.headers = headers.items()
         elif isinstance(headers, list):
             self.headers = headers
+        elif isinstance(headers, HttpHeaders):
+            self.headers = list(headers.headers)
+        elif not headers:
+            self.headers = []
         else:
             raise ValueError("HttpHeaders not support with: " + str(type(headers)))
 
