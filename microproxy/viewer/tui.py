@@ -12,9 +12,8 @@ from pygments.lexers.javascript import JavascriptLexer
 import gviewer
 from gviewer.util import pygmentize
 from microproxy.event import EventClient
-from format import Formatter
-from format.formatter import (
-    JsonFormatter, XmlFormatter, HtmlFormatter,
+from formatter import (
+    Formatter, JsonFormatter, XmlFormatter, HtmlFormatter,
     CssFormatter, JsFormatter)
 
 ioloop.install()

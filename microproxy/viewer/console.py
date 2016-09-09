@@ -4,7 +4,7 @@ import json
 from colored import fg, bg, attr
 
 from microproxy.event import EventClient
-from format import Formatter
+from formatter import Formatter
 
 _formatter = Formatter()
 
