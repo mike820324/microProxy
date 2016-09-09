@@ -12,7 +12,7 @@ try:
 except ImportError:
     import urlparse
 
-import decompress
+from microproxy.viewer.utils import ungzip
 
 cssutils.log.setLevel(logging.CRITICAL)
 
@@ -144,7 +144,7 @@ class Formatter(object):
         body = request["body"].decode("base64")
 
         if self._is_gzip(headers_dict):
-            body = decompress.ungzip(body)
+            body = ungzip(body)
 
         formatter, body = self.format_body(headers_dict, body)
 
@@ -155,7 +155,7 @@ class Formatter(object):
         body = response["body"].decode("base64")
 
         if self._is_gzip(headers_dict):
-            body = decompress.ungzip(body)
+            body = ungzip(body)
 
         formatter, body = self.format_body(headers_dict, body)
 
