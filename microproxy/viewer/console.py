@@ -185,7 +185,7 @@ def create_msg_channel(channel):  # pragma: no cover
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
-    socket.setsockopt(zmq.SUBSCRIBE, "")
+    socket.setsockopt(zmq.SUBSCRIBE, "message")
     return socket
 
 
@@ -218,7 +218,7 @@ def start(config):  # pragma: no cover
 
     while True:
         try:
-            data = socket.recv()
+            topic, data = socket.recv_multipart()
             message = json.loads(data)
             if dump_file:
                 fp.write(data)
