@@ -4,6 +4,7 @@ import json
 from colored import fg, bg, attr
 
 from microproxy.event import EventClient
+from microproxy.context import ViewerContext
 from formatter import Formatter
 
 _formatter = Formatter()
@@ -114,10 +115,10 @@ class Request(TextList):
     def __init__(self, request, show_body=False):
         content = []
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-        content.append(Header(request["headers"]))
-        if show_body and request["body"]:
+        content.append(Header(request.headers))
+        if show_body and request.body:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            _, body = _formatter.format_request(request)
+            _, body = _formatter.format_body(request.body, request.headers)
             content = content + body
         super(Request, self).__init__(content)
 
@@ -140,10 +141,10 @@ class Response(TextList):
     def __init__(self, response, show_body=False):
         content = []
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-        content.append(Header(response["headers"]))
-        if show_body and response["body"]:
+        content.append(Header(response.headers))
+        if show_body and response.body:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            _, body = _formatter.format_response(response)
+            _, body = _formatter.format_body(response.body, response.headers)
             content = content + body
         super(Response, self).__init__(content)
 
@@ -159,26 +160,24 @@ class Response(TextList):
 
 def construct_status_summary(message):
     # TODO: need update here when we implement new context system
-    host = message["host"]
-    path = message["path"]
-    status_code = message["response"]["code"]
-    method = message["request"]["method"]
+    host = message.host
+    path = message.path
+    status_code = message.response.code
+    method = message.request.method
     return StatusText(status_code, method, host, path)
 
 
 def construct_color_msg(message, verbose_level):
     status = construct_status_summary(message)
-    request = message["request"]
-    response = message["response"]
 
     if verbose_level == "status":
         return status
     if verbose_level == "header":
-        return TextList([status, Request(request), Response(response)])
-    elif verbose_level == "body":
-        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
-    elif verbose_level == "all":
-        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
+        return TextList([status, Request(message.request), Response(message.response)])
+    elif verbose_level in ("body", "all"):
+        return TextList([
+            status, Request(message.request, show_body=True),
+            Response(message.response, show_body=True)])
 
 
 def create_msg_channel(channel):  # pragma: no cover
@@ -219,7 +218,7 @@ def start(config):  # pragma: no cover
     while True:
         try:
             topic, data = socket.recv_multipart()
-            message = json.loads(data)
+            message = ViewerContext(**json.loads(data))
             if dump_file:
                 fp.write(data)
                 fp.write("\n")

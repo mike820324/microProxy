@@ -4,6 +4,7 @@ from colored import fg, bg, attr
 
 from microproxy.viewer.console import ColorText, TextList, StatusText, Header
 from microproxy.viewer.console import Request, Response
+from microproxy.context import HttpRequest, HttpResponse
 
 
 class TestColorText(TestCase):
@@ -80,7 +81,7 @@ class TestHeader(TestCase):
 
 class TestRequest(TestCase):
     def test_simple_request(self):
-        request = {"headers": [("Host", "github.com")]}
+        request = HttpRequest(headers=[("Host", "github.com")])
         expected = TextList(
             [ColorText("Request Headers:", fg_color="blue", attrs=["bold"]),
              Header([("Host", "github.com")])])
@@ -91,10 +92,10 @@ class TestRequest(TestCase):
 
 class ResponseTest(TestCase):
     def test_simple_response(self):
-        response = {"headers": [("Host", "github.com")]}
+        response = HttpResponse(headers=[("Content-Type", "application/xml")])
         expected = TextList(
             [ColorText("Response Headers:", fg_color="blue", attrs=["bold"]),
-             Header([("Host", "github.com")])])
+             Header([("Content-Type", "application/xml")])])
         self.assertEqual(
             expected.__dict__,
             Response(response).__dict__)

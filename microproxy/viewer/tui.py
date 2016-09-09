@@ -11,6 +11,7 @@ from pygments.lexers.javascript import JavascriptLexer
 
 import gviewer
 from gviewer.util import pygmentize
+from microproxy.context import ViewerContext
 from microproxy.event import EventClient
 from formatter import (
     Formatter, JsonFormatter, XmlFormatter, HtmlFormatter,
@@ -75,15 +76,15 @@ class Tui(gviewer.BaseDisplayer):
     def summary(self, message, exported=False):
         mark = "V " if exported else "  "
         pretty_path = self._fold_path("{0}://{1}{2}".format(
-            message["scheme"],
-            message["host"],
-            message["path"])
+            message.scheme,
+            message.host,
+            message.path)
         )
         return [
             ("indicator", mark),
-            self._code_text_markup(message["response"]["code"]),
+            self._code_text_markup(message.response.code),
             " {0:7} {1}".format(
-                message["request"]["method"],
+                message.request.method,
                 pretty_path)
         ]
 
@@ -93,18 +94,19 @@ class Tui(gviewer.BaseDisplayer):
 
     def request_view(self, message):
         groups = []
-        request = message["request"]
+        request = message.request
         groups.append(gviewer.PropsGroup(
             "",
-            [gviewer.Prop("method", request["method"]),
-             gviewer.Prop("path", request["path"]),
-             gviewer.Prop("version", request["version"])]))
+            [gviewer.Prop("method", request.method),
+             gviewer.Prop("path", request.path),
+             gviewer.Prop("version", request.version)]))
         groups.append(gviewer.PropsGroup(
             "Request Header",
-            [gviewer.Prop(k, v) for k, v in request["headers"]]))
+            [gviewer.Prop(k, v) for k, v in request.headers]))
 
-        if request["body"]:
-            formatter, formatted_body = self.formatter.format_request(request)
+        if request.body:
+            formatter, formatted_body = self.formatter.format_body(
+                request.body, request.headers)
             groups.append(gviewer.Group(
                 "Request Body",
                 self.transform_body_to_texts(formatter, formatted_body)))
@@ -112,18 +114,19 @@ class Tui(gviewer.BaseDisplayer):
 
     def response_view(self, message):
         groups = []
-        response = message["response"]
+        response = message.response
         groups.append(gviewer.PropsGroup(
             "",
-            [gviewer.Prop("code", str(response["code"])),
-             gviewer.Prop("reason", response["reason"]),
-             gviewer.Prop("version", response["version"])]))
+            [gviewer.Prop("code", str(response.code)),
+             gviewer.Prop("reason", response.reason),
+             gviewer.Prop("version", response.version)]))
         groups.append(gviewer.PropsGroup(
             "Response Header",
-            [gviewer.Prop(k, v) for k, v in response["headers"]]))
+            [gviewer.Prop(k, v) for k, v in response.headers]))
 
-        if response["body"]:
-            formatter, formatted_body = self.formatter.format_response(response)
+        if response.body:
+            formatter, formatted_body = self.formatter.format_body(
+                response.body, response.headers)
             groups.append(gviewer.Group(
                 "Response Body",
                 self.transform_body_to_texts(formatter, formatted_body)))
@@ -145,13 +148,13 @@ class Tui(gviewer.BaseDisplayer):
             export_file = self.DEFAULT_EXPORT_REPLAY_FILE
 
         with open(export_file, "a") as f:
-            f.write(json.dumps(message))
+            f.write(json.dumps(message.serialize()))
             f.write("\n")
         widget.set_title(self.summary(message, exported=True))
         parent.notify("replay script export to {0}".format(export_file))
 
     def replay(self, parent, message, *args, **kwargs):
-        self.event_client.send_event(message)
+        self.event_client.send_event(message.serialize())
         if parent:
             parent.notify("sent replay event to server")
 
@@ -161,7 +164,7 @@ class Tui(gviewer.BaseDisplayer):
 
 class MessageAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
-        return json.loads(message[1])
+        return ViewerContext(**json.loads(message[1]))
 
 
 class LogDisplayer(gviewer.BaseDisplayer):
