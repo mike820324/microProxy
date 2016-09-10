@@ -7,7 +7,6 @@ from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
 from microproxy.utils import get_logger, curr_loop
 from microproxy.context import ViewerContext, LayerContext
-from microproxy.config import Config
 from microproxy import layer_manager as default_layer_manager
 from microproxy.interceptor import get_interceptor
 
@@ -16,9 +15,8 @@ logger = get_logger(__name__)
 
 class ReplayHandler(object):
     def __init__(self, config, interceptor=None, layer_manager=None):
-        config_dict = dict(config)
-        config_dict.update(dict(mode="replay"))
-        self.config = Config(config_dict)
+        self.config = config.copy()
+        self.config.update(dict(mode="replay"))
         self.layer_manager = layer_manager or default_layer_manager
         self.interceptor = interceptor or get_interceptor()
 
