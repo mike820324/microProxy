@@ -1,13 +1,13 @@
 import ConfigParser
 import argparse
-import os.path
 
 from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-class Config(dict):
-    pass
+_OPTION_TYPES = ["string", "boolean", "int", "list"]
+
+_LIST_TYPES = ["string", "boolean", "int"]
 
 
 class ConfigParserBuilder(object):
@@ -21,7 +21,7 @@ class ConfigParserBuilder(object):
         parser = argparse.ArgumentParser(description="MicroProxy a http/https proxy interceptor.")
 
         parser.add_argument("--config-file",
-                            default="./application.cfg",
+                            default="",
                             help="Specify config file location")
         subparser = parser.add_subparsers(dest="command_type")
 
@@ -63,43 +63,41 @@ def define_option(option_info,
     if not isinstance(option_info, dict):
         raise ValueError("Expect option_info as a dictionary")
 
-    if option_type not in ["string", "boolean", "int", "list"]:
+    if option_type not in _OPTION_TYPES:
         raise ValueError("Unsupport type : {0}".format(option_type))
 
     if choices is not None and not isinstance(choices, list):
         raise ValueError("choices should be a list object")
 
     option = {
-        option_name: {
-            "help": help_str,
-            "type": option_type
-        }
+        "help": help_str,
+        "type": option_type
     }
 
     if default is not None:
-        option[option_name]["is_require"] = False
-        option[option_name]["default"] = default
+        option["is_require"] = False
+        option["default"] = default
     else:
-        option[option_name]["is_require"] = True
+        option["is_require"] = True
 
     if cmd_flags:
         if isinstance(cmd_flags, str):
-            option[option_name]["cmd_flags"] = [cmd_flags]
+            option["cmd_flags"] = [cmd_flags]
         elif isinstance(cmd_flags, list):
-            option[option_name]["cmd_flags"] = cmd_flags
+            option["cmd_flags"] = cmd_flags
 
     if choices:
-        option[option_name]["choices"] = choices
+        option["choices"] = choices
 
     if option_type == "list":
         if not list_type:
             raise ValueError("Require list_type for option_type list")
-        if list_type not in ["string", "boolean", "int"]:
+        if list_type not in _LIST_TYPES:
             raise ValueError("Unsupport list type : {0}".format(list_type))
 
-        option[option_name]["list_type"] = list_type
+        option["list_type"] = list_type
 
-    option_info.update(option)
+    option_info.update({option_name: option})
 
 
 def verify_config(config_field_info, config):
@@ -109,6 +107,7 @@ def verify_config(config_field_info, config):
     if missing_fields:
         raise KeyError("missing config field: [{0}]".format(",".join(missing_fields)))
 
+    # NOTE: Verify that the value in choices
     for field in config:
         try:
             if config[field] not in fieldInfos[field]["choices"]:
@@ -117,42 +116,44 @@ def verify_config(config_field_info, config):
             pass
 
     unknown_fields = [field for field in config if field not in fieldInfos]
-    for field in unknown_fields:
-        if field == "command_type":
-            continue
-        logger.warning("Unknonw Field Name {0}".format(field))
+    if unknown_fields:
+        logger.warning("Unknown field names: {0}".format(",".join(unknown_fields)))
 
 
-def parse_config(config_field_info):
+def parse_config(config_field_info, args=None):  # pragma: no cover
     cmd_parser = ConfigParserBuilder.setup_cmd_parser(config_field_info)
-    cmd_config = cmd_parser.parse_args()
-
-    config_file = cmd_config.config_file
-    if not os.path.isfile(config_file):
-        config_file = "./application.cfg"
+    if args:
+        cmd_config = cmd_parser.parse_args(args)
+    else:
+        cmd_config = cmd_parser.parse_args()
 
     ini_parser = ConfigParserBuilder.setup_ini_parser()
-    ini_parser.read(config_file)
+    ini_parser.read([cmd_config.config_file, "application.cfg"])
 
-    config_dict = gen_config_dict(config_field_info, ini_parser, vars(cmd_config))
-    config = Config(config_dict)
+    config = gen_config(config_field_info, ini_parser, vars(cmd_config))
 
     verify_config(config_field_info, config)
     return config
 
 
-def gen_config_dict(config_field_info, file_config, cmd_config):
+def gen_config(config_field_info, file_config, cmd_config):
         command_type = cmd_config["command_type"]
         option_infos = config_field_info[command_type]
+        config = dict()
 
-        file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
+        try:
+            file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
+        except:  # pragma: no cover
+            pass  # NOTE: No config file found
+        else:
+            config.update(file_config)
+
         cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
-        config_dict = dict()
-        config_dict.update(file_config)
-        config_dict.update(cmd_config)
-        config_dict.update(append_default(config_dict, option_infos))
-        config_dict.update(type_transform(config_dict, option_infos))
-        return config_dict
+        config.update(cmd_config)
+
+        config.update(append_default(config, option_infos))
+        config.update(type_transform(config, option_infos))
+        return config
 
 
 def append_default(config, optionInfo):

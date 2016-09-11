@@ -1,9 +1,9 @@
 import unittest
 from mock import Mock
 
-from microproxy.config import Config, ConfigParserBuilder
+from microproxy.config import ConfigParserBuilder
 from microproxy.config import (
-    define_option, define_section, verify_config, gen_config_dict)
+    define_option, define_section, verify_config, gen_config)
 
 
 class TestDefineSection(unittest.TestCase):
@@ -180,7 +180,7 @@ class TestConfig(unittest.TestCase):
                       help_str="Specify the viewer type",
                       option_type="string",
                       cmd_flags="--mode",
-                      choices=["--mode"])
+                      choices=["log"])
 
         self.config_field_info = {}
         define_section(config_field_info=self.config_field_info,
@@ -225,8 +225,7 @@ class TestConfig(unittest.TestCase):
         }
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=[])
-        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
-        config = Config(config_dict)
+        config = gen_config(self.config_field_info, ini_parser, cmd_options)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -246,8 +245,7 @@ class TestConfig(unittest.TestCase):
 
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
-        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
-        config = Config(config_dict)
+        config = gen_config(self.config_field_info, ini_parser, cmd_options)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -268,8 +266,7 @@ class TestConfig(unittest.TestCase):
         ]
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=ini_options)
-        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
-        config = Config(config_dict)
+        config = gen_config(self.config_field_info, ini_parser, cmd_options)
         self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
@@ -278,37 +275,36 @@ class TestConfig(unittest.TestCase):
         self.assertListEqual(config["http_port"], [5000, 5001])
 
     def test_missing_requre_field(self):
-        cmd_options = {
+        config = {
             "command_type": "proxy",
-            "host": "127.0.0.1"
+            "host": "127.0.0.1",
+            "http_port": [5000],
         }
-
-        ini_options = []
-        ini_parser = Mock()
-        ini_parser.items = Mock(return_value=ini_options)
-
-        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
-        config = Config(config_dict)
 
         with self.assertRaises(KeyError):
             verify_config(self.config_field_info, config)
 
     def test_incorect_value(self):
-        cmd_options = {
+        config = {
             "command_type": "viewer",
             "mode": "not_exist"
         }
 
-        ini_options = []
-        ini_parser = Mock()
-        ini_parser.items = Mock(return_value=ini_options)
-
-        config_dict = gen_config_dict(self.config_field_info, ini_parser, cmd_options)
-        config = Config(config_dict)
-
         with self.assertRaises(ValueError):
             verify_config(self.config_field_info, config)
 
+    def test_unknown_field(self):
+        config = {
+            "command_type": "proxy",
+            "host": "127.0.0.1",
+            "port": 5580,
+            "http_port": [5000],
+            "unknown_field": "yaya"
+        }
+
+        # NOTE: unknow field should just print warning message
+        # should not raise eny exception
+        verify_config(self.config_field_info, config)
 
 if __name__ == "__main__":
     unittest.main()

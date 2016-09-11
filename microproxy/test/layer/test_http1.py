@@ -9,7 +9,6 @@ from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
 from microproxy.context import LayerContext
-from microproxy.config import Config
 from microproxy.layer import Http1Layer
 from microproxy.protocol.http1 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
@@ -46,7 +45,7 @@ class TestHttp1Layer(AsyncTestCase):
 
         self.context = LayerContext(src_stream=server_streams[0],
                                     dest_stream=client_streams[1],
-                                    config=Config(dict(mode="socks")))
+                                    config=dict(mode="socks"))
 
         self.interceptor = Mock()
         self.interceptor.publish = Mock(return_value=None)
@@ -175,7 +174,7 @@ class TestHttp1Layer(AsyncTestCase):
 
     @gen_test
     def test_replay(self):
-        self.context.config = Config(dict(mode="replay"))
+        self.context.config = dict(mode="replay")
 
         http_layer_future = self.http_layer.process_and_return_context()
         self.client_conn.send_request(HttpRequest(

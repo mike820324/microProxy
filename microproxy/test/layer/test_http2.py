@@ -8,7 +8,6 @@ from tornado.netutil import add_accept_handler
 from tornado.gen import coroutine
 
 from microproxy.context import LayerContext
-from microproxy.config import Config
 from microproxy.layer import Http2Layer
 from microproxy.protocol.http2 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
@@ -44,7 +43,7 @@ class TestHttp2Layer(AsyncTestCase):
 
         self.context = LayerContext(src_stream=server_streams[0],
                                     dest_stream=client_streams[1],
-                                    config=Config(dict(mode="socks")))
+                                    config=dict(mode="socks"))
 
         self.interceptor = Mock()
         self.interceptor.publish = Mock(return_value=None)
