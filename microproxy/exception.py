@@ -31,3 +31,7 @@ class Http2Error(Exception):
             err = "{0}: {1} on {2}, cause is {3}".format(
                 type(error), error_msg, conn, error.args)
         super(Http2Error, self).__init__(err)
+
+
+class TlsError(Exception):
+    pass
