@@ -1,8 +1,9 @@
 from OpenSSL import SSL, crypto
-from service_identity import VerificationError
 from service_identity.pyopenssl import verify_hostname
 
+from microproxy.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger
+
 logger = get_logger(__name__)
 
 _SUPPROT_CIPHERS_SUITES = (
@@ -71,12 +72,15 @@ def create_dest_sslcontext(insecure=False, trusted_ca_certs="", alpn=None):
     ssl_ctx = create_basic_sslcontext()
 
     if not insecure and trusted_ca_certs:
-        verify_mode = SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT
         ssl_ctx.load_verify_locations(trusted_ca_certs)
+        ssl_ctx.set_verify(
+            SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
+            certificate_verify_cb)
     else:
-        verify_mode = SSL.VERIFY_NONE
+        def verify_cb_always_true(*args, **kwargs):
+            return True
+        ssl_ctx.set_verify(SSL.VERIFY_NONE, verify_cb_always_true)
 
-    ssl_ctx.set_verify(verify_mode, certificate_verify_cb)
     try:
         ssl_ctx.set_alpn_protos(alpn or [])
     except NotImplementedError:
@@ -97,3 +101,60 @@ def create_src_sslcontext(cert, priv_key, alpn_callback=None,
         ssl_ctx.set_info_callback(info_callback)
 
     return ssl_ctx
+
+
+class ServerConnection(object):
+    def __init__(self, stream):
+        self.stream = stream
+        self.alpn_resolver = None
+        self.on_alpn = None
+
+    def start_tls(self, cert, priv_key, info_callback=None,
+                  on_alpn=None, alpn_resolver=None):
+        self.alpn_resolver = alpn_resolver
+        self.on_alpn = on_alpn
+        ssl_ctx = create_src_sslcontext(
+            cert, priv_key, alpn_callback=self.alpn_callback, info_callback=info_callback)
+        return self.stream.start_tls(server_side=True, ssl_options=ssl_ctx)
+
+    def alpn_callback(self, conn, alpns):
+        if self.on_alpn:
+            self.on_alpn(conn, alpns)
+        try:
+            return self.alpn_resolver.__call__()
+        except Exception as e:
+            logger.exception(e)
+            return alpns[0] if alpns else b""
+
+
+class ClientConnection(object):
+    def __init__(self, stream):
+        self.stream = stream
+
+    def start_tls(self, insecure=False, trusted_ca_certs="",
+                  hostname=None, alpns=None):
+        ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
+        return self.stream.start_tls(
+            server_side=False, ssl_options=ssl_ctx)
+
+    def start_tls_blocking(self, insecure=False, trusted_ca_certs="",
+                           hostname=None, alpns=None):
+        ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
+        conn = self.stream.detach()
+        conn.setblocking(True)
+        conn = SSL.Connection(ssl_ctx, conn)
+        conn.set_connect_state()
+        try:
+            conn.do_handshake()
+            if not insecure:
+                verify_hostname(conn, unicode(hostname))
+        except:
+            conn.close()
+            raise
+        else:
+            return MicroProxySSLIOStream(conn)
+
+    def create_sslcontext(self, insecure=False, trusted_ca_certs="", alpns=None):
+        return create_dest_sslcontext(
+            insecure=insecure, trusted_ca_certs=trusted_ca_certs,
+            alpn=alpns)
