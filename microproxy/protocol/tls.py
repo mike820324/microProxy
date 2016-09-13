@@ -1,8 +1,10 @@
 from OpenSSL import SSL, crypto
+import certifi
 from service_identity.pyopenssl import verify_hostname
+from tornado import gen
 
 from microproxy.iostream import MicroProxySSLIOStream
-from microproxy.utils import get_logger
+from microproxy.utils import get_logger, HAS_ALPN
 
 logger = get_logger(__name__)
 
@@ -71,7 +73,8 @@ def certificate_verify_cb(conn, x509, err_num, err_depth, verify_status):
 def create_dest_sslcontext(insecure=False, trusted_ca_certs="", alpn=None):
     ssl_ctx = create_basic_sslcontext()
 
-    if not insecure and trusted_ca_certs:
+    if not insecure:
+        trusted_ca_certs = trusted_ca_certs or certifi.where()
         ssl_ctx.load_verify_locations(trusted_ca_certs)
         ssl_ctx.set_verify(
             SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
@@ -81,10 +84,8 @@ def create_dest_sslcontext(insecure=False, trusted_ca_certs="", alpn=None):
             return True
         ssl_ctx.set_verify(SSL.VERIFY_NONE, verify_cb_always_true)
 
-    try:
-        ssl_ctx.set_alpn_protos(alpn or [])
-    except NotImplementedError:
-        pass
+    if alpn and HAS_ALPN:
+        ssl_ctx.set_alpn_protos(alpn)
 
     return ssl_ctx
 
@@ -95,7 +96,7 @@ def create_src_sslcontext(cert, priv_key, alpn_callback=None,
     ssl_ctx.use_certificate(cert)
     ssl_ctx.use_privatekey(priv_key)
 
-    if alpn_callback:
+    if alpn_callback and HAS_ALPN:
         ssl_ctx.set_alpn_select_callback(alpn_callback)
     if info_callback:
         ssl_ctx.set_info_callback(info_callback)
@@ -122,8 +123,7 @@ class ServerConnection(object):
             self.on_alpn(conn, alpns)
         try:
             return self.alpn_resolver.__call__()
-        except Exception as e:
-            logger.exception(e)
+        except:  # NOTE: Cannot resolve alpn from resolver, than use the first one
             return alpns[0] if alpns else b""
 
 
@@ -131,14 +131,25 @@ class ClientConnection(object):
     def __init__(self, stream):
         self.stream = stream
 
+    @gen.coroutine
     def start_tls(self, insecure=False, trusted_ca_certs="",
                   hostname=None, alpns=None):
         ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
-        return self.stream.start_tls(
+
+        stream = yield self.stream.start_tls(
             server_side=False, ssl_options=ssl_ctx)
 
+        if not insecure and hostname:
+            try:
+                verify_hostname(stream.fileno(), hostname)
+            except:
+                stream.close()
+                raise
+
+        raise gen.Return(stream)
+
     def start_tls_blocking(self, insecure=False, trusted_ca_certs="",
-                           hostname=None, alpns=None):
+                           hostname=None, alpns=None):  # pragma: no cover, cannot test tls handshaking on blocking socket
         ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
         conn = self.stream.detach()
         conn.setblocking(True)
