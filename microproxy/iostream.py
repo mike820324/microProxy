@@ -1,4 +1,3 @@
-import socket
 import errno
 from tornado import ioloop
 from tornado.iostream import IOStream, SSLIOStream, StreamClosedError
@@ -41,27 +40,27 @@ class MicroProxyIOStream(IOStream):
                 self._pending_callbacks or self._closed or
                 self._read_buffer or self._write_buffer):
             raise ValueError("IOStream is not idle; cannot detach")
-        socket = self.socket
-        self.io_loop.remove_handler(socket)
+        _socket = self.socket
+        self.io_loop.remove_handler(_socket)
         self.socket = None
-        return socket
+        return _socket
 
     def start_tls(self, server_side, ssl_options, server_hostname=None):
         if not isinstance(ssl_options, SSL.Context):
             raise ValueError("ssl_options is not SSL.Context")
 
-        socket = self.detach()
-        socket = SSL.Connection(ssl_options, socket)
+        _socket = self.detach()
+        _socket = SSL.Connection(ssl_options, _socket)
         if server_side:
-            socket.set_accept_state()
+            _socket.set_accept_state()
         else:
-            socket.set_connect_state()
+            _socket.set_connect_state()
 
         orig_close_callback = self._close_callback
         self._close_callback = None
 
         future = TracebackFuture()
-        ssl_stream = MicroProxySSLIOStream(socket,
+        ssl_stream = MicroProxySSLIOStream(_socket,
                                            server_hostname,
                                            ssl_options=ssl_options,
                                            io_loop=self.io_loop)
