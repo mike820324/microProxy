@@ -4,9 +4,10 @@ import json
 from colored import fg, bg, attr
 
 from microproxy.event import EventClient
-from format import Formatter
+from microproxy.context import ViewerContext
+from formatter import ConsoleFormatter
 
-_formatter = Formatter()
+_formatter = ConsoleFormatter()
 
 
 class ColorText(object):
@@ -20,15 +21,18 @@ class ColorText(object):
         self.bg_color = bg_color
         self.attrs = attrs or []
 
-    def __str__(self):
+    def __unicode__(self):
         if not (self.fg_color or self.bg_color or self.attrs):
-            return self.text
-        _str = fg(self.fg_color) if self.fg_color else ""
-        _str += bg(self.bg_color) if self.bg_color else ""
-        _str += "".join(map(lambda a: attr(a), self.attrs))
-        _str += self.text
-        _str += attr("reset")
+            return self.text.decode("utf8")
+        _str = fg(self.fg_color).decode("utf8") if self.fg_color else u""
+        _str += bg(self.bg_color).decode("utf8") if self.bg_color else u""
+        _str += u"".join(map(lambda a: attr(a), self.attrs))
+        _str += self.text.decode("utf8")
+        _str += attr("reset").decode("utf8")
         return _str
+
+    def __str__(self):
+        return self.__unicode__().encode("utf8")
 
     def __repr__(self):
         return self.__str__()
@@ -44,12 +48,15 @@ class ColorText(object):
 
 
 class TextList(object):
-    def __init__(self, text_list, delimiter="\n"):
+    def __init__(self, text_list, delimiter=u"\n"):
         self.text_list = text_list
         self.delimiter = delimiter
 
+    def __unicode__(self):
+        return self.delimiter.join(map(lambda s: unicode(s), self.text_list))
+
     def __str__(self):
-        return self.delimiter.join(map(lambda s: str(s), self.text_list))
+        return self.__unicode__().encode("utf8")
 
     def __repr__(self):
         return self.__str__()
@@ -75,7 +82,7 @@ class StatusText(TextList):
             [ColorText(status_code, fg_color=status_fg, attrs=self.ATTRS),
              method,
              host + path],
-            delimiter=" ")
+            delimiter=u" ")
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
@@ -114,11 +121,11 @@ class Request(TextList):
     def __init__(self, request, show_body=False):
         content = []
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-        content.append(Header(request["headers"]))
-        if show_body and request["body"]:
+        content.append(Header(request.headers))
+        if show_body and request.body:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            _, body = _formatter.format_request(request)
-            content = content + body
+            body = _formatter.format_body(request.body, request.headers)
+            content.append(body)
         super(Request, self).__init__(content)
 
     def __eq__(self, other):
@@ -140,11 +147,11 @@ class Response(TextList):
     def __init__(self, response, show_body=False):
         content = []
         content.append(ColorText(self.HEADER_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-        content.append(Header(response["headers"]))
-        if show_body and response["body"]:
+        content.append(Header(response.headers))
+        if show_body and response.body:
             content.append(ColorText(self.BODY_TITLE, fg_color=self.FG_COLOR, attrs=self.ATTRS))
-            _, body = _formatter.format_response(response)
-            content = content + body
+            body = _formatter.format_body(response.body, response.headers)
+            content.append(body)
         super(Response, self).__init__(content)
 
     def __eq__(self, other):
@@ -159,33 +166,31 @@ class Response(TextList):
 
 def construct_status_summary(message):
     # TODO: need update here when we implement new context system
-    host = message["host"]
-    path = message["path"]
-    status_code = message["response"]["code"]
-    method = message["request"]["method"]
+    host = message.host
+    path = message.path
+    status_code = message.response.code
+    method = message.request.method
     return StatusText(status_code, method, host, path)
 
 
 def construct_color_msg(message, verbose_level):
     status = construct_status_summary(message)
-    request = message["request"]
-    response = message["response"]
 
     if verbose_level == "status":
         return status
     if verbose_level == "header":
-        return TextList([status, Request(request), Response(response)])
-    elif verbose_level == "body":
-        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
-    elif verbose_level == "all":
-        return TextList([status, Request(request, show_body=True), Response(response, show_body=True)])
+        return TextList([status, Request(message.request), Response(message.response)])
+    elif verbose_level in ("body", "all"):
+        return TextList([
+            status, Request(message.request, show_body=True),
+            Response(message.response, show_body=True)])
 
 
 def create_msg_channel(channel):  # pragma: no cover
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
-    socket.setsockopt(zmq.SUBSCRIBE, "")
+    socket.setsockopt(zmq.SUBSCRIBE, "message")
     return socket
 
 
@@ -218,13 +223,17 @@ def start(config):  # pragma: no cover
 
     while True:
         try:
-            data = socket.recv()
-            message = json.loads(data)
+            topic, data = socket.recv_multipart()
+            viewer_context = ViewerContext(**json.loads(data))
+            if viewer_context.request.body:
+                viewer_context.request.body = viewer_context.request.body.decode("base64")
+            if viewer_context.response.body:
+                viewer_context.response.body = viewer_context.response.body.decode("base64")
             if dump_file:
                 fp.write(data)
                 fp.write("\n")
 
-            print construct_color_msg(message, verbose_level)
+            print construct_color_msg(viewer_context, verbose_level)
             print
         except KeyboardInterrupt:
             print ColorText("Closing Simple Viewer",
