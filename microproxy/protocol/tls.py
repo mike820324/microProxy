@@ -80,9 +80,7 @@ def create_dest_sslcontext(insecure=False, trusted_ca_certs="", alpn=None):
             SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
             certificate_verify_cb)
     else:
-        def verify_cb_always_true(*args, **kwargs):
-            return True
-        ssl_ctx.set_verify(SSL.VERIFY_NONE, verify_cb_always_true)
+        ssl_ctx.set_verify(SSL.VERIFY_NONE, certificate_verify_cb)
 
     if alpn and HAS_ALPN:
         ssl_ctx.set_alpn_protos(alpn)
