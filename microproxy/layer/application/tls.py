@@ -5,10 +5,12 @@ from service_identity import VerificationError
 from tornado import gen, concurrent
 from tornado.iostream import StreamClosedError
 
-from microproxy.utils import get_logger
+from microproxy.utils import HAS_ALPN, get_logger
 from microproxy.protocol import tls
 from microproxy.cert import get_cert_store
-from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, TlsError
+from microproxy.exception import (
+    DestStreamClosedError, TlsError, ProtocolError)
+
 logger = get_logger(__name__)
 
 
@@ -65,12 +67,12 @@ class TlsLayer(object):
     def src_info_callback(self, conn, level, ret_code):
         if not level & SSL.SSL_CB_HANDSHAKE_DONE:
             return
-        if conn.get_alpn_proto_negotiated() or ret_code != 1:
+        if (HAS_ALPN and conn.get_alpn_proto_negotiated()) or ret_code != 1:
             return
         logger.debug("handshake withouth alpn, using http/1.1")
         self.start_dest_tls(["http/1.1"], conn.get_servername() or self.context.host)
 
-    def resolve_src_alpns(self):
+    def resolve_select_alpn(self):
         _, _, select_alpn = self._dest_stream_future.result()
         return select_alpn
 
@@ -81,21 +83,21 @@ class TlsLayer(object):
                 *self.cert_store.get_cert_and_pkey(self.context.host),
                 info_callback=self.src_info_callback,
                 on_alpn=self.start_dest_tls_with_alpns,
-                alpn_resolver=self.resolve_src_alpns)
+                alpn_resolver=self.resolve_select_alpn)
         # TODO: SSL.Error may have other error types.
         except SSL.Error as e:
             raise TlsError("Tls Handshaking Failed on source with: ({0}) {1}".format(
                 type(e).__name__, str(e)))
-        except StreamClosedError as e:
-            raise SrcStreamClosedError(self, detail="Stream closed when tls Handshaking failed")
 
         try:
             dest_stream, hostname, alpn_info = yield self._dest_stream_future
         # TODO: SSL.Error may have other error types.
         except (SSL.Error, VerificationError) as e:
+            src_stream.close()
             raise TlsError("Tls Handshaking Failed on destination with: ({0}) {1}".format(
                 type(e).__name__, str(e)))
         except StreamClosedError as e:
+            src_stream.close()
             raise DestStreamClosedError(self, detail="Stream closed when tls Handshaking failed")
 
         self.context.src_stream = src_stream
@@ -107,6 +109,8 @@ class TlsLayer(object):
         elif alpn_info == "h2":
             self.context.scheme = "h2"
         else:
-            self.context.scheme = "https"
+            self.context.src_stream.close()
+            self.context.dest_stream.close()
+            raise ProtocolError("Not supported protocol from alpn: {0}".format(alpn_info))
 
         raise gen.Return(self.context)
