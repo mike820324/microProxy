@@ -129,7 +129,6 @@ def create_tui_viewer_options():
                   option_name="events_channel",
                   help_str="Specify the events channel. ex. tcp://127.0.0.1:5582",
                   option_type="string",
-                  default="tcp://127.0.0.1:5582",
                   cmd_flags="--events-channel")
 
     define_option(option_info=tui_viewer_option_info,

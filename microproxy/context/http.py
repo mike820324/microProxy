@@ -63,6 +63,10 @@ class HttpHeaders(object):
             self.headers = headers.items()
         elif isinstance(headers, list):
             self.headers = headers
+        elif isinstance(headers, HttpHeaders):
+            self.headers = list(headers.headers)
+        elif not headers:
+            self.headers = []
         else:
             raise ValueError("HttpHeaders not support with: " + str(type(headers)))
 
@@ -70,10 +74,13 @@ class HttpHeaders(object):
         return len(self.headers)
 
     def __contains__(self, key):
-        return key in dict(self.headers)
+        for k, _ in self.headers:
+            if k.lower() == key.lower():
+                return True
+        return False
 
     def __getitem__(self, key):
-        return ", ".join([v for k, v in self.headers if k == key])
+        return ", ".join([v for k, v in self.headers if k.lower() == key.lower()])
 
     def __setitem__(self, key, value):
         self.headers.append((key, value))
