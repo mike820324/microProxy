@@ -135,14 +135,7 @@ class ClientConnection(object):
         ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
 
         stream = yield self.stream.start_tls(
-            server_side=False, ssl_options=ssl_ctx)
-
-        if not insecure and hostname:
-            try:
-                verify_hostname(stream.fileno(), hostname)
-            except:
-                stream.close()
-                raise
+            server_side=False, ssl_options=ssl_ctx, server_hostname=hostname)
 
         raise gen.Return(stream)
 
