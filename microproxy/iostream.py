@@ -61,7 +61,7 @@ class MicroProxyIOStream(IOStream):
 
         future = TracebackFuture()
         ssl_stream = MicroProxySSLIOStream(_socket,
-                                           server_hostname,
+                                           server_hostname=server_hostname,
                                            ssl_options=ssl_options,
                                            io_loop=self.io_loop)
 
@@ -136,7 +136,7 @@ class MicroProxySSLIOStream(SSLIOStream):
                     verify_hostname(self.socket, self._server_hostname)
                 except VerificationError as e:
                     logger.warning("Invalid SSL certificate: {0}".format(e))
-                    self.close()
+                    self.close(exc_info=True)
                     return
 
             self._run_ssl_connect_callback()
