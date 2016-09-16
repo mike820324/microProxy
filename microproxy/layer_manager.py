@@ -1,7 +1,7 @@
 from tornado import gen
 from tornado import iostream
 
-from microproxy.iostream import safe_resume_stream
+from microproxy.tornado_ext.iostream import safe_resume_stream
 from microproxy.utils import get_logger
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
