@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function, with_statement
 from tornado.concurrent import Future
 from tornado import gen
 from tornado import netutil
-from tornado.iostream import StreamClosedError
 from tornado.stack_context import NullContext
 from tornado.testing import AsyncTestCase, bind_unused_port, gen_test
 from tornado.test.util import unittest, skipIfNonUnix, refusing_port
@@ -13,6 +12,7 @@ from microproxy.protocol.tls import create_src_sslcontext
 from microproxy.protocol.tls import create_basic_sslcontext
 from OpenSSL import crypto
 from OpenSSL import SSL
+from service_identity import VerificationError
 
 import errno
 import os
@@ -806,7 +806,7 @@ class TestIOStreamStartTLS(AsyncTestCase):
         client_future = self.client_start_tls(
             _client_ssl_options(SSL.VERIFY_PEER, verify_cb),
             server_hostname=b'localhost')
-        with self.assertRaises(StreamClosedError):
+        with self.assertRaises(VerificationError):
             yield client_future
         # TODO: server will not raise.
         # with self.assertRaises(Exception):

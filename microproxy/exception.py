@@ -5,7 +5,8 @@ class ProtocolError(Exception):
 class StreamClosedError(Exception):
     def __init__(self, layer, detail="closed"):
         super(StreamClosedError, self).__init__(
-            "Stream is closed on {0}: {1}".format(type(layer).__name__, detail))
+            "{0} on {1}: {2}".format(
+                type(self).__name__, type(layer).__name__, detail))
 
 
 class SrcStreamClosedError(StreamClosedError):
@@ -31,3 +32,7 @@ class Http2Error(Exception):
             err = "{0}: {1} on {2}, cause is {3}".format(
                 type(error), error_msg, conn, error.args)
         super(Http2Error, self).__init__(err)
+
+
+class TlsError(Exception):
+    pass
