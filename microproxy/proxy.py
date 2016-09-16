@@ -1,33 +1,19 @@
-from tornado import tcpserver
 from tornado import gen
 
+from microproxy.tornado_ext.tcpserver import TCPServer
 from microproxy import layer_manager
 from microproxy.context import LayerContext
-from microproxy.iostream import MicroProxyIOStream
 from microproxy.utils import curr_loop, get_logger
 from microproxy.interceptor import get_interceptor
 
 logger = get_logger(__name__)
 
 
-class ProxyServer(tcpserver.TCPServer):
+class ProxyServer(TCPServer):
     def __init__(self, config, **kwargs):
         super(ProxyServer, self).__init__(**kwargs)
         self.config = config
         self.layer_manager = layer_manager
-
-    def _handle_connection(self, connection, address):
-        try:
-            stream = MicroProxyIOStream(connection,
-                                        io_loop=self.io_loop,
-                                        max_buffer_size=self.max_buffer_size,
-                                        read_chunk_size=self.read_chunk_size)
-            future = self.handle_stream(stream)
-            if future is not None:
-                self.io_loop.add_future(future, lambda f: f.result())
-        except Exception as e:
-            logger.exception(e)
-            raise
 
     @gen.coroutine
     def handle_stream(self, stream):

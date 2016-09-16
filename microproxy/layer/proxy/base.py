@@ -3,7 +3,7 @@ from copy import copy
 from datetime import timedelta
 from tornado import gen
 
-from microproxy import iostream
+from microproxy.tornado_ext.iostream import MicroProxyIOStream
 
 
 class ProxyLayer(object):
@@ -20,7 +20,7 @@ class ProxyLayer(object):
     @gen.coroutine
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        dest_stream = iostream.MicroProxyIOStream(dest_socket)
+        dest_stream = MicroProxyIOStream(dest_socket)
         yield gen.with_timeout(
             timedelta(seconds=5), dest_stream.connect(dest_addr_info))
         raise gen.Return(dest_stream)
