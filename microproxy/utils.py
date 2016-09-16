@@ -2,9 +2,16 @@ import zmq
 from zmq.eventloop import zmqstream
 from zmq.log.handlers import PUBHandler
 from zmq.eventloop.ioloop import IOLoop
+from OpenSSL import SSL
 
 import logging
 import logging.config
+
+
+try:
+    HAS_ALPN = SSL._lib.Cryptography_HAS_ALPN
+except:
+    HAS_ALPN = False
 
 
 def init_system_logger():
