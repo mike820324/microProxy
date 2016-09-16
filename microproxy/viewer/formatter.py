@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import logging
 import re
 import cssutils
@@ -22,13 +23,13 @@ from microproxy.viewer.utils import ungzip
 cssutils.log.setLevel(logging.CRITICAL)
 
 
-def colorize(lexer_name, raw_text):
+def colorize(lexer_name, raw_text):  # pragma: no cover
     lexer = get_lexer_by_name(lexer_name, stripall=True)
     formatter = Terminal256Formatter()
     return highlight(raw_text, lexer, formatter)
 
 
-class BaseFormatter(object):
+class BaseFormatter(object):  # pragma: no cover
     def match(self, headers, content_type):
         return False
 
@@ -56,7 +57,7 @@ class CssFormatter(BaseFormatter):
             body, get_lexer_by_name("css"))
         return map(lambda t: Text(t), pygmentized_list)
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         return colorize("css", self.format_body(body))
 
 
@@ -77,11 +78,11 @@ class JsFormatter(BaseFormatter):
             body, get_lexer_by_name("javascript"))
         return map(lambda t: Text(t), pygmentized_list)
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         return colorize("javascript", self.format_body(body))
 
 
-class URlEncodedFormatter(BaseFormatter):
+class URLEncodedFormatter(BaseFormatter):
     JSON_SUSPECT_PREFIX = ["{", "["]
     XML_SUSPECT_PREFIX = ["<"]
 
@@ -116,7 +117,7 @@ class URlEncodedFormatter(BaseFormatter):
     def format_tui(self, body):
         urlencoed_list = urlparse.parse_qsl(body)
         if not urlencoed_list:
-            return ""
+            return []
 
         max_length = max(map(lambda kv: len(kv[0]), urlencoed_list))
         texts = []
@@ -133,7 +134,7 @@ class URlEncodedFormatter(BaseFormatter):
 
         return texts
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         urlencoed_list = urlparse.parse_qsl(body)
         if not urlencoed_list:
             return ""
@@ -180,7 +181,7 @@ class HtmlFormatter(BaseFormatter):
             body, get_lexer_by_name("html"))
         return map(lambda t: Text(t), pygmentized_list)
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         return colorize("html", self.format_body(body))
 
 
@@ -192,7 +193,9 @@ class JsonFormatter(BaseFormatter):
         )
 
     def format_body(self, body):
-        parsed_body = json.loads(unicode(body, "utf-8", errors="replace"))
+        parsed_body = json.loads(
+            unicode(body, "utf-8", errors="replace"),
+            object_pairs_hook=OrderedDict)
         return json.dumps(parsed_body, indent=4)
 
     def format_tui(self, body):
@@ -201,7 +204,7 @@ class JsonFormatter(BaseFormatter):
             body, get_lexer_by_name("json"))
         return map(lambda t: Text(t), pygmentized_list)
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         return colorize("json", self.format_body(body))
 
 
@@ -226,7 +229,7 @@ class XmlFormatter(BaseFormatter):
             body, get_lexer_by_name("xml"))
         return map(lambda t: Text(t), pygmentized_list)
 
-    def format_console(self, body):
+    def format_console(self, body):  # pragma: no cover
         return colorize("xml", self.format_body(body))
 
 
@@ -235,26 +238,26 @@ class PlainTextFormatter(BaseFormatter):
         return content_type == "text/plain"
 
     def format_body(self, body):
-        return body
+        return str(body)
 
     def format_tui(self, body):
-        return map(lambda t: Text(t) for t in re.split(r"\r?\n", body))
+        return map(lambda t: Text(t), re.split(r"\r?\n", body))
 
 
-class DefaultFormatter(PlainTextFormatter):
+class DefaultFormatter(PlainTextFormatter):  # pragma: no cover
     def match(self, headers, content_type):
         return True
 
 
 class Formatter(object):
-    def __init__(self):
-        self.formatters = [
+    def __init__(self, formatters=None):
+        self.formatters = formatters or [
             CssFormatter(),
             JsFormatter(),
             HtmlFormatter(),
             JsonFormatter(),
             XmlFormatter(),
-            URlEncodedFormatter(),
+            URLEncodedFormatter(),
             PlainTextFormatter(),
             DefaultFormatter()
         ]
@@ -263,9 +266,24 @@ class Formatter(object):
         if self._is_gzip(headers):
             body = ungzip(body)
 
-        return self.run_formatters(body, headers)
+        if "content-type" in headers:
+            content_type = headers["content-type"]
+        else:
+            content_type = ""
+        content_type = content_type.split(";")[0].strip()
 
-    def run_formatters(self, body, headers):
+        for formatter in self.formatters:
+            if formatter.match(headers, content_type):
+                try:
+                    return self.run_formatter(formatter, body)
+                except:
+                    pass
+        return self.default(body)
+
+    def run_formatter(self, formatter, body):
+        raise NotImplementedError
+
+    def default(self, body):
         raise NotImplementedError
 
     def _is_gzip(self, headers):
@@ -276,36 +294,16 @@ class Formatter(object):
 
 
 class TuiFormatter(Formatter):
-    def run_formatters(self, body, headers):
-        if "content-type" in headers:
-            content_type = headers["content-type"]
-        else:
-            content_type = ""
+    def run_formatter(self, formatter, body):
+        return formatter.format_tui(body)
 
-        content_type = content_type.split(";")[0].strip()
-
-        for formatter in self.formatters:
-            if formatter.match(headers, content_type):
-                try:
-                    return formatter.format_tui(body)
-                except:
-                    pass
+    def default(self, body):
         return []
 
 
 class ConsoleFormatter(Formatter):
-    def run_formatters(self, body, headers):
-        if "content-type" in headers:
-            content_type = headers["content-type"]
-        else:
-            content_type = ""
+    def run_formatter(self, formatter, body):
+        return formatter.format_console(body)
 
-        content_type = content_type.split(";")[0].strip()
-
-        for formatter in self.formatters:
-            if formatter.match(headers, content_type):
-                try:
-                    return formatter.format_console(body)
-                except:
-                    pass
-        return b""
+    def default(self, body):
+        return ""
