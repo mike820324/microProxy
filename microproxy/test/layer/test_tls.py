@@ -12,7 +12,7 @@ from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 from microproxy.cert import CertStore
 from microproxy.context import LayerContext
 from microproxy.exception import DestStreamClosedError, ProtocolError, TlsError
-from microproxy.iostream import MicroProxyIOStream, MicroProxySSLIOStream
+from microproxy.tornado_ext.iostream import MicroProxyIOStream, MicroProxySSLIOStream
 from microproxy.layer.application.tls import TlsLayer
 from microproxy.protocol.tls import create_dest_sslcontext
 from microproxy.utils import HAS_ALPN
