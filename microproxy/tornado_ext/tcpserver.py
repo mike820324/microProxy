@@ -5,7 +5,7 @@ from iostream import MicroProxyIOStream
 
 class TCPServer(tcpserver.TCPServer):
     """tornado TCPServer that use the extended iostream and ssliostream."""
-    def __init__(self, config, **kwargs):
+    def __init__(self, **kwargs):
         super(TCPServer, self).__init__(**kwargs)
 
     def _handle_connection(self, connection, address):
