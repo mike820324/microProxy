@@ -6,8 +6,8 @@ from tornado.stack_context import NullContext
 from tornado.testing import AsyncTestCase, bind_unused_port, gen_test
 from tornado.test.util import unittest, skipIfNonUnix, refusing_port
 
-from microproxy.iostream import MicroProxyIOStream
-from microproxy.iostream import MicroProxySSLIOStream
+from microproxy.tornado_ext.iostream import MicroProxyIOStream
+from microproxy.tornado_ext.iostream import MicroProxySSLIOStream
 from microproxy.protocol.tls import create_src_sslcontext
 from microproxy.protocol.tls import create_basic_sslcontext
 from OpenSSL import crypto
@@ -132,10 +132,10 @@ class TestIOStreamMixin(object):
 
     @unittest.skipIf(mock is None, 'mock package not present')
     def test_gaierror(self):
-        # Test that IOStream sets its exc_info on getaddrinfo error.
+        # Test that MicroProxyIOStream sets its exc_info on getaddrinfo error.
         # It's difficult to reliably trigger a getaddrinfo error;
         # some resolvers own't even return errors for malformed names,
-        # so we mock it instead. If IOStream changes to call a Resolver
+        # so we mock it instead. If MicroProxyIOStream changes to call a Resolver
         # before sock.connect, the mock target will need to change too.
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         stream = MicroProxyIOStream(s, io_loop=self.io_loop)
@@ -147,14 +147,14 @@ class TestIOStreamMixin(object):
             self.assertIsInstance(stream.error, socket.gaierror)
 
     def test_read_callback_error(self):
-        # Test that IOStream sets its exc_info when a read callback throws
+        # Test that MicroProxyIOStream sets its exc_info when a read callback throws
         server, client = self.make_iostream_pair()
         try:
             server.set_close_callback(self.stop)
             # with ExpectLog(
             #     app_log, "(Uncaught exception|Exception in callback)"
             # ):
-            # Clear ExceptionStackContext so IOStream catches error
+            # Clear ExceptionStackContext so MicroProxyIOStream catches error
             with NullContext():
                 server.read_bytes(1, callback=lambda data: 1 / 0)
             client.write(b"1")
@@ -293,9 +293,9 @@ class TestIOStreamMixin(object):
 
     def test_close_buffered_data(self):
         # Similar to the previous test, but with data stored in the OS's
-        # socket buffers instead of the IOStream's read buffer.  Out-of-band
+        # socket buffers instead of the MicroProxyIOStream's read buffer.  Out-of-band
         # close notifications must be delayed until all data has been
-        # drained into the IOStream buffer. (epoll used to use out-of-band
+        # drained into the MicroProxyIOStream buffer. (epoll used to use out-of-band
         # close events with EPOLLRDHUP, but no longer)
         #
         # This depends on the read_chunk_size being smaller than the
@@ -398,7 +398,7 @@ class TestIOStreamMixin(object):
 
     def test_close_callback_with_pending_read(self):
         # Regression test for a bug that was introduced in 2.3
-        # where the IOStream._close_callback would never be called
+        # where the MicroProxyIOStream._close_callback would never be called
         # if there were pending reads.
         OK = b"OK\r\n"
         server, client = self.make_iostream_pair()
@@ -467,7 +467,7 @@ class TestIOStreamMixin(object):
 
     def test_future_close_callback(self):
         # Regression test for interaction between the Future read interfaces
-        # and IOStream._maybe_add_error_listener.
+        # and MicroProxyIOStream._maybe_add_error_listener.
         server, client = self.make_iostream_pair()
         closed = [False]
 

@@ -11,7 +11,7 @@ from tornado.netutil import add_accept_handler
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
 from microproxy.exception import ProtocolError, DestNotConnectedError, SrcStreamClosedError
-from microproxy.iostream import MicroProxyIOStream
+from microproxy.tornado_ext.iostream import MicroProxyIOStream
 
 import socks5
 from socks5 import GreetingRequest, Request

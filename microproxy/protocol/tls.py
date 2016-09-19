@@ -3,7 +3,7 @@ import certifi
 from service_identity.pyopenssl import verify_hostname
 from tornado import gen
 
-from microproxy.iostream import MicroProxySSLIOStream
+from microproxy.tornado_ext.iostream import MicroProxySSLIOStream
 from microproxy.utils import get_logger, HAS_ALPN
 
 logger = get_logger(__name__)

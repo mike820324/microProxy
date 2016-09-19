@@ -9,7 +9,7 @@ from tornado.netutil import add_accept_handler
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 
 from microproxy.cert import CertStore
-from microproxy.iostream import MicroProxyIOStream, MicroProxySSLIOStream
+from microproxy.tornado_ext.iostream import MicroProxyIOStream, MicroProxySSLIOStream
 from microproxy.protocol.tls import (
     ClientConnection, ServerConnection, create_dest_sslcontext,
     create_src_sslcontext)
