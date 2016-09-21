@@ -7,9 +7,9 @@ logger = get_logger(__name__)
 
 
 class EventManager(object):
-    def __init__(self, config, zmq_stream, handler=None):
+    def __init__(self, server_state, zmq_stream, handler=None):
         super(EventManager, self).__init__()
-        self.handler = handler or EventHandler(config)
+        self.handler = handler or EventHandler(server_state)
         self.zmq_stream = zmq_stream
 
     def start(self):
@@ -27,13 +27,12 @@ class EventManager(object):
 
 
 class EventHandler(object):
-    def __init__(self, config):
-        self.config = config
-        self.handler = ReplayHandler(self.config)
+    def __init__(self, server_state):
+        self.handler = ReplayHandler(server_state)
 
     def handle_event(self, event):
         self.handler.handle(event)
 
 
-def start_events_server(config, zmq_stream):
-    EventManager(config, zmq_stream).start()
+def start_events_server(server_state, zmq_stream):
+    EventManager(server_state, zmq_stream).start()

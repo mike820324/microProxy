@@ -194,21 +194,20 @@ def run_proxy_mode(config):
         get_logger, curr_loop,
         create_publish_channel, create_event_channel,
         register_log_publisher)
-    from microproxy.cert import init_cert_store
-    from microproxy.interceptor import init_interceptor
-    from microproxy.interceptor.msg_publisher import MsgPublisher
+    from microproxy.server_state import init_server_state
 
+    # Create zmq related sockets
     publish_socket = create_publish_channel(config["viewer_channel"])
-    register_log_publisher(publish_socket, get_logger())
-    msg_publisher = MsgPublisher(config, zmq_socket=publish_socket)
-
-    init_interceptor(config, msg_publisher=msg_publisher)
-
     event_socket = create_event_channel(config["events_channel"])
-    start_events_server(config, event_socket)
 
-    init_cert_store(config)
-    start_tcp_server(config)
+    # Register log publisher
+    register_log_publisher(publish_socket, get_logger())
+
+    # Initialize server state
+    _server_state = init_server_state(config, publish_socket)
+
+    start_events_server(_server_state, event_socket)
+    start_tcp_server(_server_state)
 
     try:
         curr_loop().start()

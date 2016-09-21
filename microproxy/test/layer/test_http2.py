@@ -7,7 +7,7 @@ from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 from tornado.gen import coroutine
 
-from microproxy.context import LayerContext
+from microproxy.context import LayerContext, ServerContext
 from microproxy.layer import Http2Layer
 from microproxy.protocol.http2 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
@@ -41,20 +41,20 @@ class TestHttp2Layer(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = LayerContext(src_stream=server_streams[0],
-                                    dest_stream=client_streams[1],
-                                    config=dict(mode="socks"))
+        self.context = LayerContext(mode="socks",
+                                    src_stream=server_streams[0],
+                                    dest_stream=client_streams[1])
 
-        self.interceptor = Mock()
-        self.interceptor.publish = Mock(return_value=None)
-        self.interceptor.request = Mock(return_value=None)
-        self.interceptor.response = Mock(return_value=None)
-        self.context.interceptor = self.interceptor
+        interceptor = Mock()
+        interceptor.publish = Mock(return_value=None)
+        interceptor.request = Mock(return_value=None)
+        interceptor.response = Mock(return_value=None)
+        server_state = ServerContext(interceptor=interceptor)
 
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
 
-        self.http_layer = Http2Layer(self.context)
+        self.http_layer = Http2Layer(server_state, self.context)
 
     def record_src_event(self, *args):
         self.src_events.append(args)
@@ -436,8 +436,7 @@ class TestHttp2Layer(AsyncTestCase):
 
     @gen_test
     def test_replay(self):
-        self.context.config["mode"] = "replay"
-
+        self.context.mode = "replay"
         self.client_conn = Connection(
             self.src_stream, client_side=True,
             on_unhandled=self.ignore_event)

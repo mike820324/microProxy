@@ -10,7 +10,7 @@ from tornado.netutil import add_accept_handler
 from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
 
 from microproxy.cert import CertStore
-from microproxy.context import LayerContext
+from microproxy.context import LayerContext, ServerContext
 from microproxy.exception import DestStreamClosedError, ProtocolError, TlsError
 from microproxy.tornado_ext.iostream import MicroProxyIOStream, MicroProxySSLIOStream
 from microproxy.layer.application.tls import TlsLayer
@@ -39,17 +39,19 @@ class TestTlsLayer(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.config = dict(client_certs="microproxy/test/test.crt", insecure="yes")
-        self.context = LayerContext(src_stream=self.server_stream,
-                                    dest_stream=mock.Mock(),
-                                    host="127.0.0.1", port=port,
-                                    interceptor=mock.Mock(),
-                                    config=self.config)
+        self.config = dict(
+            client_certs="microproxy/test/test.crt", insecure="yes")
+
+        context = LayerContext(mode="socks",
+                               src_stream=self.server_stream,
+                               dest_stream=mock.Mock(),
+                               host="127.0.0.1", port=port)
         self.server_stream = None
 
-        self.cert_store = CertStore(dict(certfile="microproxy/test/test.crt",
+        cert_store = CertStore(dict(certfile="microproxy/test/test.crt",
                                     keyfile="microproxy/test/test.key"))
-        self.tls_layer = TlsLayer(self.context, cert_store=self.cert_store)
+        server_state = ServerContext(cert_store=cert_store, config=self.config)
+        self.tls_layer = TlsLayer(server_state, context)
 
         # NOTE: mock dest conn
         self.tls_dest_stream = mock.Mock()
