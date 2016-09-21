@@ -5,7 +5,7 @@ class ForwardLayer(object):
     '''
     ForwardLayer: passing all the src data to destination. Will not intercept anything
     '''
-    def __init__(self, context):
+    def __init__(self, server_state, context):
         super(ForwardLayer, self).__init__()
         self.context = context
         self._future = concurrent.Future()
