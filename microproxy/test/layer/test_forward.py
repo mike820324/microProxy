@@ -35,11 +35,12 @@ class TestForwardLayer(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = LayerContext(src_stream=server_streams[0],
+        self.context = LayerContext(mode="socks",
+                                    src_stream=server_streams[0],
                                     dest_stream=client_streams[1])
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
-        self.forward_layer = ForwardLayer(self.context)
+        self.forward_layer = ForwardLayer(dict(), self.context)
 
     @gen_test
     def test_forward_message(self):

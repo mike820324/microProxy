@@ -7,7 +7,7 @@ from tornado.gen import coroutine
 from microproxy.event.replay import ReplayHandler
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
-from microproxy.context import HttpRequest, HttpHeaders
+from microproxy.context import HttpRequest, HttpHeaders, ServerContext
 
 
 class TestReplayHandler(AsyncTestCase):
@@ -18,8 +18,10 @@ class TestReplayHandler(AsyncTestCase):
             return_value=self.layer_manager.first_layer)
         self.layer_manager.run_layers = mock.Mock(
             side_effect=self.get_context)
+
+        self.server_state = ServerContext()
         self.replay_handler = ReplayHandler(
-            dict(), interceptor=mock.Mock(), layer_manager=self.layer_manager)
+            self.server_state, layer_manager=self.layer_manager)
         self.context = None
         self.http_events = []
 
@@ -28,7 +30,7 @@ class TestReplayHandler(AsyncTestCase):
         future.set_result(result)
         return future
 
-    def get_context(self, layer, context):
+    def get_context(self, server_state, layer, context):
         self.context = context
         return self._future(None)
 
@@ -54,7 +56,7 @@ class TestReplayHandler(AsyncTestCase):
         self.layer_manager.get_first_layer.assert_called_with(
             self.context)
         self.layer_manager.run_layers.assert_called_with(
-            self.layer_manager.first_layer, self.context)
+            self.server_state, self.layer_manager.first_layer, self.context)
 
         conn = Http1Connection(
             h11.SERVER, self.context.src_stream, on_unhandled=self.collect_event)
@@ -86,7 +88,7 @@ class TestReplayHandler(AsyncTestCase):
         self.layer_manager.get_first_layer.assert_called_with(
             self.context)
         self.layer_manager.run_layers.assert_called_with(
-            self.layer_manager.first_layer, self.context)
+            self.server_state, self.layer_manager.first_layer, self.context)
 
         conn = Http1Connection(
             h11.SERVER, self.context.src_stream, on_unhandled=self.collect_event)
@@ -116,7 +118,7 @@ class TestReplayHandler(AsyncTestCase):
         self.layer_manager.get_first_layer.assert_called_with(
             self.context)
         self.layer_manager.run_layers.assert_called_with(
-            self.layer_manager.first_layer, self.context)
+            self.server_state, self.layer_manager.first_layer, self.context)
 
         conn = Http2Connection(
             self.context.src_stream, client_side=False, on_request=self.collect_event, on_unhandled=mock.Mock())
@@ -147,7 +149,7 @@ class TestReplayHandler(AsyncTestCase):
         self.layer_manager.get_first_layer.assert_called_with(
             self.context)
         self.layer_manager.run_layers.assert_called_with(
-            self.layer_manager.first_layer, self.context)
+            self.server_state, self.layer_manager.first_layer, self.context)
 
         conn = Http2Connection(
             self.context.src_stream, client_side=False, on_request=self.collect_event, on_unhandled=mock.Mock())
