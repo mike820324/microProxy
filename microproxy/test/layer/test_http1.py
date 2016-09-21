@@ -8,7 +8,7 @@ from tornado.locks import Semaphore
 from tornado.iostream import IOStream
 from tornado.netutil import add_accept_handler
 
-from microproxy.context import LayerContext
+from microproxy.context import LayerContext, ServerContext
 from microproxy.layer import Http1Layer
 from microproxy.protocol.http1 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
@@ -43,19 +43,19 @@ class TestHttp1Layer(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = LayerContext(src_stream=server_streams[0],
-                                    dest_stream=client_streams[1],
-                                    config=dict(mode="socks"))
+        self.context = LayerContext(mode="socks",
+                                    src_stream=server_streams[0],
+                                    dest_stream=client_streams[1])
 
-        self.interceptor = Mock()
-        self.interceptor.publish = Mock(return_value=None)
-        self.interceptor.request = Mock(return_value=None)
-        self.interceptor.response = Mock(return_value=None)
-        self.context.interceptor = self.interceptor
+        interceptor = Mock()
+        interceptor.publish = Mock(return_value=None)
+        interceptor.request = Mock(return_value=None)
+        interceptor.response = Mock(return_value=None)
+        server_state = ServerContext(interceptor=interceptor)
 
         self.src_stream = client_streams[0]
         self.dest_stream = server_streams[1]
-        self.http_layer = Http1Layer(self.context)
+        self.http_layer = Http1Layer(server_state, self.context)
 
         self.client_conn = Connection(
             h11.CLIENT, self.src_stream,
@@ -174,7 +174,7 @@ class TestHttp1Layer(AsyncTestCase):
 
     @gen_test
     def test_replay(self):
-        self.context.config = dict(mode="replay")
+        self.context.mode = "replay"
 
         http_layer_future = self.http_layer.process_and_return_context()
         self.client_conn.send_request(HttpRequest(

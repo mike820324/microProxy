@@ -44,7 +44,8 @@ class TestSocksProxyHandler(AsyncTestCase):
         self.io_loop.remove_handler(listener)
         listener.close()
 
-        self.context = LayerContext(src_stream=self.server_stream)
+        self.context = LayerContext(
+            mode="socks", src_stream=self.server_stream)
         self.layer = SocksLayer(self.context)
 
         dest_listener, dest_port = bind_unused_port()
