@@ -13,14 +13,15 @@ def _wrap_req_path(context, req):
 
 
 class Http1Layer(object):
-    def __init__(self, context):
+    def __init__(self, server_state, context):
         super(Http1Layer, self).__init__()
         self.context = context
+        self.interceptor = server_state.interceptor
         self.src_conn = Connection(
             h11.SERVER,
             self.context.src_stream,
             conn_type="src",
-            readonly=context.config["mode"] == "replay",
+            readonly=(context.mode == "replay"),
             on_request=self.on_request)
         self.dest_conn = Connection(
             h11.CLIENT,
@@ -79,7 +80,7 @@ class Http1Layer(object):
                 self.dest_conn.receive(data, raise_exception=True)
 
     def on_request(self, request):
-        plugin_result = self.context.interceptor.request(
+        plugin_result = self.interceptor.request(
             layer_context=self.context, request=request)
 
         self.req = plugin_result.request if plugin_result else request
@@ -90,7 +91,7 @@ class Http1Layer(object):
                 _wrap_req_path(self.context, self.req)))
 
     def on_response(self, response):
-        plugin_result = self.context.interceptor.response(
+        plugin_result = self.interceptor.response(
             layer_context=self.context,
             request=self.req, response=response)
 
@@ -104,7 +105,7 @@ class Http1Layer(object):
         self.finish()
 
     def on_info_response(self, response):
-        plugin_result = self.context.interceptor.response(
+        plugin_result = self.interceptor.response(
             layer_context=self.context,
             request=self.req, response=response)
         self.resp = plugin_result.response if plugin_result else response
@@ -122,10 +123,10 @@ class Http1Layer(object):
                 self.context.dest_stream.closed())
 
     def finish(self, switch_protocol=False):
-        self.context.interceptor.publish(
+        self.interceptor.publish(
             layer_context=self.context,
             request=self.req, response=self.resp)
-        if self.context.config["mode"] == "replay":
+        if self.context.mode == "replay":
             self.context.src_stream.close()
             self.context.dest_stream.close()
         elif switch_protocol:

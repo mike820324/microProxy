@@ -7,7 +7,6 @@ from tornado.iostream import StreamClosedError
 
 from microproxy.utils import HAS_ALPN, get_logger
 from microproxy.protocol import tls
-from microproxy.cert import get_cert_store
 from microproxy.exception import (
     DestStreamClosedError, TlsError, ProtocolError)
 
@@ -17,15 +16,15 @@ logger = get_logger(__name__)
 class TlsLayer(object):
     SUPPORT_PROTOCOLS = ["http/1.1", "h2"]
 
-    def __init__(self, context, cert_store=None):
+    def __init__(self, server_state, context):
         super(TlsLayer, self).__init__()
         self.context = copy(context)
-        self.config = self.context.config
-        self.cert_store = cert_store or get_cert_store()
+        self.config = server_state.config
+        self.cert_store = server_state.cert_store
+
         # NOTE: tuple contains (dest_ssl_conn, hostname, alpn_info)
         # Throws exception if failed
         self._dest_stream_future = concurrent.Future()
-        self._server_hostname = None
 
         self.src_conn = tls.ServerConnection(self.context.src_stream)
         self.dest_conn = tls.ClientConnection(self.context.dest_stream)

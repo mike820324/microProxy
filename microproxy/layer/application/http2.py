@@ -10,9 +10,10 @@ class Http2Layer(object):
     '''
     Http2Layer: Responsible for handling the http2 request and response.
     '''
-    def __init__(self, context):
+    def __init__(self, server_state, context):
         super(Http2Layer, self).__init__()
         self.context = context
+        self.interceptor = server_state.interceptor
         self.src_conn = Connection(
             self.context.src_stream, client_side=False,
             conn_type="source",
@@ -22,7 +23,7 @@ class Http2Layer(object):
             on_priority_updates=self.on_src_priority_updates,
             on_reset=self.on_src_reset,
             on_terminate=self.on_src_terminate,
-            readonly=context.config["mode"] == "replay")
+            readonly=(context.mode == "replay"))
         self.dest_conn = Connection(
             self.context.dest_stream, client_side=True,
             conn_type="destination",
@@ -112,12 +113,12 @@ class Http2Layer(object):
     def on_finish(self, src_stream_id):
         stream = self.streams[src_stream_id]
 
-        self.context.interceptor.publish(
+        self.interceptor.publish(
             layer_context=self.context, request=stream.request,
             response=stream.response)
         del self.streams[src_stream_id]
 
-        if self.context.config["mode"] == "replay":
+        if self.context.mode == "replay":
             self.context.src_stream.close()
             self.context.dest_stream.close()
 
@@ -181,13 +182,14 @@ class Stream(object):
     def __init__(self, layer, context, src_stream_id, dest_stream_id):
         self.layer = layer
         self.context = context
+        self.interceptor = layer.interceptor
         self.src_stream_id = src_stream_id
         self.dest_stream_id = dest_stream_id
         self.request = None
         self.response = None
 
     def on_request(self, request, **kwargs):
-        plugin_ressult = self.context.interceptor.request(
+        plugin_ressult = self.interceptor.request(
             layer_context=self.context, request=request)
 
         self.request = plugin_ressult.request if plugin_ressult else request
@@ -195,7 +197,7 @@ class Stream(object):
             self.dest_stream_id, self.request, **kwargs)
 
     def on_push(self, request, parent_stream_id):
-        plugin_ressult = self.context.interceptor.request(
+        plugin_ressult = self.interceptor.request(
             layer_context=self.context, request=request)
 
         self.request = plugin_ressult.request if plugin_ressult else request
@@ -203,7 +205,7 @@ class Stream(object):
             parent_stream_id, self.src_stream_id, self.request)
 
     def on_response(self, response):
-        plugin_result = self.context.interceptor.response(
+        plugin_result = self.interceptor.response(
             layer_context=self.context,
             request=self.request, response=response
         )

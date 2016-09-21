@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 
 
 def get_first_layer(context):
-    mode = context.config["mode"]
+    mode = context.mode
     if mode == "socks":
         return SocksLayer(context)
     elif mode == "transparent":
@@ -23,7 +23,7 @@ def get_first_layer(context):
 
 
 @gen.coroutine
-def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
+def run_layers(server_state, initial_layer, initial_layer_context):  # pragma: no cover
     current_context = initial_layer_context
     current_layer = initial_layer
 
@@ -32,7 +32,7 @@ def run_layers(initial_layer, initial_layer_context):  # pragma: no cover
             logger.debug("Enter {0} Layer".format(current_layer))
             current_context = yield current_layer.process_and_return_context()
             logger.debug("Leave {0} Layer".format(current_layer))
-            current_layer = _next_layer(current_layer, current_context)
+            current_layer = _next_layer(server_state, current_layer, current_context)
     except Exception as error:
         _handle_layer_error(error, current_context)
 
@@ -67,35 +67,36 @@ def _handle_layer_error(error, layer_context):
     raise
 
 
-def _next_layer(current_layer, context):
-    http_ports = [80] + context.config["http_port"]
-    https_ports = [443] + context.config["https_port"]
+def _next_layer(server_state, current_layer, context):
+    config = server_state.config
+    http_ports = [80] + config["http_port"]
+    https_ports = [443] + config["https_port"]
 
     if isinstance(current_layer, (SocksLayer, TransparentLayer)):
         safe_resume_stream(context.src_stream)
         if context.port in http_ports:
             context.scheme = "http"
-            return Http1Layer(context)
+            return Http1Layer(server_state, context)
         elif context.port in https_ports:
-            return TlsLayer(context)
+            return TlsLayer(server_state, context)
         else:
-            return ForwardLayer(context)
+            return ForwardLayer(server_state, context)
 
     if isinstance(current_layer, TlsLayer):
         if context.scheme == "https":
-            return Http1Layer(context)
+            return Http1Layer(server_state, context)
         elif context.scheme == "h2":
-            return Http2Layer(context)
+            return Http2Layer(server_state, context)
         else:
-            return ForwardLayer(context)
+            return ForwardLayer(server_state, context)
 
     if isinstance(current_layer, ReplayLayer):
         if context.scheme in ("http", "https"):
-            return Http1Layer(context)
+            return Http1Layer(server_state, context)
         elif context.scheme == "h2":
-            return Http2Layer(context)
+            return Http2Layer(server_state, context)
         else:
-            return ForwardLayer(context)
+            return ForwardLayer(server_state, context)
 
     if isinstance(current_layer, Http1Layer):
         if context.scheme == "websocket":

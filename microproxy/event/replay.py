@@ -8,17 +8,14 @@ from microproxy.protocol.http2 import Connection as Http2Connection
 from microproxy.utils import get_logger, curr_loop
 from microproxy.context import ViewerContext, LayerContext
 from microproxy import layer_manager as default_layer_manager
-from microproxy.interceptor import get_interceptor
 
 logger = get_logger(__name__)
 
 
 class ReplayHandler(object):
-    def __init__(self, config, interceptor=None, layer_manager=None):
-        self.config = config.copy()
-        self.config.update(dict(mode="replay"))
+    def __init__(self, server_state, layer_manager=None):
+        self.server_state = server_state
         self.layer_manager = layer_manager or default_layer_manager
-        self.interceptor = interceptor or get_interceptor()
 
     @gen.coroutine
     def handle(self, event):
@@ -36,15 +33,15 @@ class ReplayHandler(object):
                     viewer_context.scheme))
 
             layer_context = LayerContext(
+                mode="replay",
                 src_stream=read_stream,
                 host=viewer_context.host,
                 port=viewer_context.port,
-                config=self.config,
-                scheme=viewer_context.scheme,
-                interceptor=self.interceptor)
+                scheme=viewer_context.scheme)
 
             initial_layer = self.layer_manager.get_first_layer(layer_context)
-            yield self.layer_manager.run_layers(initial_layer, layer_context)
+            yield self.layer_manager.run_layers(
+                self.server_state, initial_layer, layer_context)
         except Exception as e:
             logger.exception(e)
         else:
