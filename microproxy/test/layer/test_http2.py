@@ -1,19 +1,16 @@
-import socket
 from mock import Mock
 
-from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
-from tornado.locks import Semaphore
-from tornado.iostream import IOStream
-from tornado.netutil import add_accept_handler
+from tornado.testing import gen_test
 from tornado.gen import coroutine
 
+from microproxy.test.utils import ProxyAsyncTestCase
 from microproxy.context import LayerContext, ServerContext
 from microproxy.layer import Http2Layer
 from microproxy.protocol.http2 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
 
 
-class TestHttp2Layer(AsyncTestCase):
+class TestHttp2Layer(ProxyAsyncTestCase):
     def setUp(self):
         super(TestHttp2Layer, self).setUp()
         self.asyncSetUp()
@@ -22,37 +19,18 @@ class TestHttp2Layer(AsyncTestCase):
 
     @gen_test
     def asyncSetUp(self):
-        listener, port = bind_unused_port()
-        semaphore = Semaphore(0)
-        server_streams = []
-
-        def accept_callback(conn, addr):
-            server_stream = IOStream(conn)
-            server_streams.append(server_stream)
-            self.addCleanup(server_stream.close)
-            semaphore.release()
-
-        add_accept_handler(listener, accept_callback)
-        client_streams = [IOStream(socket.socket()), IOStream(socket.socket())]
-        for client_stream in client_streams:
-            self.addCleanup(client_stream.close)
-            yield [client_stream.connect(('127.0.0.1', port)),
-                   semaphore.acquire()]
-        self.io_loop.remove_handler(listener)
-        listener.close()
+        self.client_stream, src_stream = yield self.create_iostream_pair()
+        dest_stream, self.server_stream = yield self.create_iostream_pair()
 
         self.context = LayerContext(mode="socks",
-                                    src_stream=server_streams[0],
-                                    dest_stream=client_streams[1])
+                                    src_stream=src_stream,
+                                    dest_stream=dest_stream)
 
         interceptor = Mock()
         interceptor.publish = Mock(return_value=None)
         interceptor.request = Mock(return_value=None)
         interceptor.response = Mock(return_value=None)
         server_state = ServerContext(interceptor=interceptor)
-
-        self.src_stream = client_streams[0]
-        self.dest_stream = server_streams[1]
 
         self.http_layer = Http2Layer(server_state, self.context)
 
@@ -74,11 +52,11 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_req_and_resp(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_response=self.record_src_event,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -100,8 +78,8 @@ class TestHttp2Layer(AsyncTestCase):
 
         yield self.read_until_new_event(self.client_conn, self.src_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         result = yield result_future
         self.assertIsNotNone(result)
@@ -133,10 +111,10 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_req_with_priority_updated(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -155,8 +133,8 @@ class TestHttp2Layer(AsyncTestCase):
 
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
 
@@ -179,12 +157,12 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_push(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_response=self.record_src_event,
             on_push=self.record_src_event,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -209,8 +187,8 @@ class TestHttp2Layer(AsyncTestCase):
                             body=b"ccc"))
         yield self.read_until_new_event(self.client_conn, self.src_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
 
@@ -238,11 +216,11 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_window_updates(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_window_updates=self.record_src_event,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_window_updates=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -264,10 +242,11 @@ class TestHttp2Layer(AsyncTestCase):
         self.server_conn.send_window_updates(1, 300)
         yield self.read_until_new_event(self.client_conn, self.src_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
+        print self.src_events
         self.assertEqual(len(self.src_events), 1)
         self.assertEqual(self.src_events[0], (1, 300))
         self.assertEqual(len(self.dest_events), 2)
@@ -277,10 +256,10 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_priority_updated(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_priority_updates=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -296,8 +275,8 @@ class TestHttp2Layer(AsyncTestCase):
         self.client_conn.send_priority_updates(1, 0, 10, False)
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
         self.assertEqual(len(self.dest_events), 1)
@@ -306,11 +285,11 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_reset(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_reset=self.record_src_event,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_reset=self.record_dest_event,
             on_unhandled=self.ignore_event)
@@ -339,8 +318,8 @@ class TestHttp2Layer(AsyncTestCase):
         self.server_conn.send_reset(3, 0)
         yield self.read_until_new_event(self.client_conn, self.src_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
         self.assertEqual(len(self.src_events), 1)
@@ -351,10 +330,10 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_src_send_terminate(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_terminate=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -365,8 +344,8 @@ class TestHttp2Layer(AsyncTestCase):
         self.client_conn.send_terminate()
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
         self.assertEqual(len(self.dest_events), 1)
@@ -375,12 +354,12 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_dest_send_terminate(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_terminate=self.record_src_event,
             on_settings=self.record_src_event,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_unhandled=self.ignore_event)
 
         result_future = self.http_layer.process_and_return_context()
@@ -395,8 +374,8 @@ class TestHttp2Layer(AsyncTestCase):
         self.server_conn.send_terminate()
         yield self.read_until_new_event(self.client_conn, self.src_events)
 
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
 
         yield result_future
         self.assertEqual(len(self.src_events), 3)
@@ -405,10 +384,10 @@ class TestHttp2Layer(AsyncTestCase):
     @gen_test
     def test_safe_mapping_id(self):
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -429,19 +408,18 @@ class TestHttp2Layer(AsyncTestCase):
         self.assertEqual(
             self.http_layer.safe_mapping_id(self.http_layer.src_to_dest_ids, 1), 1)
 
-        self.src_stream.close()
-        self.dest_stream.close()
-
+        self.client_stream.close()
+        self.server_stream.close()
         yield result_future
 
     @gen_test
     def test_replay(self):
         self.context.mode = "replay"
         self.client_conn = Connection(
-            self.src_stream, client_side=True,
+            self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
         self.server_conn = Connection(
-            self.dest_stream, client_side=False,
+            self.server_stream, client_side=False,
             on_request=self.record_dest_event,
             on_unhandled=self.ignore_event)
 
@@ -479,7 +457,7 @@ class TestHttp2Layer(AsyncTestCase):
                          ("aaa", "bbb")]))
 
     def tearDown(self):
-        self.src_stream.close()
-        self.dest_stream.close()
+        self.client_stream.close()
+        self.server_stream.close()
         self.context.src_stream.close()
         self.context.dest_stream.close()

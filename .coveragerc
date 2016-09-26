@@ -1,5 +1,5 @@
 [report]
-omit = microproxy/test/*,microproxy/layer/debug/*
+omit = microproxy/test/*,microproxy/layer/debug/*,microproxy/pyca_tls/*
 exclude_lines =
     pragma: no cover
     def __repr__
