@@ -7,7 +7,7 @@ from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
 from microproxy.utils import get_logger, curr_loop
 from microproxy.context import ViewerContext, LayerContext
-from microproxy import layer_manager as default_layer_manager
+from microproxy.layer import manager as default_layer_manager
 
 logger = get_logger(__name__)
 

@@ -1,7 +1,7 @@
 from tornado import gen
 
 from microproxy.tornado_ext.tcpserver import TCPServer
-from microproxy import layer_manager
+from microproxy.layer import manager as layer_manager
 from microproxy.context import LayerContext
 from microproxy.utils import curr_loop, get_logger
 
