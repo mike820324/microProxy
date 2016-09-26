@@ -1,6 +1,7 @@
 import errno
-from tornado import ioloop
-from tornado.iostream import IOStream, SSLIOStream, StreamClosedError
+import socket
+from tornado.iostream import IOStream, SSLIOStream, StreamClosedError, UnsatisfiableReadError
+from tornado.log import gen_log
 from tornado.concurrent import TracebackFuture
 from OpenSSL import SSL
 from service_identity import VerificationError
@@ -11,27 +12,62 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-def safe_resume_stream(src_stream):
-    if isinstance(src_stream, MicroProxyIOStream) and src_stream.is_pause:
-        src_stream.resume()
-
-
 class MicroProxyIOStream(IOStream):
     def __init__(self, sock, **kwargs):
         super(MicroProxyIOStream, self).__init__(sock, **kwargs)
-        self.is_pause = False
 
-    def pause(self):
-        self.socket.setblocking(True)
-        self._state = None
-        self.io_loop.remove_handler(self.socket)
-        self.is_pause = True
+    def _handle_events(self, fd, events):
+        if self.closed():
+            gen_log.warning("Got events for closed stream %s", fd)
+            return
+        try:
+            if self._connecting:
+                self._handle_connect()
+            if self.closed():
+                return
+            if events & self.io_loop.READ:
+                # NOTE: We use explict read instead of implicit.
+                # The reason IOStream is not idle is that when an event happened,
+                # tornado iostream will still try to read them into buffer.
+                # Our approach is that when someone is trying to read the iostream,
+                # we will read it.
+                if self._should_socket_close() or self.reading():
+                    self._handle_read()
 
-    def resume(self):
-        self.socket.setblocking(False)
-        self._add_io_state(ioloop.IOLoop.READ)
-        self._add_io_state(ioloop.IOLoop.WRITE)
-        self.is_pause = False
+            if self.closed():
+                return
+            if events & self.io_loop.WRITE:
+                self._handle_write()
+            if self.closed():
+                return
+            if events & self.io_loop.ERROR:
+                self.error = self.get_fd_error()
+                self.io_loop.add_callback(self.close)
+                return
+            state = self.io_loop.ERROR
+            if self.reading():
+                state |= self.io_loop.READ
+            if self.writing():
+                state |= self.io_loop.WRITE
+            if state == self.io_loop.ERROR and self._read_buffer_size == 0:
+                state |= self.io_loop.READ
+            if state != self._state:
+                assert self._state is not None, \
+                    "shouldn't happen: _handle_events without self._state"
+                self._state = state
+                self.io_loop.update_handler(self.fileno(), self._state)
+        except UnsatisfiableReadError as e:
+            gen_log.info("Unsatisfiable read, closing connection: %s" % e)
+            self.close(exc_info=True)
+        except Exception:
+            gen_log.error("Uncaught exception, closing connection.",
+                          exc_info=True)
+            self.close(exc_info=True)
+            raise
+
+    def _should_socket_close(self):
+        _data = self.socket.recv(1, socket.MSG_PEEK)
+        return len(_data) == 0
 
     def detach(self):
         if (self._read_callback or self._read_future or
