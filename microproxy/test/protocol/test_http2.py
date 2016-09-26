@@ -1,17 +1,14 @@
-import socket
 import mock
 from datetime import timedelta
 from tornado import gen
-from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
-from tornado.locks import Event
-from tornado.iostream import IOStream
-from tornado.netutil import add_accept_handler
+from tornado.testing import gen_test
 
+from microproxy.test.utils import ProxyAsyncTestCase
 from microproxy.protocol.http2 import Connection
 from microproxy.context import HttpRequest, HttpResponse, HttpHeaders
 
 
-class TestConnection(AsyncTestCase):
+class TestConnection(ProxyAsyncTestCase):
     def setUp(self):
         super(TestConnection, self).setUp()
         self.asyncSetUp()
@@ -25,21 +22,9 @@ class TestConnection(AsyncTestCase):
 
     @gen_test
     def asyncSetUp(self):
-        listener, port = bind_unused_port()
-        event = Event()
-
-        def accept_callback(conn, addr):
-            self.server_stream = IOStream(conn)
-            self.addCleanup(self.server_stream.close)
-            event.set()
-
-        add_accept_handler(listener, accept_callback)
-        self.client_stream = IOStream(socket.socket())
+        self.client_stream, self.server_stream = yield self.create_iostream_pair()
         self.addCleanup(self.client_stream.close)
-        yield [self.client_stream.connect(('127.0.0.1', port)),
-               event.wait()]
-        self.io_loop.remove_handler(listener)
-        listener.close()
+        self.addCleanup(self.server_stream.close)
 
     def on_request(self, stream_id, request, priority_updated):
         self.request = (stream_id, request)
