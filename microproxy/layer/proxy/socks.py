@@ -79,9 +79,6 @@ class SocksLayer(ProxyLayer):
             yield self.send_event_to_src_conn(Response(
                 socks_version, RESP_STATUS["SUCCESS"],
                 event.atyp, event.addr, event.port))
-            # NOTE: currently, we need pause src stream to prevent that we cannot detach the socket
-            # to do tls handshaking
-            self.context.src_stream.pause()
             raise gen.Return((dest_stream, event.addr, event.port))
 
     @gen.coroutine
