@@ -3,8 +3,8 @@ import sys
 from mock import Mock
 
 from tornado import gen, iostream
-from microproxy import layer_manager
 from microproxy.context import LayerContext, ServerContext
+from microproxy.layer import manager as layer_manager
 from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
 from microproxy.layer import TlsLayer, Http1Layer, Http2Layer, ForwardLayer
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
@@ -112,6 +112,7 @@ class TestLayerManager(unittest.TestCase):
         layer = layer_manager._next_layer(self.server_state, tls_layer, context)
         self.assertIsInstance(layer, ForwardLayer)
 
+    @unittest.skipIf('linux' not in sys.platform, "TransparentLayer only in linux")
     def test_get_forward_layer_from_transparent(self):
         context = LayerContext(mode="socks", port=5555)
         transparent_layer = TransparentLayer(context)

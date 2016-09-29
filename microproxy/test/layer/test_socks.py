@@ -1,13 +1,12 @@
 import errno
-import socket
 from mock import Mock
 
 from tornado.gen import TimeoutError
-from tornado.testing import AsyncTestCase, gen_test, bind_unused_port
-from tornado.locks import Event
+from tornado.testing import gen_test, bind_unused_port
 from tornado.iostream import StreamClosedError
 from tornado.netutil import add_accept_handler
 
+from microproxy.test.utils import ProxyAsyncTestCase
 from microproxy.context import LayerContext
 from microproxy.layer import SocksLayer
 from microproxy.exception import ProtocolError, DestNotConnectedError, SrcStreamClosedError
@@ -20,7 +19,7 @@ from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND, ADDR_TYPE
 from socks5.connection import ClientConnection
 
 
-class TestSocksProxyHandler(AsyncTestCase):
+class TestSocksProxyHandler(ProxyAsyncTestCase):
     def setUp(self):
         super(TestSocksProxyHandler, self).setUp()
         self.asyncSetUp()
@@ -28,35 +27,20 @@ class TestSocksProxyHandler(AsyncTestCase):
 
     @gen_test
     def asyncSetUp(self):
-        listener, port = bind_unused_port()
-        event = Event()
-
-        def accept_callback(conn, addr):
-            self.server_stream = MicroProxyIOStream(conn)
-            self.addCleanup(self.server_stream.close)
-            event.set()
-
-        add_accept_handler(listener, accept_callback)
-        self.client_stream = MicroProxyIOStream(socket.socket())
-        self.addCleanup(self.client_stream.close)
-        yield [self.client_stream.connect(('127.0.0.1', port)),
-               event.wait()]
-        self.io_loop.remove_handler(listener)
-        listener.close()
+        self.client_stream, self.src_stream = yield self.create_iostream_pair()
 
         self.context = LayerContext(
-            mode="socks", src_stream=self.server_stream)
+            mode="socks", src_stream=self.src_stream)
         self.layer = SocksLayer(self.context)
 
-        dest_listener, dest_port = bind_unused_port()
-        self.listener = dest_listener
-        self.port = dest_port
+        self.listener, self.port = bind_unused_port()
 
         def dest_accept_callback(conn, addr):
             self.dest_server_stream = MicroProxyIOStream(conn)
             self.addCleanup(self.dest_server_stream.close)
-        add_accept_handler(dest_listener, dest_accept_callback)
-        self.addCleanup(dest_listener.close)
+
+        add_accept_handler(self.listener, dest_accept_callback)
+        self.addCleanup(self.listener.close)
 
     def collect_send_event(self, event):
         self.event = event
@@ -154,8 +138,6 @@ class TestSocksProxyHandler(AsyncTestCase):
                     "localhost", self.port))
 
         dest_stream, host, port = yield addr_future
-        self.client_stream.close()
-        self.server_stream.close()
 
         self.assertIsNotNone(self.event)
         self.assertIsInstance(self.event, Response)
@@ -320,4 +302,4 @@ class TestSocksProxyHandler(AsyncTestCase):
 
     def tearDown(self):
         self.client_stream.close()
-        self.server_stream.close()
+        self.src_stream.close()

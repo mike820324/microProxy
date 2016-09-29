@@ -69,6 +69,36 @@ class MicroProxyIOStream(IOStream):
         _data = self.socket.recv(1, socket.MSG_PEEK)
         return len(_data) == 0
 
+    def peek(self, length):
+        """Peek into the underline socket buffer.
+
+        Args:
+            length (int): The peeking buffer length.
+
+        Returns:
+            (bytes): Bytes of buffer.
+
+        Raises:
+            ValueError: If length is not int and smaller than one
+            will raise ValueError.
+        """
+        if not isinstance(length, int) or length < 0:
+            raise ValueError("Incorrect length.")
+
+        # TODO: Change into nonblocking mode.
+        self.socket.setblocking(True)
+        while True:
+            try:
+                _data = self.socket.recv(length, socket.MSG_PEEK)
+            except socket.error:
+                continue
+            except:
+                raise
+            else:
+                return _data
+            finally:
+                self.socket.setblocking(False)
+
     def detach(self):
         if (self._read_callback or self._read_future or
                 self._write_callback or self._write_future or
@@ -91,6 +121,8 @@ class MicroProxyIOStream(IOStream):
             _socket.set_accept_state()
         else:
             _socket.set_connect_state()
+            if server_hostname:
+                _socket.set_tlsext_host_name(server_hostname.encode("idna"))
 
         orig_close_callback = self._close_callback
         self._close_callback = None
