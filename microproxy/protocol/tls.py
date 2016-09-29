@@ -1,10 +1,13 @@
+from __future__ import absolute_import
+
 from OpenSSL import SSL, crypto
 import certifi
-from service_identity.pyopenssl import verify_hostname
-from tornado import gen
+import construct
 
-from microproxy.tornado_ext.iostream import MicroProxySSLIOStream
+from tornado import gen
+from microproxy.pyca_tls import _constructs
 from microproxy.utils import get_logger, HAS_ALPN
+from microproxy.exception import ProtocolError
 
 logger = get_logger(__name__)
 
@@ -102,27 +105,66 @@ def create_src_sslcontext(cert, priv_key, alpn_callback=None,
     return ssl_ctx
 
 
+class TlsClientHello(object):
+    SUPPORT_PROTOCOLS = ["http/1.1", "h2"]
+
+    def __init__(self, raw_client_hello):
+        try:
+            self._client_hello = _constructs.ClientHello.parse(raw_client_hello)
+        except construct.ConstructError as e:
+            raise ProtocolError(
+                'Cannot parse Client Hello: {0}, Raw Client Hello: {1}'.format(
+                    repr(e), raw_client_hello.encode("hex"))
+            )
+
+    def raw(self):
+        return self._client_hello
+
+    @property
+    def cipher_suites(self):
+        return self._client_hello.cipher_suites.cipher_suites
+
+    @property
+    def sni(self):
+        # TODO: hostname validation is required.
+        for extension in self._client_hello.extensions:
+            is_valid_sni_extension = (
+                extension.type == 0x00 and
+                len(extension.server_names) == 1 and
+                extension.server_names[0].type == 0)
+
+            if is_valid_sni_extension:
+                return extension.server_names[0].name.decode("idna")
+
+    @property
+    def alpn_protocols(self):
+        for extension in self._client_hello.extensions:
+            if extension.type == 0x10:
+                return [
+                    bytes(protocol)
+                    for protocol in list(extension.alpn_protocols)
+                    if protocol in self.SUPPORT_PROTOCOLS
+                ]
+
+    def __repr__(self):
+        return "TlsClientHello( sni: %s alpn_protocols: %s,  cipher_suites: %s)" % \
+            (self.sni, self.alpn_protocols, self.cipher_suites)
+
+
 class ServerConnection(object):
     def __init__(self, stream):
         self.stream = stream
         self.alpn_resolver = None
         self.on_alpn = None
 
-    def start_tls(self, cert, priv_key, info_callback=None,
-                  on_alpn=None, alpn_resolver=None):
-        self.alpn_resolver = alpn_resolver
-        self.on_alpn = on_alpn
+    def start_tls(self, cert, priv_key, select_alpn=None):
+        self.select_alpn = select_alpn
         ssl_ctx = create_src_sslcontext(
-            cert, priv_key, alpn_callback=self.alpn_callback, info_callback=info_callback)
+            cert, priv_key, alpn_callback=self.alpn_callback)
         return self.stream.start_tls(server_side=True, ssl_options=ssl_ctx)
 
     def alpn_callback(self, conn, alpns):
-        if self.on_alpn:
-            self.on_alpn(conn, alpns)
-        try:
-            return self.alpn_resolver.__call__()
-        except:  # NOTE: Cannot resolve alpn from resolver, than use the first one
-            return alpns[0] if alpns else b""
+        return self.select_alpn
 
 
 class ClientConnection(object):
@@ -132,31 +174,8 @@ class ClientConnection(object):
     @gen.coroutine
     def start_tls(self, insecure=False, trusted_ca_certs="",
                   hostname=None, alpns=None):
-        ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
-
+        ssl_ctx = create_dest_sslcontext(insecure, trusted_ca_certs, alpns)
         stream = yield self.stream.start_tls(
             server_side=False, ssl_options=ssl_ctx, server_hostname=hostname)
 
         raise gen.Return(stream)
-
-    def start_tls_blocking(self, insecure=False, trusted_ca_certs="",
-                           hostname=None, alpns=None):  # pragma: no cover, cannot test tls handshaking on blocking socket
-        ssl_ctx = self.create_sslcontext(insecure, trusted_ca_certs, alpns)
-        conn = self.stream.detach()
-        conn.setblocking(True)
-        conn = SSL.Connection(ssl_ctx, conn)
-        conn.set_connect_state()
-        try:
-            conn.do_handshake()
-            if not insecure:
-                verify_hostname(conn, unicode(hostname))
-        except:
-            conn.close()
-            raise
-        else:
-            return MicroProxySSLIOStream(conn)
-
-    def create_sslcontext(self, insecure=False, trusted_ca_certs="", alpns=None):
-        return create_dest_sslcontext(
-            insecure=insecure, trusted_ca_certs=trusted_ca_certs,
-            alpn=alpns)
