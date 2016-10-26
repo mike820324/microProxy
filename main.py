@@ -1,4 +1,4 @@
-from microproxy.command_line import main
+from microproxy.command_line import mpserver
 
 if __name__ == '__main__':
-    main()
+    mpserver()
