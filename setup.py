@@ -49,10 +49,28 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            "microproxy=microproxy.command_line:main",
+            "mpserver=microproxy.command_line:mpserver",
+            "mptui=microproxy.command_line:mptui",
+            "mpdump=microproxy.command_line:mpdump",
         ]
     },
-    install_requires=proxy_deps,
+    install_requires=[
+        "tornado==4.3",
+        "pyzmq==15.4.0",
+        "watchdog==0.8.3",
+        "pyOpenSSL==16.0.0",
+        "service-identity==16.0.0",
+        "certifi==2016.8.8",
+        "construct==2.5.3",
+        "six==1.10.0",
+        "h2==2.4.0",
+        "h11==0.5.0+dev",
+        "socks5==0.1.0"
+    ],
+    dependency_links=[
+        "https://github.com/chhsiao90/h11/tarball/master#egg=h11-0.5.0+dev",
+        "https://github.com/mike820324/socks5/tarball/master#egg=socks5-0.1.0"
+    ],
     extras_require={
         'viewer': viewer_deps,
         'develop': dev_deps

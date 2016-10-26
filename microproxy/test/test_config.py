@@ -36,36 +36,42 @@ class TestDefineSection(unittest.TestCase):
 
 
 class TestDefineOption(unittest.TestCase):
-    def test_non_list_type_option_without_default(self):
+    def test_str_type_option_without_default(self):
         config_info = {}
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      option_type="string")
+                      option_type="str",
+                      cmd_flags="--test")
 
         self.assertIn("test", config_info)
         self.assertEqual(config_info["test"]["help"], "test is a help")
         self.assertTrue(config_info["test"]["is_require"])
-        self.assertEqual(config_info["test"]["type"], "string")
+        self.assertEqual(config_info["test"]["type"], "str")
         self.assertTrue(config_info["test"]["is_require"])
 
     def test_default_option(self):
         config_info = {}
-        define_option(option_info=config_info,
-                      option_name="test",
-                      help_str="test is a help",
-                      option_type="string",
-                      default="test1")
-
-        self.assertFalse(config_info["test"]["is_require"])
-        self.assertIs(config_info["test"]["default"], "test1")
+        try:
+            define_option(option_info=config_info,
+                          option_name="test",
+                          help_str="test is a help",
+                          option_type="str",
+                          default="test1",
+                          cmd_flags="--test")
+        except:
+            self.fail("define_option should not raise exception.")
+        else:
+            self.assertIn("test", config_info)
+            self.assertFalse(config_info["test"]["is_require"])
+            self.assertIs(config_info["test"]["default"], "test1")
 
     def test_cmd_flags_option(self):
         config_info = {}
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      option_type="string",
+                      option_type="str",
                       cmd_flags="--test")
 
         self.assertIsInstance(config_info["test"]["cmd_flags"], list)
@@ -75,7 +81,7 @@ class TestDefineOption(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      option_type="string",
+                      option_type="str",
                       cmd_flags=["--test", "-t"])
 
         self.assertIsInstance(config_info["test"]["cmd_flags"], list)
@@ -87,8 +93,9 @@ class TestDefineOption(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      option_type="string",
-                      choices=["socks", "proxy"])
+                      option_type="str",
+                      choices=["socks", "proxy"],
+                      cmd_flags="--test")
 
         self.assertIsInstance(config_info["test"]["choices"], list)
         self.assertIn("socks", config_info["test"]["choices"])
@@ -99,21 +106,21 @@ class TestDefineOption(unittest.TestCase):
         define_option(option_info=config_info,
                       option_name="test",
                       help_str="test is a help",
-                      option_type="list",
-                      list_type="string")
+                      option_type="list:str",
+                      cmd_flags="--test")
 
         self.assertIn("test", config_info)
         self.assertEqual(config_info["test"]["help"], "test is a help")
         self.assertTrue(config_info["test"]["is_require"])
-        self.assertEqual(config_info["test"]["type"], "list")
-        self.assertEqual(config_info["test"]["list_type"], "string")
+        self.assertEqual(config_info["test"]["type"], "list:str")
 
     def test_incorrect_option_info(self):
         with self.assertRaises(ValueError):
             define_option(option_info=None,
                           option_name="test",
                           help_str="test is a help",
-                          option_type="string")
+                          option_type="str",
+                          cmd_flags="--test")
 
     def test_incorrect_option_type(self):
         config_info = {}
@@ -121,7 +128,8 @@ class TestDefineOption(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          option_type="not_a_type")
+                          option_type="not_a_type",
+                          cmd_flags="--test")
 
     def test_incorrect_list_type(self):
         config_info = {}
@@ -129,8 +137,8 @@ class TestDefineOption(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          option_type="list",
-                          list_type="not_a_type")
+                          option_type="list:abc",
+                          cmd_flags="--test")
 
     def test_missing_list_type(self):
         config_info = {}
@@ -138,7 +146,8 @@ class TestDefineOption(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          option_type="list")
+                          option_type="list",
+                          cmd_flags="--test")
 
     def test_incorrect_choices_type(self):
         config_info = {}
@@ -146,79 +155,52 @@ class TestDefineOption(unittest.TestCase):
             define_option(option_info=config_info,
                           option_name="test",
                           help_str="test is a help",
-                          option_type="string",
-                          choices="hello")
+                          option_type="str",
+                          choices="hello",
+                          cmd_flags="--test")
 
 
 class TestConfig(unittest.TestCase):
     def setUp(self):
-        proxy_option_info = {}
-        define_option(option_info=proxy_option_info,
+        self.config_field_info = {}
+        define_option(option_info=self.config_field_info,
                       option_name="host",
                       help_str="Specify the proxy host",
                       default="127.0.0.1",
-                      option_type="string",
-                      cmd_flags="--host")
+                      option_type="str",
+                      cmd_flags="--host",
+                      config_file_flags="proxy:host")
 
-        define_option(option_info=proxy_option_info,
+        define_option(option_info=self.config_field_info,
                       option_name="port",
                       help_str="Specify the proxy listening port",
                       option_type="int",
-                      cmd_flags="--port")
+                      cmd_flags="--port",
+                      config_file_flags="proxy:port")
 
-        define_option(option_info=proxy_option_info,
+        define_option(option_info=self.config_field_info,
                       option_name="http_port",
                       help_str="Add additional http port",
                       default="",
-                      option_type="list",
+                      option_type="list:int",
                       cmd_flags="--http-port",
-                      list_type="int")
-
-        viewer_option_info = {}
-        define_option(option_info=viewer_option_info,
-                      option_name="mode",
-                      help_str="Specify the viewer type",
-                      option_type="string",
-                      cmd_flags="--mode",
-                      choices=["log"])
-
-        self.config_field_info = {}
-        define_section(config_field_info=self.config_field_info,
-                       section="proxy",
-                       option_info=proxy_option_info,
-                       help_str="Open microproxy service")
-        define_section(config_field_info=self.config_field_info,
-                       section="viewer",
-                       option_info=viewer_option_info,
-                       help_str="Open viewer")
+                      config_file_flags="proxy:http.port")
 
     def test_cmd_arguments(self):
         parser = ConfigParserBuilder.setup_cmd_parser(self.config_field_info)
         arguments = [
-            "proxy",
             "--host", "127.0.0.1",
             "--port", "8080",
             "--http-port", "5000,5001"
         ]
         config = vars(parser.parse_args(arguments))
 
-        self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertEqual(config["port"], "8080")
         self.assertEqual(config["http_port"], "5000,5001")
 
-        arguments = [
-            "viewer",
-            "--mode", "log"
-        ]
-        config = vars(parser.parse_args(arguments))
-
-        self.assertEqual(config["command_type"], "viewer")
-        self.assertEqual(config["mode"], "log")
-
     def test_config_options_cmd(self):
         cmd_options = {
-            "command_type": "proxy",
             "host": "127.0.0.1",
             "port": "8080",
             "http_port": "5000,5001"
@@ -226,7 +208,6 @@ class TestConfig(unittest.TestCase):
         ini_parser = Mock()
         ini_parser.items = Mock(return_value=[])
         config = gen_config(self.config_field_info, ini_parser, cmd_options)
-        self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
         self.assertEqual(config["port"], 8080)
@@ -234,19 +215,20 @@ class TestConfig(unittest.TestCase):
         self.assertListEqual(config["http_port"], [5000, 5001])
 
     def test_config_options_ini(self):
-        cmd_options = {
-            "command_type": "proxy"
-        }
         ini_options = [
             ("host", "127.0.0.1"),
             ("port", "8080"),
             ("http.port", "5000,5001")
         ]
 
+        def ini_parser_side_effect(section, name):
+            for key, value in ini_options:
+                if name == key:
+                    return value
+
         ini_parser = Mock()
-        ini_parser.items = Mock(return_value=ini_options)
-        config = gen_config(self.config_field_info, ini_parser, cmd_options)
-        self.assertEqual(config["command_type"], "proxy")
+        ini_parser.get = Mock(side_effect=ini_parser_side_effect)
+        config = gen_config(self.config_field_info, ini_parser, {})
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
         self.assertEqual(config["port"], 8080)
@@ -255,7 +237,6 @@ class TestConfig(unittest.TestCase):
 
     def test_config_options_overwrite(self):
         cmd_options = {
-            "command_type": "proxy",
             "host": "127.0.0.1",
             "port": "8080"
         }
@@ -264,10 +245,15 @@ class TestConfig(unittest.TestCase):
             ("port", "8000"),
             ("http.port", "5000,5001")
         ]
+
+        def ini_parser_side_effect(section, name):
+            for key, value in ini_options:
+                if name == key:
+                    return value
+
         ini_parser = Mock()
-        ini_parser.items = Mock(return_value=ini_options)
+        ini_parser.get = Mock(side_effect=ini_parser_side_effect)
         config = gen_config(self.config_field_info, ini_parser, cmd_options)
-        self.assertEqual(config["command_type"], "proxy")
         self.assertEqual(config["host"], "127.0.0.1")
         self.assertIsInstance(config["port"], int)
         self.assertEqual(config["port"], 8080)
@@ -276,7 +262,6 @@ class TestConfig(unittest.TestCase):
 
     def test_missing_requre_field(self):
         config = {
-            "command_type": "proxy",
             "host": "127.0.0.1",
             "http_port": [5000],
         }
@@ -286,16 +271,14 @@ class TestConfig(unittest.TestCase):
 
     def test_incorect_value(self):
         config = {
-            "command_type": "viewer",
             "mode": "not_exist"
         }
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(KeyError):
             verify_config(self.config_field_info, config)
 
     def test_unknown_field(self):
         config = {
-            "command_type": "proxy",
             "host": "127.0.0.1",
             "port": 5580,
             "http_port": [5000],

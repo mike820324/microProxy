@@ -5,9 +5,7 @@ from microproxy.utils import get_logger
 logger = get_logger(__name__)
 
 
-_OPTION_TYPES = ["string", "boolean", "int", "list"]
-
-_LIST_TYPES = ["string", "boolean", "int"]
+_OPTION_TYPES = ["str", "bool", "int", "list:str", "list:int"]
 
 
 class ConfigParserBuilder(object):
@@ -23,17 +21,17 @@ class ConfigParserBuilder(object):
         parser.add_argument("--config-file",
                             default="",
                             help="Specify config file location")
-        subparser = parser.add_subparsers(dest="command_type")
 
-        for section in config_field_info:
-            sub_parser = subparser.add_parser(section)
-
-            for field_name, field_info in config_field_info[section].iteritems():
-                if "cmd_flags" not in field_info:
-                    continue
-                sub_parser.add_argument(*field_info["cmd_flags"],
-                                        dest=field_name,
-                                        help=field_info["help"])
+        for field_name, field_info in config_field_info.iteritems():
+            if "bool" == field_info["type"]:
+                parser.add_argument(*field_info["cmd_flags"],
+                                    dest=field_name,
+                                    action="store_true",
+                                    help=field_info["help"])
+            else:
+                parser.add_argument(*field_info["cmd_flags"],
+                                    dest=field_name,
+                                    help=field_info["help"])
 
         return parser
 
@@ -56,23 +54,35 @@ def define_option(option_info,
                   option_type,
                   default=None,
                   cmd_flags=None,
-                  choices=None,
-                  list_type=None
+                  config_file_flags=None,
+                  choices=None
                   ):
-
     if not isinstance(option_info, dict):
         raise ValueError("Expect option_info as a dictionary")
+
+    if not config_file_flags and not cmd_flags:
+        raise ValueError("Useless option")
+
+    if option_name in option_info:
+        raise ValueError("option {} is already defined".format(option_name))
 
     if option_type not in _OPTION_TYPES:
         raise ValueError("Unsupport type : {0}".format(option_type))
 
-    if choices is not None and not isinstance(choices, list):
-        raise ValueError("choices should be a list object")
+    if choices is not None:
+        if not isinstance(choices, list):
+            raise ValueError("choices should be a list object")
+
+        if default is not None and default not in choices:
+            raise ValueError("default value {0} not in {1}".format(default, choices))
 
     option = {
         "help": help_str,
         "type": option_type
     }
+
+    if choices:
+        option["choices"] = choices
 
     if default is not None:
         option["is_require"] = False
@@ -86,22 +96,17 @@ def define_option(option_info,
         elif isinstance(cmd_flags, list):
             option["cmd_flags"] = cmd_flags
 
-    if choices:
-        option["choices"] = choices
-
-    if option_type == "list":
-        if not list_type:
-            raise ValueError("Require list_type for option_type list")
-        if list_type not in _LIST_TYPES:
-            raise ValueError("Unsupport list type : {0}".format(list_type))
-
-        option["list_type"] = list_type
+    if config_file_flags:
+        option["config_file_flags"] = {
+            "section": config_file_flags.split(":")[0],
+            "key": config_file_flags.split(":")[1]
+        }
 
     option_info.update({option_name: option})
 
 
 def verify_config(config_field_info, config):
-    fieldInfos = config_field_info[config["command_type"]]
+    fieldInfos = config_field_info
     require_fields = [k for k, v in fieldInfos.iteritems() if v["is_require"]]
     missing_fields = [field for field in require_fields if field not in config]
     if missing_fields:
@@ -136,23 +141,29 @@ def parse_config(config_field_info, args=None):  # pragma: no cover
     return config
 
 
+def gen_file_config(config_field_info, file_config):
+    config = dict()
+    for field_name, field_info in config_field_info.iteritems():
+        try:
+            section = field_info["config_file_flags"]["section"]
+            key = field_info["config_file_flags"]["key"]
+            config[field_name] = file_config.get(section, key)
+        except (KeyError, ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+            continue
+
+    return config
+
+
 def gen_config(config_field_info, file_config, cmd_config):
-        command_type = cmd_config["command_type"]
-        option_infos = config_field_info[command_type]
         config = dict()
 
-        try:
-            file_config = {k.replace(".", "_"): v for k, v in file_config.items(command_type)}
-        except:  # pragma: no cover
-            pass  # NOTE: No config file found
-        else:
-            config.update(file_config)
+        config.update(gen_file_config(config_field_info, file_config))
 
         cmd_config = {k: v for k, v in cmd_config.iteritems() if v is not None and k != "config_file"}
         config.update(cmd_config)
 
-        config.update(append_default(config, option_infos))
-        config.update(type_transform(config, option_infos))
+        config.update(append_default(config, config_field_info))
+        config.update(type_transform(config, config_field_info))
         return config
 
 
@@ -167,18 +178,19 @@ def type_transform(config, optionInfo):
     for field in config:
         if field not in optionInfo:
             continue
+        option_type = optionInfo[field]["type"]
 
-        if optionInfo[field]["type"] == "int":
-            new_config[field] = int(config[field])
-
-        elif optionInfo[field]["type"] == "list":
-            values = [value for value in config[field].split(",") if len(value) > 0]
-            if optionInfo[field]["list_type"] == "int":
-                new_config[field] = map(int, values)
-            elif optionInfo[field]["list_type"] == "string":
-                new_config[field] = values
-
-        else:
+        if "str" == option_type or "bool" == option_type:
             new_config[field] = config[field]
+        elif "int" == option_type:
+            new_config[field] = int(config[field])
+        elif "list:str" == option_type:
+            values = [value for value in config[field].split(",") if len(value) > 0]
+            new_config[field] = values
+        elif "list:int" == option_type:
+            values = [value for value in config[field].split(",") if len(value) > 0]
+            new_config[field] = map(int, values)
+        else:
+            raise ValueError("Non supported type")
 
     return new_config

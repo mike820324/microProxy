@@ -6,3 +6,11 @@ lint:
 
 coverage:
 	@coverage run --source=microproxy -m unittest discover
+
+install:
+	pip install -U --no-deps .
+
+install-all:
+	pip install -U .
+	pip install -U .[viewer]
+	pip install -U .[dev]
