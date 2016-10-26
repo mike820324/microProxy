@@ -54,7 +54,7 @@ class TlsLayer(object):
         try:
             logger.debug("start dest tls handshaking: {0}".format(hostname))
             dest_stream = yield self.dest_conn.start_tls(
-                insecure=(self.config["insecure"] == "yes"),
+                insecure=self.config["insecure"],
                 trusted_ca_certs=trusted_ca_certs,
                 hostname=hostname, alpns=client_alpns)
 
