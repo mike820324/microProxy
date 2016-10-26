@@ -40,37 +40,41 @@ For more in depth information about our architecture design, please refer to the
 
 In order to let http2 protocol works properly, the openssl version **1.0.2.h** (alpn support)is required.
 
-## Installation
+## Installation:
 
 This project is not update to pypi yet.
 Therefore, to intall this project, please follow the following steps.
 
 ```bash
-git clone https://github.com/mike820324/microProxy.git
-cd microProxy
+# Install basic dependencies.
+pip install --process-dependency-links https://github.com/mike820324/microProxy/tarball/master#egg=microProxy
 
-# install proxy dependency
-pip install .
-
-# install viewer dependency
-pip install .[viewer]
-
-# install dev dependency
-pip install .[develop]
+# Install viewer related dependencies.
+pip install https://github.com/mike820324/microProxy/tarball/master#egg=microProxy[viewer]
 ```
 
+## QuickStart:
 To run the proxy, simply type the following command.
 
 ```bash
+# create server root ca
+openssl req -new -x509 -days 365 -nodes -out ./cert.crt -keyout ./cert.key
+
 # start proxy server
-microproxy proxy --viewer-channel tcp://127.0.0.1:5581
+mpserver --viewer-channel tcp://127.0.0.1:5581 --cert-file ./cert.crt --key-file ./cert.key
 
 # start tui-viewer
-microproxy tui-viewer --viewer-channel tcp://127.0.0.1:5581
+mptui --viewer-channel tcp://127.0.0.1:5581
 
 # start console-viewer
-microproxy console-viewer --viewer-channel tcp://127.0.0.1:5581
+mpdump --viewer-channel tcp://127.0.0.1:5581
 ```
 
 For more information about command line options and configurations,
 please refer to the [wiki page](https://github.com/mike820324/microProxy/wiki/Command-Line-Options-and-Config-Files).
+
+## Troubleshooting:
+
+- Installation failed in macosx:
+
+Please followg this link https://cryptography.io/en/latest/installation/#building-cryptography-on-os-x to build on macosx.
