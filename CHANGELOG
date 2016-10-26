@@ -1,3 +1,27 @@
+26 October 2016: MicroProxy 0.4.0
+This release add several new features, massive internal refactoring and unittest.
+
+* Add replay feature.
+  * server side implementation. (credit chhsiao90)
+  * tui implementation. (credit chhsiao90)
+  * command line implementation.
+
+* Refactor layer structure.
+  * socks5: using socks5 module
+  * http1: using h11 module. (credit chhsiao90)
+  * http2: refactor for better maintainability. (credit chhsiao90)
+
+* TUI Enhancement. (credit chhsiao90)
+  * Add new key bindings.
+  * urlencoded formatter.
+  * Improvement user experience.
+
+* Config and command line refinement.
+  * remove subcommand and chnage into individual binary interfaces.
+
+* Bug fixed.
+
+
 31 July 2016: MicroProxy 0.3.0
 
 This release focus on adding new features and code refactoring.
