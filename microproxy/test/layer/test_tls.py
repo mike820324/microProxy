@@ -37,7 +37,7 @@ class TestTlsLayer(ProxyAsyncTestCase):
         dest_stream, self.server_stream = yield self.create_iostream_pair()
 
         self.config = dict(
-            client_certs="microproxy/test/test.crt", insecure="yes")
+            client_certs="microproxy/test/test.crt", insecure=True)
 
         cert_store = CertStore(dict(certfile="microproxy/test/test.crt",
                                     keyfile="microproxy/test/test.key"))
@@ -107,7 +107,7 @@ class TestTlsLayer(ProxyAsyncTestCase):
 
     @gen_test
     def test_start_dest_tls_with_verification_error(self):
-        self.config.update(dict(insecure="no"))
+        self.config.update(dict(insecure=False))
 
         def alpn_callback(conn, alpns):
             return b""
@@ -133,7 +133,7 @@ class TestTlsLayer(ProxyAsyncTestCase):
                 "microproxy/test/test.crt", "microproxy/test/test.key",
                 alpn_callback=None))
 
-        self.config.update({"insecure": "no"})
+        self.config.update({"insecure": False})
         ctx_future = self.tls_layer.start_dest_tls("www.google.com", [])
 
         with self.assertRaises(TlsError):
