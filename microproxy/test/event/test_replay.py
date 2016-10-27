@@ -68,7 +68,7 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.version, "HTTP/1.1")
         self.assertEqual(req.path, "/")
         self.assertEqual(req.headers, HttpHeaders([
-            ("Host", "localhost")]))
+            ("host", "localhost")]))
 
     @gen_test
     def test_http1_post_body(self):
@@ -100,8 +100,8 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.version, "HTTP/1.1")
         self.assertEqual(req.path, "/")
         self.assertEqual(req.headers, HttpHeaders([
-            ("Host", "localhost"),
-            ("Content-Length", str(body_length))]))
+            ("host", "localhost"),
+            ("content-length", str(body_length))]))
         self.assertEqual(req.body, body)
 
     @gen_test
