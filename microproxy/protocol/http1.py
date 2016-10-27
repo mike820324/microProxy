@@ -125,7 +125,7 @@ class Connection(H11Connection):
             method=request.method,
             target=request.path,
             headers=request.headers,
-            keep_case=True))
+        ))
         if request.body:
             self.send(h11.Data(data=request.body))
         self.send(h11.EndOfMessage())
@@ -136,7 +136,7 @@ class Connection(H11Connection):
             status_code=int(response.code),
             reason=response.reason,
             headers=response.headers,
-            keep_case=True))
+        ))
         if response.body:
             self.send(h11.Data(data=response.body))
         self.send(h11.EndOfMessage())
@@ -149,7 +149,7 @@ class Connection(H11Connection):
             status_code=int(response.code),
             headers=response.headers,
             reason=response.reason,
-            keep_case=True))
+        ))
 
     def _default_on_unhandled(self, *args):  # pragma: no cover
         logger.warn("unhandled event: {0}".format(args))

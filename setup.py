@@ -64,11 +64,11 @@ setup(
         "construct==2.5.3",
         "six==1.10.0",
         "h2==2.4.0",
-        "h11==0.5.0+dev",
+        "h11==0.6.0+dev",
         "socks5==0.1.0"
     ],
     dependency_links=[
-        "https://github.com/chhsiao90/h11/tarball/master#egg=h11-0.5.0+dev",
+        "https://github.com/njsmith/h11/tarball/master#egg=h11-0.6.0+dev",
         "https://github.com/mike820324/socks5/tarball/master#egg=socks5-0.1.0"
     ],
     extras_require={
