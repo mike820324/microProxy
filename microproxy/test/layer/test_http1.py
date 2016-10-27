@@ -76,7 +76,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/index")
-        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost")]))
+        self.assertEqual(request.headers, HttpHeaders([("host", "localhost")]))
 
         self.server_conn.send_response(HttpResponse(
             version="HTTP/1.1", code="200", reason="OK",
@@ -141,7 +141,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/index")
-        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost")]))
+        self.assertEqual(request.headers, HttpHeaders([("host", "localhost")]))
 
         self.client_stream.close()
 
@@ -168,7 +168,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/index")
-        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost")]))
+        self.assertEqual(request.headers, HttpHeaders([("host", "localhost")]))
 
         self.server_conn.send_response(HttpResponse(
             version="HTTP/1.1", code="200", reason="OK",
@@ -208,8 +208,8 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/chat")
         self.assertEqual(request.headers,
-                         HttpHeaders([("Host", "localhost"),
-                                      ("Upgrade", "websocket")]))
+                         HttpHeaders([("host", "localhost"),
+                                      ("upgrade", "websocket")]))
 
         self.server_conn.send_info_response(HttpResponse(
             version="HTTP/1.1", code="101", reason="Switching Protocol",
@@ -224,7 +224,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(response.reason, "Switching Protocol")
         self.assertEqual(
             response.headers,
-            HttpHeaders([("Upgrade", "websocket"), ("Connection", "Upgrade")]))
+            HttpHeaders([("upgrade", "websocket"), ("connection", "Upgrade")]))
 
         self.assertTrue(http_layer_future.done())
         yield http_layer_future
@@ -245,7 +245,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/index")
-        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost")]))
+        self.assertEqual(request.headers, HttpHeaders([("host", "localhost")]))
 
         yield self.server_stream.write(
             (b"HTTP/1.1 200 OK\r\n"
@@ -285,7 +285,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
         self.assertEqual(request.path, "/chat")
-        self.assertEqual(request.headers, HttpHeaders([("Host", "localhost"), ("Upgrade", "websocket")]))
+        self.assertEqual(request.headers, HttpHeaders([("host", "localhost"), ("upgrade", "websocket")]))
 
         self.client_stream.close()
 

@@ -38,7 +38,7 @@ class TestConnection(ProxyAsyncTestCase):
 
         self.assertIsNotNone(self.request)
         self.assertEqual(self.request.headers,
-                         HttpHeaders([("Host", "localhost")]))
+                         HttpHeaders([("host", "localhost")]))
         self.assertEqual(self.request.method, "GET")
         self.assertEqual(self.request.path, "/")
         self.assertEqual(self.request.version, "HTTP/1.1")
@@ -58,8 +58,8 @@ class TestConnection(ProxyAsyncTestCase):
 
         self.assertIsNotNone(self.response)
         self.assertEqual(self.response.headers,
-                         HttpHeaders([("Host", "localhost"),
-                                      ("Content-Length", "1")]))
+                         HttpHeaders([("host", "localhost"),
+                                      ("content-length", "1")]))
         self.assertEqual(self.response.code, "200")
         self.assertEqual(self.response.reason, "OK")
         self.assertEqual(self.response.version, "HTTP/1.1")
@@ -84,8 +84,8 @@ class TestConnection(ProxyAsyncTestCase):
 
         self.assertIsNotNone(self.response)
         self.assertEqual(self.response.headers,
-                         HttpHeaders([("Host", "localhost"),
-                                      ("Upgrade", "websocket")]))
+                         HttpHeaders([("host", "localhost"),
+                                      ("upgrade", "websocket")]))
         self.assertEqual(self.response.code, "101")
         self.assertEqual(self.response.reason, "Protocol Upgrade")
         self.assertEqual(self.response.version, "HTTP/1.1")
@@ -104,7 +104,7 @@ class TestConnection(ProxyAsyncTestCase):
 
         self.assertIsNotNone(self.request)
         self.assertEqual(self.request.headers,
-                         HttpHeaders([("Host", "localhost"), ("Content-Length", "4")]))
+                         HttpHeaders([("host", "localhost"), ("content-length", "4")]))
         self.assertEqual(self.request.method, "POST")
         self.assertEqual(self.request.path, "/")
         self.assertEqual(self.request.version, "HTTP/1.1")
