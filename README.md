@@ -47,10 +47,10 @@ Therefore, to intall this project, please follow the following steps.
 
 ```bash
 # Install basic dependencies.
-pip install --process-dependency-links https://github.com/mike820324/microProxy/tarball/master#egg=microProxy
+pip install --process-dependency-links https://github.com/mike820324/microProxy/archive/v0.4.0.tar.gz#egg=microProxy
 
 # Install viewer related dependencies.
-pip install https://github.com/mike820324/microProxy/tarball/master#egg=microProxy[viewer]
+pip install https://github.com/mike820324/microProxy/archive/v0.4.0.tar.gz#egg=microProxy[viewer]
 ```
 
 ## QuickStart:
