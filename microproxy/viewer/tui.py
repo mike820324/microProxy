@@ -76,7 +76,8 @@ class Tui(gviewer.BaseDisplayer):
 
     def get_views(self):
         return [("Request", self.request_view),
-                ("Response", self.response_view)]
+                ("Response", self.response_view),
+                ("Detail", self.detail_view)]
 
     def request_view(self, message):
         groups = []
@@ -114,6 +115,39 @@ class Tui(gviewer.BaseDisplayer):
                 response.body, response.headers)
             groups.append(gviewer.Group(
                 "Response Body", body_list))
+        return gviewer.View(groups)
+
+    def detail_view(self, message):
+        groups = []
+
+        groups.append(gviewer.PropsGroup(
+            "Detail",
+            [
+                gviewer.Prop("Host", message.host),
+                gviewer.Prop("Port", str(message.port)),
+                gviewer.Prop("Path", message.path)
+            ]
+        ))
+        if message.client_tls:
+            groups.append(gviewer.PropsGroup(
+                "Client Connection",
+                [
+                    gviewer.Prop("TLS Version", message.client_tls.version),
+                    gviewer.Prop("Server Name Notation", message.client_tls.sni),
+                    gviewer.Prop("Cipher", message.client_tls.cipher),
+                    gviewer.Prop("ALPN", message.client_tls.alpn),
+                ]
+            ))
+        if message.server_tls:
+            groups.append(gviewer.PropsGroup(
+                "Server Connection",
+                [
+                    gviewer.Prop("TLS Version", message.server_tls.version),
+                    gviewer.Prop("Server Name Notation", message.server_tls.sni),
+                    gviewer.Prop("Cipher", message.server_tls.cipher),
+                    gviewer.Prop("ALPN", message.server_tls.alpn),
+                ]
+            ))
         return gviewer.View(groups)
 
     def export_replay(self, parent, message, widget, *args, **kwargs):
