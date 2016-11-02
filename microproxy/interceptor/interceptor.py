@@ -46,6 +46,8 @@ class Interceptor(object):
             port=layer_context.port,
             path=request.path,
             request=request,
-            response=response)
+            response=response,
+            client_tls=layer_context.client_tls,
+            server_tls=layer_context.server_tls)
 
         self.msg_publisher.publish(viewer_context)

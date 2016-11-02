@@ -7,6 +7,7 @@ import certifi
 from service_identity import VerificationError
 from tornado import gen
 
+from microproxy.context import TlsInfo
 from microproxy.utils import get_logger
 from microproxy.protocol.tls import TlsClientHello, ServerConnection, ClientConnection
 from microproxy.exception import (
@@ -102,6 +103,7 @@ class TlsLayer(object):
         self.context.dest_stream = dest_stream
         if hostname:
             self.context.host = hostname
+
         if select_alpn == "http/1.1":
             self.context.scheme = "https"
         elif select_alpn == "h2":
@@ -110,6 +112,9 @@ class TlsLayer(object):
             src_stream.close()
             dest_stream.close()
             raise ProtocolError("Unsupported alpn protocol: {0}".format(select_alpn))
+
+        self.context.client_tls = self._resolve_tls_info(self.context.src_stream)
+        self.context.server_tls = self._resolve_tls_info(self.context.dest_stream)
 
     @gen.coroutine
     def process_and_return_context(self):
@@ -129,7 +134,6 @@ class TlsLayer(object):
         try:
             src_stream = yield self.start_src_tls(
                 hostname, select_alpn)
-
         except:
             if not dest_stream.closed():
                 dest_stream.close()
@@ -139,3 +143,18 @@ class TlsLayer(object):
             src_stream, dest_stream, hostname, select_alpn)
 
         raise gen.Return(self.context)
+
+    def _resolve_tls_info(self, conn):
+        try:
+            version = conn.fileno().get_protocol_version_name()
+            sni = conn.fileno().get_servername().decode("idna")
+            alpn = conn.fileno().get_alpn_proto_negotiated()
+            cipher = conn.fileno().get_cipher_name()
+            return TlsInfo(
+                version=version,
+                sni=sni,
+                alpn=alpn,
+                cipher=cipher)
+        except Exception as e:
+            logger.error("resolve tls info failed: %s", e)
+            return None

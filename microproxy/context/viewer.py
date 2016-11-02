@@ -1,5 +1,5 @@
 from http import HttpRequest, HttpResponse
-from tls import Tls
+from tls import TlsInfo
 from base import Serializable, try_deserialize
 
 
@@ -26,5 +26,5 @@ class ViewerContext(Serializable):
 
         self.request = try_deserialize(request, HttpRequest)
         self.response = try_deserialize(response, HttpResponse)
-        self.client_tls = try_deserialize(client_tls, Tls)
-        self.server_tls = try_deserialize(server_tls, Tls)
+        self.client_tls = try_deserialize(client_tls, TlsInfo)
+        self.server_tls = try_deserialize(server_tls, TlsInfo)
