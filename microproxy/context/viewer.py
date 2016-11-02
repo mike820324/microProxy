@@ -1,7 +1,9 @@
 from http import HttpRequest, HttpResponse
+from tls import Tls
+from base import Serializable, try_deserialize
 
 
-class ViewerContext(object):
+class ViewerContext(Serializable):
     """
     ViewerContext: Context used to communicate with viewer.
     """
@@ -11,7 +13,10 @@ class ViewerContext(object):
                  port=0,
                  path="",
                  request=None,
-                 response=None):
+                 response=None,
+                 client_tls=None,
+                 server_tls=None,
+                 **kwargs):
 
         super(ViewerContext, self).__init__()
         self.scheme = scheme
@@ -19,30 +24,7 @@ class ViewerContext(object):
         self.port = port
         self.path = path
 
-        if isinstance(request, dict):
-            self.request = HttpRequest(**request)
-        elif isinstance(request, HttpRequest):
-            self.request = request
-        elif request:
-            raise ValueError("not support request type: {0}".format(
-                type(request)))
-        else:
-            self.request = None
-
-        if isinstance(response, dict):
-            self.response = HttpResponse(**response)
-        elif isinstance(response, HttpResponse):
-            self.response = response
-        elif response:
-            raise ValueError("not support response type: {0}".format(
-                type(response)))
-        else:
-            self.response = None
-
-    def serialize(self):
-        json = dict(self.__dict__)
-        if self.request:
-            json["request"] = self.request.serialize()
-        if self.response:
-            json["response"] = self.response.serialize()
-        return json
+        self.request = try_deserialize(request, HttpRequest)
+        self.response = try_deserialize(response, HttpResponse)
+        self.client_tls = try_deserialize(client_tls, Tls)
+        self.server_tls = try_deserialize(server_tls, Tls)
