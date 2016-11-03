@@ -17,6 +17,12 @@ class Serializable(object):
     def __repr__(self):
         return "{0}{1}".format(type(self).__name__, self.__dict__)
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __neq__(self, other):  # pragma: no cover
+        return not self.__eq__(other)
+
 
 def try_deserialize(data, target_type):
     if isinstance(data, target_type):
