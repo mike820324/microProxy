@@ -4,10 +4,11 @@ from tornado.testing import AsyncTestCase, gen_test
 from tornado.concurrent import Future
 from tornado.gen import coroutine
 
+from microproxy.context import HttpRequest, HttpHeaders, ServerContext, Event
 from microproxy.event.replay import ReplayHandler
+from microproxy.event import REPLAY
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
-from microproxy.context import HttpRequest, HttpHeaders, ServerContext
 
 
 class TestReplayHandler(AsyncTestCase):
@@ -44,12 +45,13 @@ class TestReplayHandler(AsyncTestCase):
 
     @gen_test
     def test_http1(self):
-        event = dict(
+        ctx = dict(
             host="localhost", port=8080, scheme="http", path="/",
             request=dict(
                 method="GET", path="/", version="HTTP/1.1",
                 headers=[("Host", "localhost")]),
             response=None)
+        event = Event(REPLAY, ctx)
         yield self.replay_handler.handle(event)
 
         self.assertIsNotNone(self.context)
@@ -74,7 +76,7 @@ class TestReplayHandler(AsyncTestCase):
     def test_http1_post_body(self):
         body = b"this is body"
         body_length = len(body)
-        event = dict(
+        ctx = dict(
             host="localhost", port=8080, scheme="http", path="/",
             request=dict(
                 method="POST", path="/", version="HTTP/1.1",
@@ -82,6 +84,7 @@ class TestReplayHandler(AsyncTestCase):
                          ("Content-Length", str(body_length))],
                 body=body.encode("base64")),
             response=None)
+        event = Event(REPLAY, ctx)
         yield self.replay_handler.handle(event)
 
         self.assertIsNotNone(self.context)
@@ -106,12 +109,13 @@ class TestReplayHandler(AsyncTestCase):
 
     @gen_test
     def test_http2(self):
-        event = dict(
+        ctx = dict(
             host="localhost", port=8080, scheme="h2", path="/",
             request=dict(
                 method="GET", path="/", version="HTTP/2",
                 headers=[(":method", "GET"), (":path", "/")]),
             response=None)
+        event = Event(REPLAY, ctx)
         yield self.replay_handler.handle(event)
 
         self.assertIsNotNone(self.context)
@@ -136,13 +140,14 @@ class TestReplayHandler(AsyncTestCase):
     def test_http2_post_body(self):
         body = b"this is body"
         body_length = len(body)
-        event = dict(
+        ctx = dict(
             host="localhost", port=8080, scheme="h2", path="/",
             request=dict(
                 method="POST", path="/", version="HTTP/2",
                 headers=[(":method", "POST"), (":path", "/"), ("content-length", str(body_length))],
                 body=body.encode("base64")),
             response=None)
+        event = Event(REPLAY, ctx)
         yield self.replay_handler.handle(event)
 
         self.assertIsNotNone(self.context)

@@ -19,4 +19,4 @@ class EventClient(object):
         return socket
 
     def send_event(self, event):
-        self.zmq_socket.send_json(event)
+        self.zmq_socket.send_json(event.serialize())
