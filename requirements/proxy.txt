@@ -9,4 +9,4 @@ six==1.10.0
 h2==2.4.0
 
 -e git+https://github.com/chhsiao90/h11.git#egg=h11
--e git+https://github.com/mike820324/socks5.git#egg=socks5
+-e git+https://github.com/mike820324/socks5.git@v0.1.0#egg=socks5
