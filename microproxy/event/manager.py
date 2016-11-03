@@ -1,5 +1,6 @@
 import json
 
+from microproxy.context import Event
 from microproxy.utils import get_logger
 from replay import ReplayHandler
 from types import REPLAY
@@ -19,12 +20,15 @@ class EventManager(object):
     def _on_recv(self, msg_parts):
         message = msg_parts[0]
         try:
-            event = json.loads(message)
+            event = Event(**json.loads(message))
         except:
             logger.error("Wrong message received: {0}".format(message))
         else:
             logger.debug("Receive event: {0}".format(event))
-            self.handler.handle_event(event)
+            try:
+                self.handler.handle_event(event)
+            except Exception as e:
+                logger.error("handle event failed: {0}".format(e))
 
 
 class EventHandler(object):
@@ -35,7 +39,7 @@ class EventHandler(object):
 
     def handle_event(self, event):
         if event.name in self.handlers:
-            self.handlers.handle(event)
+            self.handlers[event.name].handle(event)
         else:
             logger.error("Unhandled event: {0}".format(event.name))
 
