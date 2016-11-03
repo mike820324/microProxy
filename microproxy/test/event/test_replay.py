@@ -21,7 +21,7 @@ class TestReplayHandler(AsyncTestCase):
 
         self.server_state = ServerContext()
         self.replay_handler = ReplayHandler(
-            self.server_state, layer_manager=self.layer_manager)
+            self.server_state, layer_manager=self.layer_manager, io_loop=self.io_loop)
         self.context = None
         self.http_events = []
 
