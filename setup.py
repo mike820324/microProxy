@@ -69,7 +69,7 @@ setup(
     ],
     dependency_links=[
         "https://github.com/njsmith/h11/tarball/master#egg=h11-0.6.0+dev",
-        "https://github.com/mike820324/socks5/tarball/master#egg=socks5-0.1.0"
+        "https://github.com/mike820324/socks5/archive/v0.1.0.tar.gz#egg=socks5-0.1.0"
     ],
     extras_require={
         'viewer': viewer_deps,
