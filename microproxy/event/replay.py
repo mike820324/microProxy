@@ -13,8 +13,9 @@ logger = get_logger(__name__)
 
 
 class ReplayHandler(object):
-    def __init__(self, server_state, layer_manager=None):
+    def __init__(self, server_state, layer_manager=None, io_loop=None):
         self.server_state = server_state
+        self.io_loop = io_loop or curr_loop()
         self.layer_manager = layer_manager or default_layer_manager
 
     @gen.coroutine
@@ -49,9 +50,8 @@ class ReplayHandler(object):
 
     def _create_streams(self):
         read_fd, write_fd = os.pipe()
-        io_loop = curr_loop()
-        write_stream = PipeIOStream(write_fd, io_loop=io_loop)
-        read_stream = PipeIOStream(read_fd, io_loop=io_loop)
+        write_stream = PipeIOStream(write_fd, io_loop=self.io_loop)
+        read_stream = PipeIOStream(read_fd, io_loop=self.io_loop)
         return (write_stream, read_stream)
 
     def _send_http1_request(self, stream, context):
