@@ -2,6 +2,7 @@ import json
 
 from microproxy.utils import get_logger
 from replay import ReplayHandler
+from types import REPLAY
 
 logger = get_logger(__name__)
 
@@ -28,10 +29,15 @@ class EventManager(object):
 
 class EventHandler(object):
     def __init__(self, server_state):
-        self.handler = ReplayHandler(server_state)
+        self.handlers = {
+            REPLAY: ReplayHandler(server_state)
+        }
 
     def handle_event(self, event):
-        self.handler.handle(event)
+        if event.name in self.handlers:
+            self.handlers.handle(event)
+        else:
+            logger.error("Unhandled event: {0}".format(event.name))
 
 
 def start_events_server(server_state, zmq_stream):
