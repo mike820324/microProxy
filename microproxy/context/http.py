@@ -1,15 +1,18 @@
 from collections import OrderedDict
 import time
 
+from base import Serializable
 
-class HttpRequest(object):
+
+class HttpRequest(Serializable):
     def __init__(self,
                  version="",
                  method="",
                  path="",
                  headers=None,
                  body=b"",
-                 timestamp=None):
+                 timestamp=None,
+                 **kwargs):
         super(HttpRequest, self).__init__()
         self.timestamp = timestamp or int(time.time() * 1000000)
         self.version = version
@@ -19,24 +22,29 @@ class HttpRequest(object):
         self.headers = HttpHeaders(headers)
 
     def serialize(self):
-        json = dict(self.__dict__)
-        json["body"] = self.body.encode("base64")
-        json["headers"] = [h for h in self.headers]
-        return json
+        data = super(HttpRequest, self).serialize()
+        data["body"] = self.body.encode("base64")
+        return data
 
     def __str__(self):
-        return "HttpRequest(version={0}, method={1}, path={2}, headers={3})".format(
-            self.version, self.method, self.path, self.headers)
+        display_data = {
+            "version": self.version,
+            "method": self.method,
+            "path": self.path,
+            "headers": self.headers
+        }
+        return "{0}{1}".format(type(self).__name__, display_data)
 
 
-class HttpResponse(object):
+class HttpResponse(Serializable):
     def __init__(self,
                  code="",
                  reason="",
                  version="",
                  headers=None,
                  body=b"",
-                 timestamp=None):
+                 timestamp=None,
+                 **kwargs):
         super(HttpResponse, self).__init__()
         self.timestamp = timestamp or int(time.time() * 1000000)
         self.code = code
@@ -46,17 +54,21 @@ class HttpResponse(object):
         self.headers = HttpHeaders(headers)
 
     def serialize(self):
-        json = dict(self.__dict__)
-        json["body"] = self.body.encode("base64")
-        json["headers"] = [h for h in self.headers]
-        return json
+        data = super(HttpResponse, self).serialize()
+        data["body"] = self.body.encode("base64")
+        return data
 
     def __str__(self):
-        return "HttpResponse(version={0}, code={1}, reason={2}, headers={3})".format(
-            self.version, self.code, self.reason, self.headers)
+        display_data = {
+            "version": self.version,
+            "code": self.code,
+            "reason": self.reason,
+            "headers": self.headers
+        }
+        return "{0}{1}".format(type(self).__name__, display_data)
 
 
-class HttpHeaders(object):
+class HttpHeaders(Serializable):
     def __init__(self, headers=None):
         headers = headers or []
         if isinstance(headers, (dict, OrderedDict)):
@@ -88,14 +100,11 @@ class HttpHeaders(object):
     def __iter__(self):
         return self.headers.__iter__()
 
-    def __repr__(self):
-        return "HttpHeaders({0})".format(self.__dict__)
-
-    def __str__(self):  # pragma: no cover
-        return str(self.__dict__)
-
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def serialize(self):
+        return [h for h in self.headers]
