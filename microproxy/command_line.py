@@ -134,6 +134,7 @@ def create_console_viewer_options():
                   help_str="Specify the proxy host. ex. tcp://127.0.0.1",
                   option_type="str",
                   cmd_flags="--proxy-host",
+                  default="tcp://127.0.0.1",
                   config_file_flags="channel:host")
 
     define_option(option_info=console_viewer_option_info,
@@ -141,6 +142,7 @@ def create_console_viewer_options():
                   help_str="Specify the viewer channel port. ex. 5581",
                   option_type="int",
                   cmd_flags="--viewer-channel-port",
+                  default="5581",
                   config_file_flags="channel:viewer.port")
 
     define_option(option_info=console_viewer_option_info,
@@ -148,6 +150,7 @@ def create_console_viewer_options():
                   help_str="Specify the events channel port. ex. 5582",
                   option_type="int",
                   cmd_flags="--events-channel-port",
+                  default="5582",
                   config_file_flags="channel:events.port")
 
     define_option(option_info=console_viewer_option_info,
