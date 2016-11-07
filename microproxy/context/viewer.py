@@ -1,6 +1,6 @@
 from http import HttpRequest, HttpResponse
 from tls import TlsInfo
-from base import Serializable, try_deserialize, parse_version
+from base import Serializable, parse_version
 from microproxy.version import VERSION
 
 
@@ -30,13 +30,18 @@ class ViewerContext(Serializable):
         self.path = path
         self.version = version
 
-        self.request = try_deserialize(request, HttpRequest)
-        self.response = try_deserialize(response, HttpResponse)
-        self.client_tls = try_deserialize(client_tls, TlsInfo)
-        self.server_tls = try_deserialize(server_tls, TlsInfo)
+        self.request = HttpRequest.deserialize(request)
+        self.response = HttpResponse.deserialize(response)
+        self.client_tls = TlsInfo.deserialize(client_tls)
+        self.server_tls = TlsInfo.deserialize(server_tls)
+
+    @classmethod
+    def deserialize(cls, data):
+        enrich_data(data)
+        return ViewerContext(**data)
 
 
-def parse(data):
+def enrich_data(data):
     if "version" not in data:
         data["version"] = _DEFAULT_VERSION
 
@@ -48,7 +53,6 @@ def parse(data):
         else:
             break
     data["version"] = VERSION
-    return ViewerContext(**data)
 
 
 def convert_040_041(ctx):
