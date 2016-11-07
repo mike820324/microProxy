@@ -177,11 +177,7 @@ class Tui(gviewer.BaseDisplayer):
 
 class MessageAsyncDataStore(gviewer.AsyncDataStore):
     def transform(self, message):
-        context = ViewerContext(**json.loads(message[1]))
-        if context.request.body:
-            context.request.body = context.request.body.decode("base64")
-        if context.response.body:
-            context.response.body = context.response.body.decode("base64")
+        context = ViewerContext.deserialize(json.loads(message[1]))
         return context
 
 
