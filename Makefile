@@ -8,9 +8,9 @@ coverage:
 	@coverage run --source=microproxy -m unittest discover
 
 install:
-	pip install -U --no-deps .
+	pip install -U --no-deps --process-dependency-links .
 
 install-all:
-	pip install -U .
+	pip install -U --process-dependency-links .
 	pip install -U .[viewer]
-	pip install -U .[dev]
+	pip install -U .[develop]
