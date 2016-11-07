@@ -1,6 +1,8 @@
+import json
 import mock
 import unittest
 
+from microproxy.context import Event
 from microproxy.event import EventManager
 
 
@@ -17,8 +19,15 @@ class TestEventManager(unittest.TestCase):
         self.zmq_stream.on_recv.assert_called_with(self.event_manager._on_recv)
 
     def test_recv(self):
-        self.event_manager._on_recv(['{"event": "yoyo"}'])
-        self.handler.handle_event.assert_called_with(dict(event="yoyo"))
+        msg = json.dumps({
+            "name": "replay",
+            "context": {
+                "replay": "yoyo"
+            }
+        })
+        self.event_manager._on_recv([msg])
+        self.handler.handle_event.assert_called_with(
+            Event(name="replay", context={"replay": "yoyo"}))
 
 if __name__ == "__main__":
     unittest.main()

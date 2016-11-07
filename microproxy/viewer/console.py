@@ -3,8 +3,8 @@ import zmq
 import json
 from colored import fg, bg, attr
 
-from microproxy.event import EventClient
-from microproxy.context import ViewerContext
+from microproxy.context import ViewerContext, Event
+from microproxy.event import EventClient, REPLAY
 from formatter import ConsoleFormatter
 
 _formatter = ConsoleFormatter()
@@ -198,7 +198,9 @@ def replay(channel_addr, replay_file):  # pragma: no cover
     client = EventClient(channel_addr)
     for line in open(replay_file, "r"):
         if line:
-            client.send_event(json.loads(line))
+            ctx = json.loads(line)
+            event = Event(REPLAY, ctx)
+            client.send_event(event)
 
 
 def start(config):  # pragma: no cover

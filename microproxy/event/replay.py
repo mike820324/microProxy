@@ -22,7 +22,7 @@ class ReplayHandler(object):
     def handle(self, event):
         logger.debug("start handling replay event")
         try:
-            viewer_context = ViewerContext(**event)
+            viewer_context = ViewerContext(**event.context)
             write_stream, read_stream = self._create_streams()
 
             if viewer_context.scheme in ("http", "https"):

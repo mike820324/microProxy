@@ -5,8 +5,9 @@ import json
 from backports.shutil_get_terminal_size import get_terminal_size
 
 import gviewer
-from microproxy.context import ViewerContext
-from microproxy.event import EventClient
+
+from microproxy.context import ViewerContext, Event
+from microproxy.event import EventClient, REPLAY
 from microproxy.viewer.formatter import TuiFormatter
 
 ioloop.install()
@@ -163,12 +164,12 @@ class Tui(gviewer.BaseDisplayer):
         parent.notify("replay script export to {0}".format(export_file))
 
     def replay(self, parent, message, *args, **kwargs):
-        self.event_client.send_event(message.serialize())
+        self.event_client.send_event(Event(name=REPLAY, context=message))
         if parent:
             parent.notify("sent replay event to server")
 
     def execute_replay(self, event):
-        self.event_client.send_event(event)
+        self.event_client.send_event(Event(name=REPLAY, context=event))
 
     def log(self, controller, message, widget, *args, **kwargs):
         controller.open_view_by_context(self.log_context)

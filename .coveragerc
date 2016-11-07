@@ -3,6 +3,7 @@ omit = microproxy/test/*,microproxy/layer/debug/*,microproxy/pyca_tls/*
 exclude_lines =
     pragma: no cover
     def __repr__
+    def __neq__
     raise AssertionError
     raise NotImplementedError
     if __name__ == .__main__.:

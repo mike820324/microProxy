@@ -1,3 +1,6 @@
+import re
+
+
 class Serializable(object):
     def serialize(self):
         data = {}
@@ -14,6 +17,12 @@ class Serializable(object):
     def __repr__(self):
         return "{0}{1}".format(type(self).__name__, self.__dict__)
 
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __neq__(self, other):
+        return not self.__eq__(other)
+
 
 def try_deserialize(data, target_type):
     if isinstance(data, target_type):
@@ -25,3 +34,12 @@ def try_deserialize(data, target_type):
             type(data).__name__, target_type.__name__))
     else:
         return None
+
+
+def parse_version(version):
+    versions = re.split(r"\.|-", version)
+    return (
+        int(versions[0]),
+        int(versions[1]),
+        int(versions[2]),
+    )
