@@ -1,9 +1,12 @@
 import unittest
+
 from microproxy.context import ViewerContext
+from microproxy.context.viewer import parse
+from microproxy.version import VERSION
 
 
 class TestViewerContext(unittest.TestCase):
-    def test_deserialize(self):
+    def test_parse(self):
         data = {
             "scheme": "https",
             "host": "localhost",
@@ -33,12 +36,15 @@ class TestViewerContext(unittest.TestCase):
                 "cipher": "AES",
             },
         }
-        viewer_context = ViewerContext(**data)
+        viewer_context = parse(data)
+
+        self.assertIsInstance(viewer_context, ViewerContext)
 
         self.assertEquals("https", viewer_context.scheme)
         self.assertEquals("localhost", viewer_context.host)
         self.assertEquals(8080, viewer_context.port)
         self.assertEquals("/index", viewer_context.path)
+        self.assertEquals(VERSION, viewer_context.version)
 
         self.assertEquals("1.1", viewer_context.request.version)
         self.assertEquals("GET", viewer_context.request.method)
