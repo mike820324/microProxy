@@ -22,7 +22,7 @@ class ReplayHandler(object):
     def handle(self, event):
         logger.debug("start handling replay event")
         try:
-            viewer_context = ViewerContext(**event.context)
+            viewer_context = ViewerContext.deserialize(event.context)
             write_stream, read_stream = self._create_streams()
 
             if viewer_context.scheme in ("http", "https"):
@@ -56,14 +56,10 @@ class ReplayHandler(object):
 
     def _send_http1_request(self, stream, context):
         logger.debug("replay http1 request: {0}".format(context.request))
-        if context.request.body:
-            context.request.body = context.request.body.decode("base64")
         Http1Connection(h11.CLIENT, stream).send_request(context.request)
 
     def _send_http2_request(self, stream, context):
         logger.debug("replay http2 request: {0}".format(context.request))
-        if context.request.body:
-            context.request.body = context.request.body.decode("base64")
         conn = Http2Connection(stream, client_side=True)
         conn.initiate_connection()
         stream_id = conn.get_next_available_stream_id()

@@ -26,6 +26,16 @@ class HttpRequest(Serializable):
         data["body"] = self.body.encode("base64")
         return data
 
+    @classmethod
+    def deserialize(cls, data):
+        if isinstance(data, cls):
+            return data
+
+        req = super(HttpRequest, cls).deserialize(data)
+        if req and req.body:
+            req.body = req.body.decode("base64")
+        return req
+
     def __str__(self):
         display_data = {
             "version": self.version,
@@ -57,6 +67,16 @@ class HttpResponse(Serializable):
         data = super(HttpResponse, self).serialize()
         data["body"] = self.body.encode("base64")
         return data
+
+    @classmethod
+    def deserialize(cls, data):
+        if isinstance(data, cls):
+            return data
+
+        resp = super(HttpResponse, cls).deserialize(data)
+        if resp and resp.body:
+            resp.body = resp.body.decode("base64")
+        return resp
 
     def __str__(self):
         display_data = {

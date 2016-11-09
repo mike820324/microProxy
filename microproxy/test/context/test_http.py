@@ -29,6 +29,34 @@ class TestHttp(unittest.TestCase):
         self.assertEqual(json["headers"], [("Content-Type", "text/html")])
         self.assertEqual(json["body"], "body".encode("base64"))
 
+    def test_req_deserialize(self):
+        request = HttpRequest.deserialize({
+            "version": "1.1",
+            "method": "GET",
+            "path": "/hello",
+            "headers": [("Content-Type", "text/html")],
+            "body": "body".encode("base64")
+        })
+        self.assertEqual(request.version, "1.1")
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(request.path, "/hello")
+        self.assertEqual(request.headers, HttpHeaders([("Content-Type", "text/html")]))
+        self.assertEqual(request.body, "body")
+
+    def test_resp_deserialize(self):
+        response = HttpResponse.deserialize({
+            "version": "1.1",
+            "code": "200",
+            "reason": "OK",
+            "headers": [("Content-Type", "text/html")],
+            "body": "body".encode("base64")
+        })
+        self.assertEqual(response.version, "1.1")
+        self.assertEqual(response.code, "200")
+        self.assertEqual(response.reason, "OK")
+        self.assertEqual(response.headers, HttpHeaders([("Content-Type", "text/html")]))
+        self.assertEqual(response.body, "body")
+
 
 class TestHttpHeaders(unittest.TestCase):
     def setUp(self):
