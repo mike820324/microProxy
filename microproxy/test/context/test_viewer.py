@@ -1,12 +1,11 @@
 import unittest
 
 from microproxy.context import ViewerContext
-from microproxy.context.viewer import parse
 from microproxy.version import VERSION
 
 
 class TestViewerContext(unittest.TestCase):
-    def test_parse(self):
+    def test_deserialize(self):
         data = {
             "scheme": "https",
             "host": "localhost",
@@ -36,35 +35,35 @@ class TestViewerContext(unittest.TestCase):
                 "cipher": "AES",
             },
         }
-        viewer_context = parse(data)
+        viewer_context = ViewerContext.deserialize(data)
 
         self.assertIsInstance(viewer_context, ViewerContext)
 
-        self.assertEquals("https", viewer_context.scheme)
-        self.assertEquals("localhost", viewer_context.host)
-        self.assertEquals(8080, viewer_context.port)
-        self.assertEquals("/index", viewer_context.path)
-        self.assertEquals(VERSION, viewer_context.version)
+        self.assertEqual("https", viewer_context.scheme)
+        self.assertEqual("localhost", viewer_context.host)
+        self.assertEqual(8080, viewer_context.port)
+        self.assertEqual("/index", viewer_context.path)
+        self.assertEqual(VERSION, viewer_context.version)
 
-        self.assertEquals("1.1", viewer_context.request.version)
-        self.assertEquals("GET", viewer_context.request.method)
-        self.assertEquals("/index", viewer_context.request.path)
-        self.assertEquals(1, len(viewer_context.request.headers))
-        self.assertEquals("text/html",
-                          viewer_context.request.headers["Content-Type"])
+        self.assertEqual("1.1", viewer_context.request.version)
+        self.assertEqual("GET", viewer_context.request.method)
+        self.assertEqual("/index", viewer_context.request.path)
+        self.assertEqual(1, len(viewer_context.request.headers))
+        self.assertEqual("text/html",
+                         viewer_context.request.headers["Content-Type"])
 
-        self.assertEquals("1.1", viewer_context.response.version)
-        self.assertEquals("200", viewer_context.response.code)
-        self.assertEquals("OK", viewer_context.response.reason)
-        self.assertEquals("", viewer_context.response.body)
-        self.assertEquals(1, len(viewer_context.response.headers))
-        self.assertEquals("text/html",
-                          viewer_context.response.headers["Content-Type"])
+        self.assertEqual("1.1", viewer_context.response.version)
+        self.assertEqual("200", viewer_context.response.code)
+        self.assertEqual("OK", viewer_context.response.reason)
+        self.assertEqual("", viewer_context.response.body)
+        self.assertEqual(1, len(viewer_context.response.headers))
+        self.assertEqual("text/html",
+                         viewer_context.response.headers["Content-Type"])
 
-        self.assertEquals("http/1.1", viewer_context.client_tls.alpn)
-        self.assertEquals("localhost", viewer_context.client_tls.sni)
-        self.assertEquals("AES", viewer_context.client_tls.cipher)
+        self.assertEqual("http/1.1", viewer_context.client_tls.alpn)
+        self.assertEqual("localhost", viewer_context.client_tls.sni)
+        self.assertEqual("AES", viewer_context.client_tls.cipher)
 
-        self.assertEquals("http/1.1", viewer_context.server_tls.alpn)
-        self.assertEquals("localhost", viewer_context.server_tls.sni)
-        self.assertEquals("AES", viewer_context.server_tls.cipher)
+        self.assertEqual("http/1.1", viewer_context.server_tls.alpn)
+        self.assertEqual("localhost", viewer_context.server_tls.sni)
+        self.assertEqual("AES", viewer_context.server_tls.cipher)

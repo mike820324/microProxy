@@ -11,6 +11,18 @@ class Serializable(object):
                 data[k] = v
         return data
 
+    @classmethod
+    def deserialize(cls, data):
+        if isinstance(data, cls):
+            return data
+        elif isinstance(data, dict):
+            return cls(**data)
+        elif data:
+            raise ValueError("cannot deserialize to {0} with {1}".format(
+                type(data).__name__, cls.__name__))
+        else:
+            return None
+
     def __str__(self):
         return "{0}{1}".format(type(self).__name__, self.__dict__)
 
@@ -24,20 +36,8 @@ class Serializable(object):
         return not self.__eq__(other)
 
 
-def try_deserialize(data, target_type):
-    if isinstance(data, target_type):
-        return data
-    elif isinstance(data, dict):
-        return target_type(**data)
-    elif data:
-        raise ValueError("incorrect type: {0}, expected is {1}".format(
-            type(data).__name__, target_type.__name__))
-    else:
-        return None
-
-
 def parse_version(version):
-    versions = re.split(r"\.|-", version)
+    versions = re.split(r"\.|-|\+", version)
     return (
         int(versions[0]),
         int(versions[1]),

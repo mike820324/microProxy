@@ -226,11 +226,7 @@ def start(config):  # pragma: no cover
     while True:
         try:
             topic, data = socket.recv_multipart()
-            viewer_context = ViewerContext(**json.loads(data))
-            if viewer_context.request.body:
-                viewer_context.request.body = viewer_context.request.body.decode("base64")
-            if viewer_context.response.body:
-                viewer_context.response.body = viewer_context.response.body.decode("base64")
+            viewer_context = ViewerContext.deserialize(json.loads(data))
             if dump_file:
                 fp.write(data)
                 fp.write("\n")

@@ -20,7 +20,7 @@ class EventManager(object):
     def _on_recv(self, msg_parts):
         message = msg_parts[0]
         try:
-            event = Event(**json.loads(message))
+            event = Event.deserialize(json.loads(message))
         except:
             logger.error("Wrong message received: {0}".format(message))
         else:
