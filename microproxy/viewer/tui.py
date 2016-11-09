@@ -10,8 +10,6 @@ from microproxy.context import ViewerContext, Event
 from microproxy.event import EventClient, REPLAY
 from microproxy.viewer.formatter import TuiFormatter
 
-ioloop.install()
-
 
 class Tui(gviewer.BaseDisplayer):
     PALETTE = [
@@ -21,9 +19,11 @@ class Tui(gviewer.BaseDisplayer):
     ]
     DEFAULT_EXPORT_REPLAY_FILE = "replay.script"
 
-    def __init__(self, config):
-        socket = create_msg_channel(config["viewer_channel"], "message")
-        stream = zmqstream.ZMQStream(socket)
+    def __init__(self, config, stream=None, event_loop=None):
+        stream = (
+            stream or
+            create_msg_channel(config["viewer_channel"], "message")
+        )
         data_store = MessageAsyncDataStore(stream.on_recv)
 
         context = gviewer.DisplayerContext(
@@ -33,11 +33,12 @@ class Tui(gviewer.BaseDisplayer):
                 ("L", "log", self.log)]))
 
         self.log_context = LogDisplayer(config).context
+        event_loop = event_loop or urwid.TornadoEventLoop(ioloop.IOLoop.instance())
         self.viewer = gviewer.GViewer(
             context, palette=self.PALETTE,
             other_contexts=[self.log_context],
             config=gviewer.Config(auto_scroll=True),
-            event_loop=urwid.TornadoEventLoop(ioloop.IOLoop.instance()))
+            event_loop=event_loop)
         self.formatter = TuiFormatter()
         self.config = config
         self.event_client = EventClient(config["events_channel"])
@@ -60,11 +61,17 @@ class Tui(gviewer.BaseDisplayer):
         max_width = self.terminal_width - 16
         return path if len(path) < max_width else path[:max_width - 1] + "..."
 
+    def _format_port(self, scheme, port):
+        if (scheme, port) in [("https", 443), ("http", 80)]:
+            return ""
+        return ":" + str(port)
+
     def summary(self, message, exported=False):
         mark = "V " if exported else "  "
-        pretty_path = self._fold_path("{0}://{1}{2}".format(
+        pretty_path = self._fold_path("{0}://{1}{2}{3}".format(
             message.scheme,
             message.host,
+            self._format_port(message.scheme, message.port),
             message.path)
         )
         return [
@@ -152,10 +159,7 @@ class Tui(gviewer.BaseDisplayer):
         return gviewer.View(groups)
 
     def export_replay(self, parent, message, widget, *args, **kwargs):
-        if "out_file" in self.config:
-            export_file = self.config["out_file"]
-        else:
-            export_file = self.DEFAULT_EXPORT_REPLAY_FILE
+        export_file = self.config.get("out_file", self.DEFAULT_EXPORT_REPLAY_FILE)
 
         with open(export_file, "a") as f:
             f.write(json.dumps(message.serialize()))
@@ -175,16 +179,18 @@ class Tui(gviewer.BaseDisplayer):
         controller.open_view_by_context(self.log_context)
 
 
-class MessageAsyncDataStore(gviewer.AsyncDataStore):
+class MessageAsyncDataStore(gviewer.AsyncDataStore):  # pragma: no cover
     def transform(self, message):
         context = ViewerContext.deserialize(json.loads(message[1]))
         return context
 
 
 class LogDisplayer(gviewer.BaseDisplayer):
-    def __init__(self, config):
-        socket = create_msg_channel(config["viewer_channel"], "logger")
-        stream = zmqstream.ZMQStream(socket)
+    def __init__(self, config, stream=None):
+        stream = (
+            stream or
+            create_msg_channel(config["viewer_channel"], "logger")
+        )
         data_store = gviewer.AsyncDataStore(stream.on_recv)
         self.context = gviewer.DisplayerContext(
             data_store, self)
@@ -204,14 +210,15 @@ class LogDisplayer(gviewer.BaseDisplayer):
         return gviewer.View([gviewer.Group("", lines)])
 
 
-def create_msg_channel(channel, topic):
+def create_msg_channel(channel, topic):  # pragma: no cover
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(channel)
     socket.setsockopt(zmq.SUBSCRIBE, topic)
-    return socket
+    return zmqstream.ZMQStream(socket)
 
 
-def start(config):
+def start(config):  # pragma: no cover
+    ioloop.install()
     tui = Tui(config)
     tui.start()
