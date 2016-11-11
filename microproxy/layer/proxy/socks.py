@@ -8,7 +8,7 @@ from socks5 import VERSION as socks_version
 from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND
 from socks5.connection import ServerConnection
 
-from base import ProxyLayer
+from microproxy.layer.base import ProxyLayer
 
 from microproxy.utils import get_logger
 from microproxy.exception import SrcStreamClosedError, DestNotConnectedError, ProtocolError

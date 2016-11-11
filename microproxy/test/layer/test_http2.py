@@ -1,4 +1,4 @@
-from mock import Mock
+import mock
 
 from tornado.testing import gen_test
 from tornado.gen import coroutine
@@ -22,17 +22,20 @@ class TestHttp2Layer(ProxyAsyncTestCase):
         self.client_stream, src_stream = yield self.create_iostream_pair()
         dest_stream, self.server_stream = yield self.create_iostream_pair()
 
-        self.context = LayerContext(mode="socks",
-                                    src_stream=src_stream,
-                                    dest_stream=dest_stream)
+        server_state = ServerContext(
+            config={},
+            interceptor=mock.Mock(**{
+                "publish.return_value": None,
+                "request.return_value": None,
+                "response.return_value": None,
+            })
+        )
 
-        interceptor = Mock()
-        interceptor.publish = Mock(return_value=None)
-        interceptor.request = Mock(return_value=None)
-        interceptor.response = Mock(return_value=None)
-        server_state = ServerContext(interceptor=interceptor)
-
-        self.http_layer = Http2Layer(server_state, self.context)
+        self.http_layer = Http2Layer(
+            server_state,
+            LayerContext(mode="socks",
+                         src_stream=src_stream,
+                         dest_stream=dest_stream))
 
     def record_src_event(self, *args):
         self.src_events.append(args)
@@ -414,7 +417,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
 
     @gen_test
     def test_replay(self):
-        self.context.mode = "replay"
+        self.http_layer.context.mode = "replay"
         self.client_conn = Connection(
             self.client_stream, client_side=True,
             on_unhandled=self.ignore_event)
@@ -459,5 +462,5 @@ class TestHttp2Layer(ProxyAsyncTestCase):
     def tearDown(self):
         self.client_stream.close()
         self.server_stream.close()
-        self.context.src_stream.close()
-        self.context.dest_stream.close()
+        self.http_layer.src_stream.close()
+        self.http_layer.dest_stream.close()

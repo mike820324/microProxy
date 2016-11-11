@@ -1,21 +1,20 @@
 from tornado import concurrent, gen
 
+from microproxy.layer.base import ApplicationLayer
 from microproxy.protocol.http2 import Connection
 from microproxy.utils import get_logger
 
 logger = get_logger(__name__)
 
 
-class Http2Layer(object):
+class Http2Layer(ApplicationLayer):
     '''
     Http2Layer: Responsible for handling the http2 request and response.
     '''
     def __init__(self, server_state, context):
-        super(Http2Layer, self).__init__()
-        self.context = context
-        self.interceptor = server_state.interceptor
+        super(Http2Layer, self).__init__(server_state, context)
         self.src_conn = Connection(
-            self.context.src_stream, client_side=False,
+            self.src_stream, client_side=False,
             conn_type="source",
             on_request=self.on_request,
             on_settings=self.on_src_settings,
@@ -25,7 +24,7 @@ class Http2Layer(object):
             on_terminate=self.on_src_terminate,
             readonly=(context.mode == "replay"))
         self.dest_conn = Connection(
-            self.context.dest_stream, client_side=True,
+            self.dest_stream, client_side=True,
             conn_type="destination",
             on_response=self.on_response,
             on_push=self.on_push,
@@ -41,13 +40,13 @@ class Http2Layer(object):
     @gen.coroutine
     def process_and_return_context(self):
         yield self._init_h2_connection()
-        self.context.src_stream.read_until_close(
+        self.src_stream.read_until_close(
             streaming_callback=self.src_conn.receive)
-        self.context.src_stream.set_close_callback(self.on_src_close)
+        self.src_stream.set_close_callback(self.on_src_close)
 
-        self.context.dest_stream.read_until_close(
+        self.dest_stream.read_until_close(
             streaming_callback=self.dest_conn.receive)
-        self.context.dest_stream.set_close_callback(self.on_dest_close)
+        self.dest_stream.set_close_callback(self.on_dest_close)
         result = yield self._future
         raise gen.Return(result)
 
@@ -60,13 +59,13 @@ class Http2Layer(object):
 
     def on_src_close(self):
         logger.debug("src stream closed")
-        self.context.dest_stream.close()
+        self.dest_stream.close()
         if self._future.running():
             self._future.set_result(self.context)
 
     def on_dest_close(self):
         logger.debug("dest stream closed")
-        self.context.src_stream.close()
+        self.src_stream.close()
         if self._future.running():
             self._future.set_result(self.context)
 
@@ -119,8 +118,8 @@ class Http2Layer(object):
         del self.streams[src_stream_id]
 
         if self.context.mode == "replay":
-            self.context.src_stream.close()
-            self.context.dest_stream.close()
+            self.src_stream.close()
+            self.dest_stream.close()
 
     def on_src_settings(self, changed_settings):
         new_settings = {
@@ -182,14 +181,13 @@ class Stream(object):
     def __init__(self, layer, context, src_stream_id, dest_stream_id):
         self.layer = layer
         self.context = context
-        self.interceptor = layer.interceptor
         self.src_stream_id = src_stream_id
         self.dest_stream_id = dest_stream_id
         self.request = None
         self.response = None
 
     def on_request(self, request, **kwargs):
-        plugin_ressult = self.interceptor.request(
+        plugin_ressult = self.layer.interceptor.request(
             layer_context=self.context, request=request)
 
         self.request = plugin_ressult.request if plugin_ressult else request
@@ -197,7 +195,7 @@ class Stream(object):
             self.dest_stream_id, self.request, **kwargs)
 
     def on_push(self, request, parent_stream_id):
-        plugin_ressult = self.interceptor.request(
+        plugin_ressult = self.layer.interceptor.request(
             layer_context=self.context, request=request)
 
         self.request = plugin_ressult.request if plugin_ressult else request
@@ -205,7 +203,7 @@ class Stream(object):
             parent_stream_id, self.src_stream_id, self.request)
 
     def on_response(self, response):
-        plugin_result = self.interceptor.response(
+        plugin_result = self.layer.interceptor.response(
             layer_context=self.context,
             request=self.request, response=response
         )

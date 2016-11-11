@@ -1,3 +1,4 @@
+import mock
 from tornado.testing import gen_test
 
 from microproxy.test.utils import ProxyAsyncTestCase
@@ -18,7 +19,7 @@ class TestForwardLayer(ProxyAsyncTestCase):
                                     src_stream=src_stream,
                                     dest_stream=dest_stream)
 
-        self.forward_layer = ForwardLayer(dict(), self.context)
+        self.forward_layer = ForwardLayer(mock.Mock(), self.context)
 
     @gen_test
     def test_forward_message(self):

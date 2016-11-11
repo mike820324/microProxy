@@ -2,6 +2,7 @@ from tornado import gen
 from tornado.iostream import StreamClosedError
 import h11
 
+from microproxy.layer.base import ApplicationLayer
 from microproxy.protocol.http1 import Connection
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy.utils import get_logger
@@ -12,20 +13,18 @@ def _wrap_req_path(context, req):
     return "http://{0}:{1}{2}".format(context.host, context.port, req.path)
 
 
-class Http1Layer(object):
+class Http1Layer(ApplicationLayer):
     def __init__(self, server_state, context):
-        super(Http1Layer, self).__init__()
-        self.context = context
-        self.interceptor = server_state.interceptor
+        super(Http1Layer, self).__init__(server_state, context)
         self.src_conn = Connection(
             h11.SERVER,
-            self.context.src_stream,
+            self.src_stream,
             conn_type="src",
             readonly=(context.mode == "replay"),
             on_request=self.on_request)
         self.dest_conn = Connection(
             h11.CLIENT,
-            self.context.dest_stream,
+            self.dest_stream,
             conn_type="dest",
             on_response=self.on_response,
             on_info_response=self.on_info_response)
@@ -42,11 +41,11 @@ class Http1Layer(object):
                 yield self.run_request()
                 yield self.run_response()
             except SrcStreamClosedError:
-                self.context.dest_stream.close()
+                self.dest_stream.close()
                 if self.req:
                     raise
             except DestStreamClosedError:
-                self.context.src_stream.close()
+                self.src_stream.close()
                 raise
 
         if self.switch_protocol:
@@ -58,8 +57,8 @@ class Http1Layer(object):
         # NOTE: run first request to handle protocol change
         while not self.req:
             try:
-                data = yield self.context.src_stream.read_bytes(
-                    self.context.src_stream.max_buffer_size, partial=True)
+                data = yield self.src_stream.read_bytes(
+                    self.src_stream.max_buffer_size, partial=True)
             except StreamClosedError:
                 raise SrcStreamClosedError(self, detail="read request failed")
             else:
@@ -69,8 +68,8 @@ class Http1Layer(object):
     def run_response(self):
         while not self.resp:
             try:
-                data = yield self.context.dest_stream.read_bytes(
-                    self.context.dest_stream.max_buffer_size, partial=True)
+                data = yield self.dest_stream.read_bytes(
+                    self.dest_stream.max_buffer_size, partial=True)
             except StreamClosedError:
                 # NOTE: for HTTP protocol, there is some condition that response finish when they didn't send data
                 # It may happen when there is no "Content-Length" or "Content-Encoding: chunked" defined in there header
@@ -119,21 +118,21 @@ class Http1Layer(object):
 
     def finished(self):
         return (self.switch_protocol or
-                self.context.src_stream.closed() or
-                self.context.dest_stream.closed())
+                self.src_stream.closed() or
+                self.dest_stream.closed())
 
     def finish(self, switch_protocol=False):
         self.interceptor.publish(
             layer_context=self.context,
             request=self.req, response=self.resp)
         if self.context.mode == "replay":
-            self.context.src_stream.close()
-            self.context.dest_stream.close()
+            self.src_stream.close()
+            self.dest_stream.close()
         elif switch_protocol:
             self.switch_protocol = True
         elif self.src_conn.closed() or self.dest_conn.closed():
-            self.context.src_stream.close()
-            self.context.dest_stream.close()
+            self.src_stream.close()
+            self.dest_stream.close()
         else:
             self.src_conn.start_next_cycle()
             self.dest_conn.start_next_cycle()
