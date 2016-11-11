@@ -38,10 +38,10 @@ class ColorText(object):
         return self.__str__()
 
     def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
+        return (
+            type(self) is type(other) and
+            self.__dict__ == other.__dict__
+        )
 
     def __neq__(self, other):
         return not self.__eq__(other)
@@ -62,10 +62,10 @@ class TextList(object):
         return self.__str__()
 
     def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
+        return (
+            type(self) is type(other) and
+            self.__dict__ == other.__dict__
+        )
 
     def __neq__(self, other):
         return not self.__eq__(other)
@@ -84,15 +84,6 @@ class StatusText(TextList):
              host + path],
             delimiter=u" ")
 
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
-
-    def __neq__(self, other):
-        return not self.__eq__(other)
-
 
 class Header(TextList):
     BG_COLOR = "blue"
@@ -101,15 +92,6 @@ class Header(TextList):
         super(Header, self).__init__(
             map(lambda (k, v): ColorText("{0}: {1}".format(k, v),
                 bg_color=self.BG_COLOR), headers))
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
-
-    def __neq__(self, other):
-        return not self.__eq__(other)
 
 
 class Request(TextList):
@@ -128,15 +110,6 @@ class Request(TextList):
             content.append(body)
         super(Request, self).__init__(content)
 
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
-
-    def __neq__(self, other):
-        return not self.__eq__(other)
-
 
 class Response(TextList):
     HEADER_TITLE = "Response Headers:"
@@ -153,15 +126,6 @@ class Response(TextList):
             body = _formatter.format_body(response.body, response.headers)
             content.append(body)
         super(Response, self).__init__(content)
-
-    def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return self.__dict__ == other.__dict__
-        else:
-            return False
-
-    def __neq__(self, other):
-        return not self.__eq__(other)
 
 
 def construct_status_summary(message):

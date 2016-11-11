@@ -19,11 +19,13 @@ class ForwardLayer(object):
 
     def on_src_close(self):
         self.context.dest_stream.close()
-        if self._future.running():
-            self._future.set_result(self.context)
+        self.on_finish()
 
     def on_dest_close(self):
         self.context.src_stream.close()
+        self.on_finish()
+
+    def on_finish(self):
         if self._future.running():
             self._future.set_result(self.context)
 

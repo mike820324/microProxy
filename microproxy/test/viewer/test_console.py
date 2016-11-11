@@ -2,9 +2,12 @@ import unittest
 from unittest import TestCase
 from colored import fg, bg, attr
 
-from microproxy.viewer.console import ColorText, TextList, StatusText, Header
-from microproxy.viewer.console import Request, Response
-from microproxy.context import HttpRequest, HttpResponse
+from microproxy.viewer.console import (
+    ColorText, TextList, StatusText, Header,
+    Request, Response, construct_status_summary,
+    construct_color_msg)
+from microproxy.context import (
+    ViewerContext, HttpRequest, HttpResponse)
 
 
 class TestColorText(TestCase):
@@ -90,7 +93,7 @@ class TestRequest(TestCase):
             Request(request).__dict__)
 
 
-class ResponseTest(TestCase):
+class TestResponse(TestCase):
     def test_simple_response(self):
         response = HttpResponse(headers=[("Content-Type", "application/xml")])
         expected = TextList(
@@ -99,6 +102,99 @@ class ResponseTest(TestCase):
         self.assertEqual(
             expected.__dict__,
             Response(response).__dict__)
+
+
+class TestConsole(TestCase):
+    def test_construct_status_summary(self):
+        status = construct_status_summary(
+            ViewerContext.deserialize({
+                "host": "example.com",
+                "path": "/index",
+                "response": {
+                    "code": 200,
+                },
+                "request": {
+                    "method": "GET",
+                },
+            }))
+        self.assertEqual(status, StatusText(200, "GET", "example.com", "/index"))
+
+    def test_construct_color_msg_with_status(self):
+        msg = construct_color_msg(
+            ViewerContext.deserialize({
+                "host": "example.com",
+                "path": "/index",
+                "response": {
+                    "code": 200,
+                },
+                "request": {
+                    "method": "GET",
+                },
+            }), "status")
+        self.assertEqual(msg, StatusText(200, "GET", "example.com", "/index"))
+
+    def test_construct_color_msg_with_header(self):
+        msg = construct_color_msg(ViewerContext.deserialize({
+            "host": "example.com",
+            "path": "/index",
+            "response": {
+                "code": 200,
+                "headers": [
+                    ("Content-Type", "application/xml"),
+                ],
+                "body": "response".encode("base64"),
+            },
+            "request": {
+                "method": "GET",
+                "headers": [
+                    ("Content-Type", "application/xml"),
+                ],
+            },
+        }), "header")
+
+        self.assertEqual(
+            msg,
+            TextList([
+                StatusText(200, "GET", "example.com", "/index"),
+                Request(HttpRequest(method="GET", headers=[("Content-Type", "application/xml")])),
+                Response(HttpResponse(code=200, headers=[("Content-Type", "application/xml")]))
+            ])
+        )
+
+    def test_construct_color_msg_with_body(self):
+        msg = construct_color_msg(ViewerContext.deserialize({
+            "host": "example.com",
+            "path": "/index",
+            "response": {
+                "code": 200,
+                "headers": [
+                    ("Content-Type", "application/xml"),
+                ],
+                "body": "<xml>Response</xml>".encode("base64"),
+            },
+            "request": {
+                "method": "GET",
+                "headers": [
+                    ("Content-Type", "application/xml"),
+                ],
+                "body": "<xml>Request</xml>".encode("base64"),
+            },
+        }), "body")
+
+        self.assertEqual(
+            msg,
+            TextList([
+                StatusText(200, "GET", "example.com", "/index"),
+                Request(HttpRequest(
+                    method="GET",
+                    headers=[("Content-Type", "application/xml")],
+                    body="<xml>Request</xml>"), show_body=True),
+                Response(HttpResponse(
+                    code=200,
+                    headers=[("Content-Type", "application/xml")],
+                    body="<xml>Response</xml>"), show_body=True)
+            ])
+        )
 
 
 if __name__ == "__main__":
