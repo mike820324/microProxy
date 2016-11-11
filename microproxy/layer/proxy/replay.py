@@ -1,7 +1,7 @@
 from tornado import gen
 
 from microproxy.protocol import tls
-from base import ProxyLayer
+from microproxy.layer.base import ProxyLayer
 
 
 class ReplayLayer(ProxyLayer):

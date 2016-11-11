@@ -1,4 +1,4 @@
-from mock import Mock
+import mock
 import h11
 
 from tornado.testing import gen_test
@@ -24,17 +24,20 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.client_stream, src_stream = yield self.create_iostream_pair()
         dest_stream, self.server_stream = yield self.create_iostream_pair()
 
-        self.context = LayerContext(mode="socks",
-                                    src_stream=src_stream,
-                                    dest_stream=dest_stream)
+        server_state = ServerContext(
+            config={},
+            interceptor=mock.Mock(**{
+                "publish.return_value": None,
+                "request.return_value": None,
+                "response.return_value": None,
+            })
+        )
 
-        interceptor = Mock()
-        interceptor.publish = Mock(return_value=None)
-        interceptor.request = Mock(return_value=None)
-        interceptor.response = Mock(return_value=None)
-        server_state = ServerContext(interceptor=interceptor)
-
-        self.http_layer = Http1Layer(server_state, self.context)
+        self.http_layer = Http1Layer(
+            server_state,
+            LayerContext(mode="socks",
+                         src_stream=src_stream,
+                         dest_stream=dest_stream))
 
         self.client_conn = Connection(
             h11.CLIENT, self.client_stream,
@@ -98,8 +101,8 @@ class TestHttp1Layer(ProxyAsyncTestCase):
 
         self.client_stream.close()
         self.server_stream.close()
-        self.context.src_stream.close()
-        self.context.dest_stream.close()
+        self.http_layer.src_stream.close()
+        self.http_layer.dest_stream.close()
         yield http_layer_future
 
     @gen_test
@@ -154,7 +157,7 @@ class TestHttp1Layer(ProxyAsyncTestCase):
 
     @gen_test
     def test_replay(self):
-        self.context.mode = "replay"
+        self.http_layer.context.mode = "replay"
 
         http_layer_future = self.http_layer.process_and_return_context()
         self.client_conn.send_request(HttpRequest(
@@ -189,8 +192,8 @@ class TestHttp1Layer(ProxyAsyncTestCase):
         self.assertTrue(http_layer_future.done())
 
         yield http_layer_future
-        self.assertTrue(self.context.src_stream.closed())
-        self.assertTrue(self.context.dest_stream.closed())
+        self.assertTrue(self.http_layer.src_stream.closed())
+        self.assertTrue(self.http_layer.dest_stream.closed())
 
     @gen_test
     def test_on_websocket(self):
@@ -228,8 +231,8 @@ class TestHttp1Layer(ProxyAsyncTestCase):
 
         self.assertTrue(http_layer_future.done())
         yield http_layer_future
-        self.assertFalse(self.context.src_stream.closed())
-        self.assertFalse(self.context.dest_stream.closed())
+        self.assertFalse(self.http_layer.src_stream.closed())
+        self.assertFalse(self.http_layer.dest_stream.closed())
 
     @gen_test
     def test_read_response_without_chunked_and_content_length(self):
@@ -299,5 +302,5 @@ class TestHttp1Layer(ProxyAsyncTestCase):
     def tearDown(self):
         self.client_stream.close()
         self.server_stream.close()
-        self.context.src_stream.close()
-        self.context.dest_stream.close()
+        self.http_layer.src_stream.close()
+        self.http_layer.dest_stream.close()
