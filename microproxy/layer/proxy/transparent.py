@@ -4,7 +4,7 @@ import struct
 
 from tornado import gen
 
-from base import ProxyLayer
+from microproxy.layer.base import ProxyLayer
 
 
 class TransparentLayer(ProxyLayer):

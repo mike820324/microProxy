@@ -1,21 +1,46 @@
-import socket
 from copy import copy
 from datetime import timedelta
+import socket
 from tornado import gen
 
 from microproxy.tornado_ext.iostream import MicroProxyIOStream
 
 
-class ProxyLayer(object):
+class Layer(object):
+    def process_and_return_context(self):
+        raise NotImplementedError
+
+
+class ApplicationLayer(Layer):
+    def __init__(self, server_state, context):
+        super(ApplicationLayer, self).__init__()
+        self.context = copy(context)
+        self.server_state = server_state
+
+    @property
+    def interceptor(self):
+        return self.server_state.interceptor
+
+    @property
+    def config(self):
+        return self.server_state.config
+
+    @property
+    def src_stream(self):
+        return self.context.src_stream
+
+    @property
+    def dest_stream(self):
+        return self.context.dest_stream
+
+
+class ProxyLayer(Layer):
     def __init__(self, context, **kwargs):
         super(ProxyLayer, self).__init__()
         self.context = copy(context)
 
         for k, v in kwargs.iteritems():
             self.__setattr__(k, v)
-
-    def process_and_return_context(self):
-        raise NotImplementedError
 
     @gen.coroutine
     def create_dest_stream(self, dest_addr_info):
