@@ -1,13 +1,13 @@
 from __future__ import absolute_import
 
-from copy import copy
 import struct
 from OpenSSL import SSL
 import certifi
 from service_identity import VerificationError
 from tornado import gen
 
-from microproxy.context import TlsInfo
+from microproxy.layer.base import ApplicationLayer
+from microproxy.context import LayerContext, TlsInfo
 from microproxy.utils import get_logger
 from microproxy.protocol.tls import TlsClientHello, ServerConnection, ClientConnection
 from microproxy.exception import (
@@ -16,28 +16,25 @@ from microproxy.exception import (
 logger = get_logger(__name__)
 
 
-class TlsLayer(object):
+class TlsLayer(ApplicationLayer):
     def __init__(self, server_state, context):
-        super(TlsLayer, self).__init__()
-        self.context = copy(context)
-        self.config = server_state.config
-        self.cert_store = server_state.cert_store
+        super(TlsLayer, self).__init__(server_state, context)
 
-        self.src_conn = ServerConnection(self.context.src_stream)
-        self.dest_conn = ClientConnection(self.context.dest_stream)
+        self.src_conn = ServerConnection(self.src_stream)
+        self.dest_conn = ClientConnection(self.dest_stream)
 
     def peek_client_hello(self):
         client_hello = b""
         client_hello_size = 1
         offset = 0
         while len(client_hello) < client_hello_size:
-            record_header = self.context.src_stream.peek(offset + 5)[offset:]
+            record_header = self.src_stream.peek(offset + 5)[offset:]
             if len(record_header) != 5:
                 raise ProtocolError(
                     'Expected TLS record, got "{}" instead.'.format(record_header))
 
             record_size = struct.unpack("!H", record_header[3:])[0] + 5
-            record_body = self.context.src_stream.peek(offset + record_size)[offset + 5:]
+            record_body = self.src_stream.peek(offset + record_size)[offset + 5:]
             if len(record_body) != record_size - 5:
                 raise ProtocolError(
                     "Unexpected EOF in TLS handshake: {}".format(record_body))
@@ -93,28 +90,13 @@ class TlsLayer(object):
             logger.debug("finish src tls handshake")
             raise gen.Return(src_stream)
 
-    def update_layer_context(self,
-                             src_stream,
-                             dest_stream,
-                             hostname,
-                             select_alpn):
-
-        self.context.src_stream = src_stream
-        self.context.dest_stream = dest_stream
-        if hostname:
-            self.context.host = hostname
-
-        if select_alpn == "http/1.1":
-            self.context.scheme = "https"
-        elif select_alpn == "h2":
-            self.context.scheme = "h2"
+    def alpn_to_scheme(self, alpn):
+        if alpn == "http/1.1":
+            return "https"
+        elif alpn == "h2":
+            return "h2"
         else:
-            src_stream.close()
-            dest_stream.close()
-            raise ProtocolError("Unsupported alpn protocol: {0}".format(select_alpn))
-
-        self.context.client_tls = self._resolve_tls_info(self.context.src_stream)
-        self.context.server_tls = self._resolve_tls_info(self.context.dest_stream)
+            raise ProtocolError("Unsupported alpn protocol: {0}".format(alpn))
 
     @gen.coroutine
     def process_and_return_context(self):
@@ -127,8 +109,8 @@ class TlsLayer(object):
             dest_stream, select_alpn = yield self.start_dest_tls(
                 hostname, client_hello.alpn_protocols)
         except:
-            if not self.context.src_stream.closed():
-                self.context.src_stream.close()
+            if not self.src_stream.closed():
+                self.src_stream.close()
             raise
 
         try:
@@ -142,7 +124,23 @@ class TlsLayer(object):
         self.update_layer_context(
             src_stream, dest_stream, hostname, select_alpn)
 
-        raise gen.Return(self.context)
+        try:
+            ctx = LayerContext(
+                mode=self.context.mode,
+                src_Stream=src_stream,
+                dest_stream=dest_stream,
+                scheme=self.alpn_to_scheme(select_alpn),
+                host=hostname or self.context.host,
+                port=self.context.port,
+                client_tls=self._resolve_tls_info(src_stream),
+                server_tls=self._resolve_tls_info(dest_stream),
+            )
+        except:
+            src_stream.close()
+            dest_stream.close()
+            raise
+
+        raise gen.Return(ctx)
 
     def _resolve_tls_info(self, conn):
         try:
