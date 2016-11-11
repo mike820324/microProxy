@@ -199,6 +199,7 @@ class TestTui(unittest.TestCase):
             "replay script export to {0}".format(out_file))
 
     def test_summary(self):
+        self.tui.terminal_width = 100
         summary = self.tui.summary(self._VIEWER_CONTEXT)
         self.assertEqual(
             summary,

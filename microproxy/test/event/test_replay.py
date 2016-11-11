@@ -168,3 +168,14 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.headers, HttpHeaders([
             (":method", "POST"), (":path", "/"), ("content-length", str(body_length))]))
         self.assertEqual(req.body, body)
+
+    @gen_test
+    def test_not_support_protocol(self):
+        ctx = {
+            "scheme": "websocket"
+        }
+        event = Event(REPLAY, ctx)
+        yield self.replay_handler.handle(event)
+
+        self.layer_manager.get_first_layer.assert_not_called()
+        self.layer_manager.run_layers.assert_not_called()
