@@ -4,8 +4,8 @@ from h2.connection import H2Connection
 from h2.exceptions import NoSuchStreamError
 from h2.events import RequestReceived, WindowUpdated
 
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class Http2Layer(object):  # pragma: no cover

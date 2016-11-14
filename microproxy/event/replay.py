@@ -5,11 +5,12 @@ from tornado import gen
 import h11
 from microproxy.protocol.http1 import Connection as Http1Connection
 from microproxy.protocol.http2 import Connection as Http2Connection
-from microproxy.utils import get_logger, curr_loop
+from microproxy.utils import curr_loop
 from microproxy.context import ViewerContext, LayerContext
 from microproxy.layer import manager as default_layer_manager
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class ReplayHandler(object):

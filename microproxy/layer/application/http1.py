@@ -5,8 +5,6 @@ import h11
 from microproxy.layer.base import ApplicationLayer
 from microproxy.protocol.http1 import Connection
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
 
 
 def _wrap_req_path(context, req):

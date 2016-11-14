@@ -100,6 +100,30 @@ class CommandLineTest(unittest.TestCase):
                       default=False,
                       cmd_flags=["--insecure", "-k"])
 
+        define_option(option_info=proxy_option_info,
+                      option_name="log_level",
+                      help_str="Specify the server log level",
+                      option_type="str",
+                      default="INFO",
+                      cmd_flags="--log-level",
+                      config_file_flags="log:level")
+
+        define_option(option_info=proxy_option_info,
+                      option_name="log_file",
+                      help_str="Specify the server log level",
+                      option_type="str",
+                      default="",
+                      cmd_flags="--log-file",
+                      config_file_flags="log:file")
+
+        define_option(option_info=proxy_option_info,
+                      option_name="logger_config",
+                      help_str="Specify the server log level",
+                      option_type="str",
+                      default="",
+                      cmd_flags="--log-config",
+                      config_file_flags="log:config-file")
+
         config = create_proxy_options()
         for options_key in config:
             self.assertIn(options_key, proxy_option_info)
