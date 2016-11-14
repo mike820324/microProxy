@@ -6,10 +6,11 @@ import construct
 
 from tornado import gen
 from microproxy.pyca_tls import _constructs
-from microproxy.utils import get_logger, HAS_ALPN
+from microproxy.utils import HAS_ALPN
 from microproxy.exception import ProtocolError
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 _SUPPROT_CIPHERS_SUITES = (
     "ECDHE-RSA-AES128-GCM-SHA256",

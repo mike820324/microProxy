@@ -1,4 +1,5 @@
 from microproxy.config import parse_config, define_option
+from microproxy.log import ProxyLogger
 
 
 def create_proxy_options():
@@ -96,6 +97,31 @@ def create_proxy_options():
                   default=False,
                   cmd_flags=["--insecure", "-k"])
 
+    define_option(option_info=proxy_option_info,
+                  option_name="log_level",
+                  help_str="Specify the server log level",
+                  option_type="str",
+                  default="info",
+                  cmd_flags="--log-level",
+                  choices=["notset", "debug", "info", "warning", "error", "critical"],
+                  config_file_flags="log:level")
+
+    define_option(option_info=proxy_option_info,
+                  option_name="log_file",
+                  help_str="Specify the server log level",
+                  option_type="str",
+                  default="",
+                  cmd_flags="--log-file",
+                  config_file_flags="log:file")
+
+    define_option(option_info=proxy_option_info,
+                  option_name="logger_config",
+                  help_str="Specify the server log level",
+                  option_type="str",
+                  default="",
+                  cmd_flags="--log-config-file",
+                  config_file_flags="proxy:log-config-file")
+
     return proxy_option_info
 
 
@@ -182,17 +208,16 @@ def run_proxy_mode(config):
     from microproxy.proxy import start_tcp_server
     from microproxy.event import start_events_server
     from microproxy.utils import (
-        get_logger, curr_loop,
-        create_publish_channel, create_event_channel,
-        register_log_publisher)
+        curr_loop, create_publish_channel, create_event_channel)
     from microproxy.server_state import init_server_state
+
+    ProxyLogger.init_proxy_logger(config)
 
     # Create zmq related sockets
     publish_socket = create_publish_channel(config["viewer_channel"])
     event_socket = create_event_channel(config["events_channel"])
 
-    # Register log publisher
-    register_log_publisher(publish_socket, get_logger())
+    ProxyLogger.register_zmq_handler(publish_socket)
 
     # Initialize server state
     _server_state = init_server_state(config, publish_socket)
@@ -203,15 +228,11 @@ def run_proxy_mode(config):
     try:
         curr_loop().start()
     except KeyboardInterrupt:
-        logger = get_logger(__name__)
+        logger = ProxyLogger.get_logger(__name__)
         logger.info("bye")
 
 
 def mpserver():  # pragma: no cover
-    # NOTE: logger must start before everything else
-    from microproxy.utils import init_system_logger
-    init_system_logger()
-
     config_field_info = create_proxy_options()
     config = parse_config(config_field_info)
 

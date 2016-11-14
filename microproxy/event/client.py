@@ -1,9 +1,7 @@
 import zmq
+from microproxy.log import ProxyLogger
 
-
-from microproxy.utils import get_logger
-
-logger = get_logger(__name__)
+logger = ProxyLogger.get_logger(__name__)
 
 
 class EventClient(object):

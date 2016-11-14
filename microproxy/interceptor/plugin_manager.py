@@ -2,14 +2,14 @@ import os
 import sys
 from copy import copy
 from watchdog.events import RegexMatchingEventHandler
-from microproxy.utils import get_logger
 
 if sys.platform == "darwin":
     from watchdog.observers.polling import PollingObserver as Observer
 else:
     from watchdog.observers import Observer
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class PluginEventHandler(RegexMatchingEventHandler):

@@ -1,8 +1,8 @@
 from OpenSSL import crypto
 import time
 
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class CertStore(object):

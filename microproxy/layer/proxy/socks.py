@@ -9,11 +9,10 @@ from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND
 from socks5.connection import ServerConnection
 
 from microproxy.layer.base import ProxyLayer
-
-from microproxy.utils import get_logger
 from microproxy.exception import SrcStreamClosedError, DestNotConnectedError, ProtocolError
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class SocksLayer(ProxyLayer):
