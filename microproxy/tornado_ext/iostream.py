@@ -7,9 +7,9 @@ from OpenSSL import SSL
 from service_identity import VerificationError
 from service_identity.pyopenssl import verify_hostname
 
-from microproxy.utils import get_logger
+from microproxy.log import ProxyLogger
 
-logger = get_logger(__name__)
+logger = ProxyLogger.get_logger(__name__)
 
 
 class MicroProxyIOStream(IOStream):

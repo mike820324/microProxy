@@ -3,9 +3,10 @@ from tornado import gen
 from microproxy.tornado_ext.tcpserver import TCPServer
 from microproxy.layer import manager as layer_manager
 from microproxy.context import LayerContext
-from microproxy.utils import curr_loop, get_logger
+from microproxy.utils import curr_loop
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger("ProxyServer")
 
 
 class ProxyServer(TCPServer):

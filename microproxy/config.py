@@ -1,8 +1,7 @@
 import ConfigParser
 import argparse
 
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
 
 
 _OPTION_TYPES = ["str", "bool", "int", "list:str", "list:int"]
@@ -122,7 +121,8 @@ def verify_config(config_field_info, config):
 
     unknown_fields = [field for field in config if field not in fieldInfos]
     if unknown_fields:
-        logger.warning("Unknown field names: {0}".format(",".join(unknown_fields)))
+        ProxyLogger.get_logger(__name__).warning(
+            "Unknown field names: {0}".format(",".join(unknown_fields)))
 
 
 def parse_config(config_field_info, args=None):  # pragma: no cover
