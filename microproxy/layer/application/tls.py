@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class TlsLayer(ApplicationLayer):
     def __init__(self, server_state, context):
         super(TlsLayer, self).__init__(server_state, context)
-
+        self.cert_store = self.server_state.cert_store
         self.src_conn = ServerConnection(self.src_stream)
         self.dest_conn = ClientConnection(self.dest_stream)
 
@@ -121,13 +121,10 @@ class TlsLayer(ApplicationLayer):
                 dest_stream.close()
             raise
 
-        self.update_layer_context(
-            src_stream, dest_stream, hostname, select_alpn)
-
         try:
             ctx = LayerContext(
                 mode=self.context.mode,
-                src_Stream=src_stream,
+                src_stream=src_stream,
                 dest_stream=dest_stream,
                 scheme=self.alpn_to_scheme(select_alpn),
                 host=hostname or self.context.host,
