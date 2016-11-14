@@ -3,12 +3,12 @@ from __future__ import absolute_import
 from tornado import gen
 from tornado import iostream
 
-from microproxy.utils import get_logger
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
 from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
 from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 def get_first_layer(context):

@@ -2,9 +2,9 @@ from tornado import concurrent, gen
 
 from microproxy.layer.base import ApplicationLayer
 from microproxy.protocol.http2 import Connection
-from microproxy.utils import get_logger
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class Http2Layer(ApplicationLayer):

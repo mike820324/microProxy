@@ -8,8 +8,8 @@ from tornado import gen
 
 from microproxy.context import HttpRequest, HttpResponse
 from microproxy.exception import ProtocolError
-from microproxy.utils import get_logger
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class Connection(H11Connection):

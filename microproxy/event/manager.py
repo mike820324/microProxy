@@ -1,11 +1,11 @@
 import json
 
 from microproxy.context import Event
-from microproxy.utils import get_logger
+from microproxy.log import ProxyLogger
 from replay import ReplayHandler
 from types import REPLAY
 
-logger = get_logger(__name__)
+logger = ProxyLogger.get_logger(__name__)
 
 
 class EventManager(object):

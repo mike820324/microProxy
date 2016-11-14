@@ -8,12 +8,12 @@ from tornado import gen
 
 from microproxy.layer.base import ApplicationLayer
 from microproxy.context import LayerContext, TlsInfo
-from microproxy.utils import get_logger
 from microproxy.protocol.tls import TlsClientHello, ServerConnection, ClientConnection
 from microproxy.exception import (
     DestStreamClosedError, TlsError, ProtocolError)
 
-logger = get_logger(__name__)
+from microproxy.log import ProxyLogger
+logger = ProxyLogger.get_logger(__name__)
 
 
 class TlsLayer(ApplicationLayer):

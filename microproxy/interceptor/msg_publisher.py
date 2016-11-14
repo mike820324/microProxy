@@ -1,9 +1,5 @@
 import json
 
-from microproxy.utils import get_logger
-
-logger = get_logger(__name__)
-
 
 class MsgPublisher(object):
     TOPIC = "message"
