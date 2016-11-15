@@ -6,7 +6,7 @@ from microproxy.context import LayerContext
 from microproxy.utils import curr_loop
 
 from microproxy.log import ProxyLogger
-logger = ProxyLogger.get_logger("ProxyServer")
+logger = ProxyLogger.get_logger(__name__)
 
 
 class ProxyServer(TCPServer):
