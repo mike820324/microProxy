@@ -26,7 +26,7 @@ def create_proxy_options():
                   option_type="str",
                   cmd_flags="--mode",
                   config_file_flags="proxy:mode",
-                  choices=["socks", "transparent"])
+                  choices=["socks", "transparent", "http"])
 
     define_option(option_info=proxy_option_info,
                   option_name="http_port",
