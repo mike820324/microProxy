@@ -4,8 +4,10 @@ from tornado import gen
 from tornado import iostream
 
 from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
-from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
-from microproxy.layer import ForwardLayer, TlsLayer, Http1Layer, Http2Layer
+from microproxy.layer import (
+    SocksLayer, TransparentLayer, ReplayLayer, HttpProxyLayer,
+    ForwardLayer, TlsLayer, Http1Layer, Http2Layer
+)
 
 from microproxy.log import ProxyLogger
 logger = ProxyLogger.get_logger(__name__)
@@ -19,6 +21,8 @@ def get_first_layer(context):
         return TransparentLayer(context)
     elif mode == "replay":
         return ReplayLayer(context)
+    elif mode == "http":
+        return HttpProxyLayer(context)
     else:
         raise ValueError("Unsupport proxy mode: {0}".format(mode))
 
@@ -73,6 +77,9 @@ def _next_layer(server_state, current_layer, context):
     http_ports = [80] + config["http_port"]
     https_ports = [443] + config["https_port"]
 
+    if isinstance(current_layer, HttpProxyLayer):
+        return Http1Layer(server_state, context)
+
     if isinstance(current_layer, (SocksLayer, TransparentLayer)):
         if context.port in http_ports:
             context.scheme = "http"
@@ -101,3 +108,7 @@ def _next_layer(server_state, current_layer, context):
     if isinstance(current_layer, Http1Layer):
         if context.scheme == "websocket":
             return ForwardLayer(server_state, context)
+        elif context.scheme == "https" and not context.done:
+            return TlsLayer(server_state, context)
+        elif context.scheme == "http" and not context.done:
+            return Http1Layer(server_state, context)

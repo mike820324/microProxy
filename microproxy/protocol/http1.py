@@ -61,6 +61,14 @@ class Connection(H11Connection):
                         headers=event.headers))
                 elif isinstance(event, Response):
                     self._resp = event
+                    if self.our_state is h11.SWITCHED_PROTOCOL:
+                        self.on_response(HttpResponse(
+                            version=self._parse_version(self._resp),
+                            reason=self._resp.reason,
+                            code=str(self._resp.status_code),
+                            headers=self._resp.headers,
+                            body=b"".join(self._body_chunks)))
+                        self._cleanup_after_received()
                 elif isinstance(event, Data):
                     self._body_chunks.append(bytes(event.data))
                 elif isinstance(event, EndOfMessage):
@@ -139,7 +147,10 @@ class Connection(H11Connection):
         ))
         if response.body:
             self.send(h11.Data(data=response.body))
-        self.send(h11.EndOfMessage())
+
+        if not self.our_state == h11.SWITCHED_PROTOCOL:
+            self.send(h11.EndOfMessage())
+
         if self.our_state is h11.MUST_CLOSE:
             self.io_stream.close()
 
