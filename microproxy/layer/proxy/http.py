@@ -3,7 +3,7 @@ from tornado import gen
 from microproxy.layer.base import ProxyLayer
 
 
-class HttpProxyLayer(ProxyLayer):
+class HttpProxyLayer(ProxyLayer):  # pragma: no cover
     def __init__(self, context, dest_addr_resolver=None, **kwargs):
         super(HttpProxyLayer, self).__init__(context, **kwargs)
 
