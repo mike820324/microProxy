@@ -27,7 +27,7 @@ def parse_proxy_path(path):
     }
     matcher = re.search(r"^((https?):\/\/)?([a-zA-Z0-9\.\-]+)(:(\d+))?(/.+)?", path)
     groups = matcher.groups() if matcher else []
-    if not groups:
+    if not groups:  # pragma: no cover
         raise ValueError("illegal proxy path {0}".format(path))
     else:
         scheme = groups[1] or ""
@@ -35,7 +35,7 @@ def parse_proxy_path(path):
         port = int(groups[4]) if groups[4] else 0
 
         if not scheme and not port:
-            raise ValueError
+            raise ValueError("illegal proxy path {0}: not contains scheme or port".format(path))
         elif not scheme:
             scheme = default_schemes[port]
         elif not port:

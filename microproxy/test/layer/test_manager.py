@@ -4,10 +4,14 @@ from mock import Mock
 
 from tornado import gen, iostream
 from microproxy.context import LayerContext, ServerContext
+from microproxy.exception import (
+    DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
+)
 from microproxy.layer import manager as layer_manager
-from microproxy.layer import SocksLayer, TransparentLayer, ReplayLayer
-from microproxy.layer import TlsLayer, Http1Layer, Http2Layer, ForwardLayer
-from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
+from microproxy.layer import (
+    SocksLayer, TransparentLayer, ReplayLayer, HttpProxyLayer,
+    TlsLayer, Http1Layer, Http2Layer, ForwardLayer
+)
 
 
 class TestLayerManager(unittest.TestCase):
@@ -151,3 +155,32 @@ class TestLayerManager(unittest.TestCase):
             with self.assertRaises(ValueError):
                 layer_manager._handle_layer_error(e, context)
         context.src_stream.close.assert_not_called()
+
+    def test_get_http_proxy_layer(self):
+        context = LayerContext(mode="http", port=80)
+        layer = layer_manager.get_first_layer(context)
+        self.assertIsInstance(layer, HttpProxyLayer)
+
+    def test_get_http_layer_from_http_proxy_layer(self):
+        context = LayerContext(mode="http", port=80)
+
+        http_proxy_layer = HttpProxyLayer(context)
+        layer = layer_manager._next_layer(
+            self.server_state, http_proxy_layer, context)
+        self.assertIsInstance(layer, Http1Layer)
+
+    def test_get_tls_layer_from_http_layer(self):
+        context = LayerContext(mode="http", scheme="https", port=80)
+
+        http_layer = Http1Layer(self.server_state, context)
+        layer = layer_manager._next_layer(
+            self.server_state, http_layer, context)
+        self.assertIsInstance(layer, TlsLayer)
+
+    def test_get_http_layer_from_http_layer(self):
+        context = LayerContext(mode="http", scheme="http", port=80)
+
+        http_layer = Http1Layer(self.server_state, context)
+        layer = layer_manager._next_layer(
+            self.server_state, http_layer, context)
+        self.assertIsInstance(layer, Http1Layer)

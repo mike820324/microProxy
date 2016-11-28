@@ -48,6 +48,10 @@ class TestHtt1(TestCase):
             parse_proxy_path("example.com:443"),
             ("https", "example.com", 443))
 
+    def test_parse_proxy_path_no_scheme_and_port(self):
+        with self.assertRaises(ValueError):
+            parse_proxy_path("example.com")
+
 
 class TestHttp1Layer(ProxyAsyncTestCase):
     def setUp(self):
@@ -406,7 +410,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
             yield sleep(0.1)
 
     @gen_test
-    def test_basic_proxy(self):
+    def test_proxy(self):
         http_layer_future = self.http_layer.process_and_return_context()
         path = "http://127.0.0.1:{0}".format(self.port)
         self.client_conn.send_request(HttpRequest(
@@ -448,7 +452,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
         yield http_layer_future
 
     @gen_test
-    def test_basic_proxy_reuse_connection(self):
+    def test_proxy_reuse_connection(self):
         http_layer_future = self.http_layer.process_and_return_context()
         path = "http://127.0.0.1:{0}".format(self.port)
         self.client_conn.send_request(HttpRequest(
@@ -492,6 +496,68 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
         self.assertEqual(len(self.src_events), 1)
         response, = self.src_events.pop()
         self.assertIsInstance(response, HttpResponse)
+
+        self.client_stream.close()
+        self.server_stream.close()
+        self.http_layer.src_stream.close()
+        self.http_layer.dest_stream.close()
+        yield http_layer_future
+
+    @gen_test
+    def test_proxy_new_connection(self):
+        prev_dest_stream = mock.Mock(**{
+            "closed.return_value": False
+        })
+        self.http_layer.dest_stream = prev_dest_stream
+        self.http_layer.context.host = "example.com"
+        self.http_layer.context.port = 8080
+
+        http_layer_future = self.http_layer.process_and_return_context()
+
+        path = "http://127.0.0.1:{0}".format(self.port)
+        self.client_conn.send_request(HttpRequest(
+            version="HTTP/1.1", method="GET", path=path,
+            headers=[("Host", "localhost")]))
+
+        yield self.wait_for_server_connect()
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
+        self.assertEqual(len(self.dest_events), 1)
+        request, = self.dest_events.pop()
+        self.assertIsInstance(request, HttpRequest)
+
+        self.server_conn.send_response(HttpResponse(
+            version="HTTP/1.1", code="200", reason="OK",
+            headers=[("Content-Type", "plain/text")], body="body"))
+
+        yield self.read_until_new_event(self.client_conn, self.src_events)
+        self.assertEqual(len(self.src_events), 1)
+        response, = self.src_events.pop()
+        self.assertIsInstance(response, HttpResponse)
+
+        self.assertTrue(http_layer_future.running())
+
+        self.client_conn.start_next_cycle()
+        self.server_conn.start_next_cycle()
+
+        self.client_conn.send_request(HttpRequest(
+            version="HTTP/1.1", method="GET", path=path,
+            headers=[("Host", "localhost")]))
+
+        yield self.read_until_new_event(self.server_conn, self.dest_events)
+        self.assertEqual(len(self.dest_events), 1)
+        request, = self.dest_events.pop()
+        self.assertIsInstance(request, HttpRequest)
+
+        self.server_conn.send_response(HttpResponse(
+            version="HTTP/1.1", code="200", reason="OK",
+            headers=[("Content-Type", "plain/text")], body="body"))
+
+        yield self.read_until_new_event(self.client_conn, self.src_events)
+        self.assertEqual(len(self.src_events), 1)
+        response, = self.src_events.pop()
+        self.assertIsInstance(response, HttpResponse)
+
+        prev_dest_stream.close.assert_called_with()
 
         self.client_stream.close()
         self.server_stream.close()
