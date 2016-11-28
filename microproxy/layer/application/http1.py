@@ -166,14 +166,14 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
         self.interceptor.publish(
             layer_context=self.context,
             request=self.req, response=self.resp)
-        if self.context.mode == "replay":
+        if (self.context.mode == "replay" or
+                self.src_conn.closed() or
+                self.dest_conn.closed()):
             self.src_stream.close()
             self.dest_stream.close()
+            self.context.done = True
         elif switch_protocol:
             self.switch_protocol = True
-        elif self.src_conn.closed() or self.dest_conn.closed():
-            self.src_stream.close()
-            self.dest_stream.close()
         else:
             self.src_conn.start_next_cycle()
             self.dest_conn.start_next_cycle()
