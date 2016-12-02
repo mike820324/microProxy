@@ -21,26 +21,32 @@ def parse_proxy_path(path):
         "http": 80,
         "https": 443,
     }
-    default_schemes = {
-        80: "http",
-        443: "https"
-    }
-    matcher = re.search(r"^((https?):\/\/)?([a-zA-Z0-9\.\-]+)(:(\d+))?(/.+)?", path)
+    matcher = re.search(r"^(https?):\/\/([a-zA-Z0-9\.\-]+)(:(\d+))?(/.*)", path)
     groups = matcher.groups() if matcher else []
     if not groups:  # pragma: no cover
         raise ValueError("illegal proxy path {0}".format(path))
     else:
-        scheme = groups[1] or ""
-        host = groups[2]
-        port = int(groups[4]) if groups[4] else 0
+        scheme = groups[0]
+        host = groups[1]
+        port = int(groups[3]) if groups[3] else default_ports[scheme]
+        path = groups[4]
 
-        if not scheme and not port:
-            raise ValueError("illegal proxy path {0}: not contains scheme or port".format(path))
-        elif not scheme:
-            scheme = default_schemes[port]
-        elif not port:
-            port = default_ports[scheme]
+        return (scheme, host, port, path)
 
+
+def parse_tunnel_proxy_path(path):
+    default_schemes = {
+        80: "http",
+        443: "https"
+    }
+    matcher = re.search(r"([a-zA-Z0-9\.\-]+)(:(\d+))", path)
+    groups = matcher.groups() if matcher else []
+    if not groups:  # pragma: no cover
+        raise ValueError("illegal proxy path {0}".format(path))
+    else:
+        host = groups[0]
+        port = int(groups[2])
+        scheme = default_schemes.get(port, "http")
         return (scheme, host, port)
 
 
@@ -182,7 +188,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
     def handle_http_proxy(self):
         if self.is_tunnel_http_proxy():
             logger.debug("proxy tunnel to {0}".format(self.req.path))
-            scheme, host, port = parse_proxy_path(self.req.path)
+            scheme, host, port = parse_tunnel_proxy_path(self.req.path)
             yield self.connect_to_dest(scheme, (host, port))
             self.src_conn.send_response(HttpResponse(
                 code="200",
@@ -190,7 +196,8 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
             raise SwitchToTunnelHttpProxy
         elif self.is_normal_http_proxy():
             logger.debug("proxy to {0}".format(self.req.path))
-            scheme, host, port = parse_proxy_path(self.req.path)
+            scheme, host, port, path = parse_proxy_path(self.req.path)
+            self.req.path = path
             yield self.connect_to_dest(scheme, (host, port))
             self.dest_conn.io_stream = self.dest_stream
         else:
