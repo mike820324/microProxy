@@ -11,7 +11,8 @@ from microproxy.context import (
 )
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
 from microproxy.layer import Http1Layer
-from microproxy.layer.application.http1 import parse_proxy_path
+from microproxy.layer.application.http1 import (
+    parse_proxy_path, parse_tunnel_proxy_path)
 from microproxy.protocol.http1 import Connection
 from microproxy.tornado_ext.iostream import MicroProxyIOStream
 from microproxy.test.utils import ProxyAsyncTestCase
@@ -20,37 +21,50 @@ from microproxy.test.utils import ProxyAsyncTestCase
 class TestHtt1(TestCase):
     def test_parse_proxy_path_http_80(self):
         self.assertEqual(
-            parse_proxy_path("http://example.com"),
-            ("http", "example.com", 80))
+            parse_proxy_path("http://example.com/"),
+            ("http", "example.com", 80, "/"))
 
     def test_parse_proxy_path_http_8080(self):
         self.assertEqual(
-            parse_proxy_path("http://example.com:8080"),
-            ("http", "example.com", 8080))
+            parse_proxy_path("http://example.com:8080/"),
+            ("http", "example.com", 8080, "/"))
 
     def test_parse_proxy_path_https_443(self):
         self.assertEqual(
-            parse_proxy_path("https://example.com"),
-            ("https", "example.com", 443))
+            parse_proxy_path("https://example.com/"),
+            ("https", "example.com", 443, "/"))
 
     def test_parse_proxy_path_https_8443(self):
         self.assertEqual(
-            parse_proxy_path("https://example.com:8443"),
-            ("https", "example.com", 8443))
+            parse_proxy_path("https://example.com:8443/"),
+            ("https", "example.com", 8443, "/"))
 
-    def test_parse_proxy_path_http_80_without_scheme(self):
+    def test_parse_proxy_path_http_80_index(self):
         self.assertEqual(
-            parse_proxy_path("example.com:80"),
+            parse_proxy_path("http://example.com/index"),
+            ("http", "example.com", 80, "/index"))
+
+    def test_parse_proxy_path_without_scheme(self):
+        with self.assertRaises(ValueError):
+            parse_proxy_path("example.com/")
+
+    def test_parse_proxy_path_without_path(self):
+        with self.assertRaises(ValueError):
+            parse_proxy_path("http://example.com")
+
+    def test_parse_tunnel_proxy_path_http_80(self):
+        self.assertEqual(
+            parse_tunnel_proxy_path("example.com:80"),
             ("http", "example.com", 80))
 
-    def test_parse_proxy_path_https_443_without_scheme(self):
+    def test_parse_tunnel_proxy_path_https_443(self):
         self.assertEqual(
-            parse_proxy_path("example.com:443"),
+            parse_tunnel_proxy_path("example.com:443"),
             ("https", "example.com", 443))
 
-    def test_parse_proxy_path_no_scheme_and_port(self):
+    def test_parse_tunnel_proxy_path_without_port(self):
         with self.assertRaises(ValueError):
-            parse_proxy_path("example.com")
+            parse_tunnel_proxy_path("example.com")
 
 
 class TestHttp1Layer(ProxyAsyncTestCase):
@@ -412,7 +426,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
     @gen_test
     def test_proxy(self):
         http_layer_future = self.http_layer.process_and_return_context()
-        path = "http://127.0.0.1:{0}".format(self.port)
+        path = "http://127.0.0.1:{0}/".format(self.port)
         self.client_conn.send_request(HttpRequest(
             version="HTTP/1.1", method="GET", path=path,
             headers=[("Host", "localhost")]))
@@ -424,7 +438,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
         self.assertIsInstance(request, HttpRequest)
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.version, "HTTP/1.1")
-        self.assertEqual(request.path, path)
+        self.assertEqual(request.path, "/")
         self.assertEqual(request.headers, HttpHeaders([("host", "localhost")]))
 
         self.server_conn.send_response(HttpResponse(
@@ -454,7 +468,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
     @gen_test
     def test_proxy_reuse_connection(self):
         http_layer_future = self.http_layer.process_and_return_context()
-        path = "http://127.0.0.1:{0}".format(self.port)
+        path = "http://127.0.0.1:{0}/".format(self.port)
         self.client_conn.send_request(HttpRequest(
             version="HTTP/1.1", method="GET", path=path,
             headers=[("Host", "localhost")]))
@@ -514,7 +528,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
 
         http_layer_future = self.http_layer.process_and_return_context()
 
-        path = "http://127.0.0.1:{0}".format(self.port)
+        path = "http://127.0.0.1:{0}/".format(self.port)
         self.client_conn.send_request(HttpRequest(
             version="HTTP/1.1", method="GET", path=path,
             headers=[("Host", "localhost")]))
@@ -568,7 +582,7 @@ class TestHttp1LayerProxying(ProxyAsyncTestCase):
     @gen_test
     def test_tunnel_on_http(self):
         http_layer_future = self.http_layer.process_and_return_context()
-        path = "http://127.0.0.1:{0}".format(self.port)
+        path = "127.0.0.1:{0}".format(self.port)
         self.client_conn.send_request(HttpRequest(
             version="HTTP/1.1", method="CONNECT", path=path,
             headers=[
