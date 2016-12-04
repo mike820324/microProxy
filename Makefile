@@ -16,4 +16,4 @@ install-all:
 	pip install -U .[develop]
 
 run-server:
-	mpserver --config-file conf/application.cfg
+	mpserver --config-file conf/application.cfg --log-config-file conf/logging.cfg
