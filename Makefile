@@ -14,3 +14,6 @@ install-all:
 	pip install -U --process-dependency-links .
 	pip install -U .[viewer]
 	pip install -U .[develop]
+
+run-server:
+	mpserver --config-file conf/application.cfg
