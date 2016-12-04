@@ -1,17 +1,56 @@
+import h11
+import re
 from tornado import gen
 from tornado.iostream import StreamClosedError
-import h11
 
-from microproxy.layer.base import ApplicationLayer
-from microproxy.protocol.http1 import Connection
+from microproxy.context import HttpResponse
 from microproxy.exception import SrcStreamClosedError, DestStreamClosedError
+from microproxy.layer.base import ApplicationLayer, DestStreamCreatorMixin
+from microproxy.log import ProxyLogger
+from microproxy.protocol.http1 import Connection
+
+logger = ProxyLogger.get_logger(__name__)
 
 
 def _wrap_req_path(context, req):
     return "http://{0}:{1}{2}".format(context.host, context.port, req.path)
 
 
-class Http1Layer(ApplicationLayer):
+def parse_proxy_path(path):
+    default_ports = {
+        "http": 80,
+        "https": 443,
+    }
+    matcher = re.search(r"^(https?):\/\/([a-zA-Z0-9\.\-]+)(:(\d+))?(/.*)", path)
+    groups = matcher.groups() if matcher else []
+    if not groups:  # pragma: no cover
+        raise ValueError("illegal proxy path {0}".format(path))
+    else:
+        scheme = groups[0]
+        host = groups[1]
+        port = int(groups[3]) if groups[3] else default_ports[scheme]
+        path = groups[4]
+
+        return (scheme, host, port, path)
+
+
+def parse_tunnel_proxy_path(path):
+    default_schemes = {
+        80: "http",
+        443: "https"
+    }
+    matcher = re.search(r"([a-zA-Z0-9\.\-]+)(:(\d+))", path)
+    groups = matcher.groups() if matcher else []
+    if not groups:  # pragma: no cover
+        raise ValueError("illegal proxy path {0}".format(path))
+    else:
+        host = groups[0]
+        port = int(groups[2])
+        scheme = default_schemes.get(port, "http")
+        return (scheme, host, port)
+
+
+class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
     def __init__(self, server_state, context):
         super(Http1Layer, self).__init__(server_state, context)
         self.src_conn = Connection(
@@ -36,23 +75,30 @@ class Http1Layer(ApplicationLayer):
             self.req = None
             self.resp = None
             try:
-                yield self.run_request()
-                yield self.run_response()
+                yield self.read_request()
+                yield self.handle_http_proxy()
+                self.send_request()
+                yield self.read_response()
+                self.send_response()
             except SrcStreamClosedError:
                 self.dest_stream.close()
+                self.context.done = True
                 if self.req:
                     raise
             except DestStreamClosedError:
                 self.src_stream.close()
                 raise
+            except SwitchToTunnelHttpProxy:
+                break
 
         if self.switch_protocol:
             self.context.scheme = self.req.headers["Upgrade"]
         raise gen.Return(self.context)
 
     @gen.coroutine
-    def run_request(self):
+    def read_request(self):
         # NOTE: run first request to handle protocol change
+        logger.debug("wait for request")
         while not self.req:
             try:
                 data = yield self.src_stream.read_bytes(
@@ -61,9 +107,11 @@ class Http1Layer(ApplicationLayer):
                 raise SrcStreamClosedError(self, detail="read request failed")
             else:
                 self.src_conn.receive(data, raise_exception=True)
+        logger.debug("received request: {0}".format(self.req))
 
     @gen.coroutine
-    def run_response(self):
+    def read_response(self):
+        logger.debug("wait for response")
         while not self.resp:
             try:
                 data = yield self.dest_stream.read_bytes(
@@ -75,12 +123,15 @@ class Http1Layer(ApplicationLayer):
                 break
             else:
                 self.dest_conn.receive(data, raise_exception=True)
+        logger.debug("received response: {0}".format(self.resp))
 
     def on_request(self, request):
         plugin_result = self.interceptor.request(
             layer_context=self.context, request=request)
 
         self.req = plugin_result.request if plugin_result else request
+
+    def send_request(self):
         try:
             self.dest_conn.send_request(self.req)
         except StreamClosedError:
@@ -93,44 +144,88 @@ class Http1Layer(ApplicationLayer):
             request=self.req, response=response)
 
         self.resp = plugin_result.response if plugin_result else response
+
+    def send_response(self):
         try:
-            self.src_conn.send_response(self.resp)
+            if int(self.resp.code) in range(200, 600):
+                self.src_conn.send_response(self.resp)
+                self.finish()
+            else:
+                self.src_conn.send_info_response(self.resp)
+                self.finish(switch_protocol=True)
         except StreamClosedError:
             raise SrcStreamClosedError(self, detail="send response failed {0}".format(
                 _wrap_req_path(self.context, self.req)))
-
-        self.finish()
 
     def on_info_response(self, response):
         plugin_result = self.interceptor.response(
             layer_context=self.context,
             request=self.req, response=response)
         self.resp = plugin_result.response if plugin_result else response
-        try:
-            self.src_conn.send_info_response(self.resp)
-        except StreamClosedError:
-            raise SrcStreamClosedError(self, detail="send response failed {0}".format(
-                _wrap_req_path(self.context, self.req)))
-
-        self.finish(switch_protocol=True)
 
     def finished(self):
         return (self.switch_protocol or
                 self.src_stream.closed() or
-                self.dest_stream.closed())
+                (self.dest_stream and self.dest_stream.closed()))
 
     def finish(self, switch_protocol=False):
         self.interceptor.publish(
             layer_context=self.context,
             request=self.req, response=self.resp)
-        if self.context.mode == "replay":
+        if (self.context.mode == "replay" or
+                self.src_conn.closed() or
+                self.dest_conn.closed()):
             self.src_stream.close()
             self.dest_stream.close()
+            self.context.done = True
         elif switch_protocol:
             self.switch_protocol = True
-        elif self.src_conn.closed() or self.dest_conn.closed():
-            self.src_stream.close()
-            self.dest_stream.close()
         else:
             self.src_conn.start_next_cycle()
             self.dest_conn.start_next_cycle()
+
+    @gen.coroutine
+    def handle_http_proxy(self):
+        if self.is_tunnel_http_proxy():
+            logger.debug("proxy tunnel to {0}".format(self.req.path))
+            scheme, host, port = parse_tunnel_proxy_path(self.req.path)
+            yield self.connect_to_dest(scheme, (host, port))
+            self.src_conn.send_response(HttpResponse(
+                code="200",
+                reason="OK", version="HTTP/1.1"))
+            raise SwitchToTunnelHttpProxy
+        elif self.is_normal_http_proxy():
+            logger.debug("proxy to {0}".format(self.req.path))
+            scheme, host, port, path = parse_proxy_path(self.req.path)
+            self.req.path = path
+            yield self.connect_to_dest(scheme, (host, port))
+            self.dest_conn.io_stream = self.dest_stream
+        else:
+            raise gen.Return(None)
+
+    def is_tunnel_http_proxy(self):
+        return self.req.method == "CONNECT"
+
+    def is_normal_http_proxy(self):
+        return (self.req.path.startswith("http://") or
+                self.req.path.startswith("https://"))
+
+    @gen.coroutine
+    def connect_to_dest(self, scheme, addr):
+        if addr != (self.context.host, self.context.port):
+            logger.debug("proxy to new connection {0}".format(addr))
+            if self.dest_stream:
+                self.dest_stream.close()
+
+            dest_stream = yield self.create_dest_stream(addr)
+            self.context.dest_stream = dest_stream
+            self.context.scheme = scheme
+            self.context.host = addr[0]
+            self.context.port = addr[1]
+            logger.debug("proxy to new connection success".format(addr))
+        else:
+            logger.debug("proxy to same connection")
+
+
+class SwitchToTunnelHttpProxy(Exception):
+    pass
