@@ -29,19 +29,20 @@ class ApplicationLayer(Layer):
     def src_stream(self):
         return self.context.src_stream
 
+    @src_stream.setter
+    def src_stream(self, value):
+        self.context.src_stream = value
+
     @property
     def dest_stream(self):
         return self.context.dest_stream
 
+    @dest_stream.setter
+    def dest_stream(self, value):
+        self.context.dest_stream = value
 
-class ProxyLayer(Layer):
-    def __init__(self, context, **kwargs):
-        super(ProxyLayer, self).__init__()
-        self.context = copy(context)
 
-        for k, v in kwargs.iteritems():
-            self.__setattr__(k, v)
-
+class DestStreamCreatorMixin:
     @gen.coroutine
     def create_dest_stream(self, dest_addr_info):
         dest_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -49,3 +50,12 @@ class ProxyLayer(Layer):
         yield gen.with_timeout(
             timedelta(seconds=5), dest_stream.connect(dest_addr_info))
         raise gen.Return(dest_stream)
+
+
+class ProxyLayer(Layer, DestStreamCreatorMixin):
+    def __init__(self, context, **kwargs):
+        super(ProxyLayer, self).__init__()
+        self.context = copy(context)
+
+        for k, v in kwargs.iteritems():
+            self.__setattr__(k, v)
