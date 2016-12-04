@@ -51,6 +51,5 @@ class ProxyLogger(object):
 
     @classmethod
     def get_logger(cls, name):  # pragma: no cover
-        shortname = ".".join(split_str for split_str in name.split(".") if split_str != "microproxy")
-        logger = logging.getLogger(shortname)
+        logger = logging.getLogger(name)
         return logger
