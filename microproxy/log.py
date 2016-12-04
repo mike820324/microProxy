@@ -11,7 +11,9 @@ class ProxyLogger(object):
         if config["logger_config"]:
             # NOTE: If user specify the logging config file,
             # used it to configure the logger behavior.
-            logging.config.fileConfig(filename=config["logger_config"], encoding="utf8")
+            # Moreover, the disable_existing_loggers is necessary,
+            # since most of our code will get logger before we initialize it.
+            logging.config.fileConfig(config["logger_config"], disable_existing_loggers=False)
         else:
             # NOTE: Otherwise, we start setup the logger based on other configure value.
             logger = logging.getLogger()
