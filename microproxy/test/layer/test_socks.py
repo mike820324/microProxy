@@ -1,6 +1,7 @@
 import errno
 from mock import Mock
 
+from ipaddress import IPv4Address
 from tornado.gen import TimeoutError
 from tornado.testing import gen_test, bind_unused_port
 from tornado.iostream import StreamClosedError
@@ -112,7 +113,7 @@ class TestSocksProxyHandler(ProxyAsyncTestCase):
 
         self.assertIsNotNone(dest_stream)
         self.assertFalse(dest_stream.closed())
-        self.assertEqual(str(host), "127.0.0.1")
+        self.assertEqual(host, IPv4Address(u"127.0.0.1"))
         self.assertEqual(port, self.port)
 
         dest_stream.close()
@@ -180,7 +181,7 @@ class TestSocksProxyHandler(ProxyAsyncTestCase):
         self.assertIsInstance(self.event, Response)
         self.assertEqual(self.event.status, RESP_STATUS["NETWORK_UNREACHABLE"])
         self.assertEqual(self.event.atyp, ADDR_TYPE["IPV4"])
-        self.assertEqual(str(self.event.addr), "1.2.3.4")
+        self.assertEqual(self.event.addr, IPv4Address(u"1.2.3.4"))
         self.assertEqual(self.event.port, self.port)
 
     @gen_test
