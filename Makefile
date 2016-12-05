@@ -11,7 +11,7 @@ install:
 	pip install -U --no-deps .
 
 install-all:
-	pip install -U --process-dependency-links .
+	pip install -U .
 	pip install -U .[viewer]
 	pip install -U .[develop]
 
