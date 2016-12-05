@@ -118,11 +118,11 @@ class TlsClientHello(object):
                     repr(e), raw_client_hello.encode("hex"))
             )
 
-    def raw(self):
+    def raw(self):  # pragma: no cover
         return self._client_hello
 
     @property
-    def cipher_suites(self):
+    def cipher_suites(self):  # pragma: no cover
         return self._client_hello.cipher_suites.cipher_suites
 
     @property

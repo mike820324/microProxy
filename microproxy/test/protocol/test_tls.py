@@ -10,9 +10,24 @@ from microproxy.test.utils import ProxyAsyncTestCase
 from microproxy.cert import CertStore
 from microproxy.tornado_ext.iostream import MicroProxySSLIOStream
 from microproxy.protocol.tls import (
+    TlsClientHello,
     ClientConnection, ServerConnection, create_dest_sslcontext,
     create_src_sslcontext)
 from microproxy.utils import HAS_ALPN
+
+
+class TestTlsClientHello(unittest.TestCase):
+    def setUp(self):
+        with open("./microproxy/test/protocol/client_hello.bin", "rb") as fp:
+            self.raw_client_hello = fp.read()
+
+        self.client_hello = TlsClientHello(self.raw_client_hello[4:])
+
+    def test_sni(self):
+        self.assertEqual(self.client_hello.sni, "www.google.com")
+
+    def test_alpn_protocols(self):
+        self.assertIsNone(self.client_hello.alpn_protocols)
 
 
 class TestServerConnection(ProxyAsyncTestCase):
