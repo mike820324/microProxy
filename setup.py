@@ -61,7 +61,7 @@ setup(
         "pyOpenSSL==16.0.0",
         "service-identity==16.0.0",
         "certifi==2016.8.8",
-        "construct==2.5.3",
+        "construct==2.8.8, < 2.9.0",
         "six==1.10.0",
         "h2==2.4.2",
         "h11==0.7.0",
