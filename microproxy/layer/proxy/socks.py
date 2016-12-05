@@ -2,11 +2,9 @@ import errno
 
 from tornado import gen
 from tornado import iostream
-from socks5 import GreetingRequest, Request
 from socks5 import GreetingResponse, Response
-from socks5 import VERSION as socks_version
-from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND
-from socks5.connection import ServerConnection
+from socks5 import RESP_STATUS, AUTH_TYPE, REQ_COMMAND, ADDR_TYPE
+from socks5 import Connection
 
 from microproxy.layer.base import ProxyLayer
 from microproxy.exception import SrcStreamClosedError, DestNotConnectedError, ProtocolError
@@ -18,7 +16,7 @@ logger = ProxyLogger.get_logger(__name__)
 class SocksLayer(ProxyLayer):
     def __init__(self, context):
         super(SocksLayer, self).__init__(context)
-        self.socks_conn = ServerConnection()
+        self.socks_conn = Connection(our_role="server")
 
     @gen.coroutine
     def process_and_return_context(self):
@@ -30,10 +28,10 @@ class SocksLayer(ProxyLayer):
                 raise SrcStreamClosedError(
                     self, detail="client closed while socks handshaking")
 
-            _event = self.socks_conn.receive(data)
-            if isinstance(_event, GreetingRequest):
+            _event = self.socks_conn.recv(data)
+            if _event == "GreetingRequest":
                 yield self.handle_greeting_request(_event)
-            elif isinstance(_event, Request):
+            elif _event == "Request":
                 dest_stream, host, port = yield self.handle_request_and_create_destination(_event)
                 self.context.dest_stream = dest_stream
                 self.context.host = host
@@ -47,11 +45,11 @@ class SocksLayer(ProxyLayer):
     @gen.coroutine
     def handle_greeting_request(self, event):
         if not AUTH_TYPE["NO_AUTH"] in event.methods:
-            yield self.send_event_to_src_conn(GreetingResponse(
-                socks_version, AUTH_TYPE["NO_SUPPORT_AUTH_METHOD"]))
+            yield self.send_event_to_src_conn(
+                GreetingResponse(AUTH_TYPE["NO_SUPPORT_AUTH_METHOD"]))
         else:
-            yield self.send_event_to_src_conn(GreetingResponse(
-                socks_version, AUTH_TYPE["NO_AUTH"]))
+            yield self.send_event_to_src_conn(
+                GreetingResponse(AUTH_TYPE["NO_AUTH"]))
 
     @gen.coroutine
     def handle_request_and_create_destination(self, event):
@@ -64,19 +62,19 @@ class SocksLayer(ProxyLayer):
         if event.cmd != REQ_COMMAND["CONNECT"]:
             logger.debug("Unsupport connect type")
             yield self.send_event_to_src_conn(Response(
-                socks_version, RESP_STATUS["COMMAND_NOT_SUPPORTED"],
+                RESP_STATUS["COMMAND_NOT_SUPPORTED"],
                 event.atyp, event.addr, event.port), raise_exception=False)
             raise ProtocolError("Unsupport bind type")
 
         try:
-            dest_stream = yield self.create_dest_stream((event.addr, event.port))
+            dest_stream = yield self.create_dest_stream((str(event.addr), event.port))
         except gen.TimeoutError as e:
             yield self.handle_timeout_error(e, event)
         except iostream.StreamClosedError as e:
             yield self.handle_stream_closed_error(e, event)
         else:
             yield self.send_event_to_src_conn(Response(
-                socks_version, RESP_STATUS["SUCCESS"],
+                RESP_STATUS["SUCCESS"],
                 event.atyp, event.addr, event.port))
             raise gen.Return((dest_stream, event.addr, event.port))
 
@@ -99,7 +97,7 @@ class SocksLayer(ProxyLayer):
         logger.debug("connection timout {0}:{1}".format(
             event.addr, event.port))
         yield self.send_event_to_src_conn(Response(
-            socks_version, RESP_STATUS["NETWORK_UNREACHABLE"],
+            RESP_STATUS["NETWORK_UNREACHABLE"],
             event.atyp, event.addr, event.port), raise_exception=False)
         raise DestNotConnectedError((event.addr, event.port))
 
@@ -127,7 +125,7 @@ class SocksLayer(ProxyLayer):
                 reason = "GENRAL_FAILURE"
 
             yield self.send_event_to_src_conn(Response(
-                socks_version, RESP_STATUS[reason],
+                RESP_STATUS[reason],
                 event.atyp, event.addr, event.port), raise_exception=False)
             raise DestNotConnectedError((event.addr, event.port))
         else:  # pragma: no cover
