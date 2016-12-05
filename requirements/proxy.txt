@@ -4,9 +4,8 @@ watchdog==0.8.3
 pyOpenSSL==16.0.0
 service-identity==16.0.0
 certifi==2016.8.8
-construct==2.5.3
+construct==2.8.8
 six==1.10.0
 h2==2.4.2
 h11==0.7.0
-
--e git+https://github.com/mike820324/socks5.git@v0.1.0#egg=socks5
+socks5==0.2.1

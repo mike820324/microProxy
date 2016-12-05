@@ -118,28 +118,28 @@ class TlsClientHello(object):
                     repr(e), raw_client_hello.encode("hex"))
             )
 
-    def raw(self):
+    def raw(self):  # pragma: no cover
         return self._client_hello
 
     @property
-    def cipher_suites(self):
+    def cipher_suites(self):  # pragma: no cover
         return self._client_hello.cipher_suites.cipher_suites
 
     @property
     def sni(self):
         # TODO: hostname validation is required.
-        for extension in self._client_hello.extensions:
+        for extension in self._client_hello.extensions.extensions:
             is_valid_sni_extension = (
                 extension.type == 0x00 and
                 len(extension.server_names) == 1 and
-                extension.server_names[0].type == 0)
+                extension.server_names[0].name_type == 0)
 
             if is_valid_sni_extension:
-                return extension.server_names[0].name.decode("idna")
+                return extension.server_names[0].host_name.decode("idna")
 
     @property
     def alpn_protocols(self):
-        for extension in self._client_hello.extensions:
+        for extension in self._client_hello.extensions.extensions:
             if extension.type == 0x10:
                 return [
                     bytes(protocol)

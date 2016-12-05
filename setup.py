@@ -61,14 +61,11 @@ setup(
         "pyOpenSSL==16.0.0",
         "service-identity==16.0.0",
         "certifi==2016.8.8",
-        "construct==2.5.3",
+        "construct==2.8.8, < 2.9.0",
         "six==1.10.0",
         "h2==2.4.2",
         "h11==0.7.0",
-        "socks5==0.1.0"
-    ],
-    dependency_links=[
-        "https://github.com/mike820324/socks5/archive/v0.1.0.tar.gz#egg=socks5-0.1.0"
+        "socks5==0.2.1"
     ],
     extras_require={
         'viewer': viewer_deps,
