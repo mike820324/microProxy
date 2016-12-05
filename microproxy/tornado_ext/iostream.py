@@ -109,6 +109,7 @@ class MicroProxyIOStream(IOStream):
         _socket = self.socket
         self.io_loop.remove_handler(_socket)
         self.socket = None
+        self._closed = True
         return _socket
 
     def start_tls(self, server_side, ssl_options, server_hostname=None):
