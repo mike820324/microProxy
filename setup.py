@@ -65,10 +65,7 @@ setup(
         "six==1.10.0",
         "h2==2.4.2",
         "h11==0.7.0",
-        "socks5==0.1.0"
-    ],
-    dependency_links=[
-        "https://github.com/mike820324/socks5/archive/v0.1.0.tar.gz#egg=socks5-0.1.0"
+        "socks5==0.2.1"
     ],
     extras_require={
         'viewer': viewer_deps,

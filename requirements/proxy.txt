@@ -8,5 +8,4 @@ construct==2.8.8
 six==1.10.0
 h2==2.4.2
 h11==0.7.0
-
--e git+https://github.com/mike820324/socks5.git@v0.1.0#egg=socks5
+socks5==0.2.1
