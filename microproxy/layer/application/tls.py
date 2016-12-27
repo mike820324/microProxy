@@ -58,7 +58,7 @@ class TlsLayer(ApplicationLayer):
 
         # TODO: tornado_ext.iostream should handle this part.
         except SSL.SysCallError as e:
-            raise DestStreamClosedError(self, detail="Stream closed when tls Handshaking failed")
+            raise DestStreamClosedError(detail="Stream closed when tls Handshaking failed")
 
         except (SSL.Error, VerificationError) as e:
             raise TlsError("Tls Handshaking Failed on destination with: ({0}) {1}".format(
@@ -131,6 +131,7 @@ class TlsLayer(ApplicationLayer):
                 port=self.context.port,
                 client_tls=self._resolve_tls_info(src_stream),
                 server_tls=self._resolve_tls_info(dest_stream),
+                src_info=self.context.src_info
             )
         except:
             src_stream.close()

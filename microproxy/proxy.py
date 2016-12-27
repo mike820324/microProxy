@@ -17,9 +17,10 @@ class ProxyServer(TCPServer):
 
     @gen.coroutine
     def handle_stream(self, stream):
+        src_info = "{0}:{1}".format(*stream.fileno().getpeername())
         try:
             initial_context = LayerContext(
-                mode=self.config["mode"], src_stream=stream)
+                mode=self.config["mode"], src_stream=stream, src_info=src_info)
 
             logger.debug("Start new layer manager")
             initial_layer = layer_manager.get_first_layer(initial_context)
@@ -27,7 +28,8 @@ class ProxyServer(TCPServer):
                 self.server_state, initial_layer, initial_context)
         except Exception as e:
             # NOTE: not handle exception, log it and close the stream
-            logger.exception(e)
+            logger.exception("Unhandled exception occured at {0} with {1}".format(
+                src_info, e))
             stream.close()
 
     def start_listener(self):

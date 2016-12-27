@@ -30,15 +30,23 @@ class Connection(H2Connection):
                  on_unhandled=None, **kwargs):
         super(Connection, self).__init__(client_side=client_side, **kwargs)
         on_unhandled = on_unhandled or self._default_on_unhandled
+
+        def on_unhandled_with_type(type_):
+            def decorate(*args):
+                on_unhandled(type_, *args)
+            return decorate
+
         self.stream = stream
-        self.on_request = on_request or on_unhandled
-        self.on_response = on_response or on_unhandled
-        self.on_push = on_push or on_unhandled
-        self.on_settings = on_settings or on_unhandled
-        self.on_priority_updates = on_priority_updates or on_unhandled
-        self.on_reset = on_reset or on_unhandled
-        self.on_window_updates = on_window_updates or on_unhandled
-        self.on_terminate = on_terminate or on_unhandled
+
+        self.on_request = on_request or on_unhandled_with_type("REQUEST")
+        self.on_response = on_response or on_unhandled_with_type("RESPONSE")
+        self.on_push = on_push or on_unhandled_with_type("PUSH")
+        self.on_settings = on_settings or on_unhandled_with_type("SETTINGS")
+        self.on_priority_updates = on_priority_updates or on_unhandled_with_type("PRIORITY")
+        self.on_reset = on_reset or on_unhandled_with_type("RESET")
+        self.on_window_updates = on_window_updates or on_unhandled_with_type("WINDOWS")
+        self.on_terminate = on_terminate or on_unhandled_with_type("TERMINATE")
+
         self.conn_type = conn_type or self._DEFAULT_TYPES[client_side]
         self.readonly = readonly
         self.ongoings_streams = dict()
@@ -72,8 +80,8 @@ class Connection(H2Connection):
             logger.error("handled event failed on {0}: {1}".format(
                 self.conn_type, e))
         except Exception as e:  # pragma: no cover
-            logger.error("Unhandled exception occured at {0}".format(self.conn_type))
-            logger.exception(e)
+            logger.exception("Unhandled exception occured at {0}".format(
+                self.conn_type))
             self.stream.closed()
 
     def handle_events(self, events):

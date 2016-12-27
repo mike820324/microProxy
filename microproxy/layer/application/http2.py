@@ -58,14 +58,16 @@ class Http2Layer(ApplicationLayer):
         yield self.src_conn.flush()
 
     def on_src_close(self):
-        logger.debug("src stream closed")
+        logger.debug("{0}: src stream closed".format(self))
         self.dest_stream.close()
-        if self._future.running():
-            self._future.set_result(self.context)
+        self.layer_finish()
 
     def on_dest_close(self):
-        logger.debug("dest stream closed")
+        logger.debug("{0}: dest stream closed".format(self))
         self.src_stream.close()
+        self.layer_finish()
+
+    def layer_finish(self):
         if self._future.running():
             self._future.set_result(self.context)
 
