@@ -81,7 +81,8 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
                 yield self.read_response()
                 self.send_response()
             except SrcStreamClosedError:
-                self.dest_stream.close()
+                if self.dest_stream:
+                    self.dest_stream.close()
                 self.context.done = True
                 if self.req:
                     raise
@@ -98,20 +99,20 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
     @gen.coroutine
     def read_request(self):
         # NOTE: run first request to handle protocol change
-        logger.debug("wait for request")
+        logger.debug("{0} wait for request".format(self))
         while not self.req:
             try:
                 data = yield self.src_stream.read_bytes(
                     self.src_stream.max_buffer_size, partial=True)
             except StreamClosedError:
-                raise SrcStreamClosedError(self, detail="read request failed")
+                raise SrcStreamClosedError(detail="read request failed")
             else:
                 self.src_conn.receive(data, raise_exception=True)
-        logger.debug("received request: {0}".format(self.req))
+        logger.debug("{0} received request: {1}".format(self, self.req))
 
     @gen.coroutine
     def read_response(self):
-        logger.debug("wait for response")
+        logger.debug("{0} wait for response".format(self))
         while not self.resp:
             try:
                 data = yield self.dest_stream.read_bytes(
@@ -123,7 +124,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
                 break
             else:
                 self.dest_conn.receive(data, raise_exception=True)
-        logger.debug("received response: {0}".format(self.resp))
+        logger.debug("{0} received response: {1}".format(self, self.resp))
 
     def on_request(self, request):
         plugin_result = self.interceptor.request(
@@ -135,7 +136,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
         try:
             self.dest_conn.send_request(self.req)
         except StreamClosedError:
-            raise DestStreamClosedError(self, detail="send request failed with {0}".format(
+            raise DestStreamClosedError(detail="send request failed with {0}".format(
                 _wrap_req_path(self.context, self.req)))
 
     def on_response(self, response):
@@ -154,7 +155,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
                 self.src_conn.send_info_response(self.resp)
                 self.finish(switch_protocol=True)
         except StreamClosedError:
-            raise SrcStreamClosedError(self, detail="send response failed {0}".format(
+            raise SrcStreamClosedError(detail="send response failed {0}".format(
                 _wrap_req_path(self.context, self.req)))
 
     def on_info_response(self, response):
@@ -187,7 +188,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
     @gen.coroutine
     def handle_http_proxy(self):
         if self.is_tunnel_http_proxy():
-            logger.debug("proxy tunnel to {0}".format(self.req.path))
+            logger.debug("{0} proxy tunnel to {1}".format(self, self.req.path))
             scheme, host, port = parse_tunnel_proxy_path(self.req.path)
             yield self.connect_to_dest(scheme, (host, port))
             self.src_conn.send_response(HttpResponse(
@@ -195,7 +196,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
                 reason="OK", version="HTTP/1.1"))
             raise SwitchToTunnelHttpProxy
         elif self.is_normal_http_proxy():
-            logger.debug("proxy to {0}".format(self.req.path))
+            logger.debug("{0} proxy to {1}".format(self, self.req.path))
             scheme, host, port, path = parse_proxy_path(self.req.path)
             self.req.path = path
             yield self.connect_to_dest(scheme, (host, port))
@@ -213,7 +214,7 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
     @gen.coroutine
     def connect_to_dest(self, scheme, addr):
         if addr != (self.context.host, self.context.port):
-            logger.debug("proxy to new connection {0}".format(addr))
+            logger.debug("{0} proxy to new connection {1}".format(self, addr))
             if self.dest_stream:
                 self.dest_stream.close()
 
@@ -222,9 +223,9 @@ class Http1Layer(ApplicationLayer, DestStreamCreatorMixin):
             self.context.scheme = scheme
             self.context.host = addr[0]
             self.context.port = addr[1]
-            logger.debug("proxy to new connection success".format(addr))
+            logger.debug("{0} proxy to new connection success".format(self))
         else:
-            logger.debug("proxy to same connection")
+            logger.debug("{0} proxy to same connection".format(self))
 
 
 class SwitchToTunnelHttpProxy(Exception):

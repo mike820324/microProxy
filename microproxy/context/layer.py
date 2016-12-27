@@ -11,7 +11,8 @@ class LayerContext(object):
                  port=None,
                  client_tls=None,
                  server_tls=None,
-                 done=False):
+                 done=False,
+                 src_info=None):
         if mode not in ("socks", "transparent", "replay", "http"):
             raise ValueError("incorrect mode value")
 
@@ -24,3 +25,4 @@ class LayerContext(object):
         self.client_tls = client_tls
         self.server_tls = server_tls
         self.done = done
+        self.src_info = src_info

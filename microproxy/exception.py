@@ -3,10 +3,10 @@ class ProtocolError(Exception):
 
 
 class StreamClosedError(Exception):
-    def __init__(self, layer, detail="closed"):
+    def __init__(self, detail="closed"):
         super(StreamClosedError, self).__init__(
-            "{0} on {1}: {2}".format(
-                type(self).__name__, type(layer).__name__, detail))
+            "{0}: {1}".format(
+                type(self).__name__, detail))
 
 
 class SrcStreamClosedError(StreamClosedError):

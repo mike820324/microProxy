@@ -149,12 +149,8 @@ class TestLayerManager(unittest.TestCase):
     def test_handle_unhandled_layer_error(self):
         context = LayerContext(
             mode="socks", src_stream=Mock(), port=443, scheme="h2")
-        try:
-            raise ValueError("stream closed")
-        except ValueError as e:
-            with self.assertRaises(ValueError):
-                layer_manager._handle_layer_error(e, context)
-        context.src_stream.close.assert_not_called()
+        layer_manager._handle_layer_error(ValueError, context)
+        context.src_stream.close.assert_called_once_with()
 
     def test_get_http_proxy_layer(self):
         context = LayerContext(mode="http", port=80)
