@@ -1,5 +1,6 @@
-import ConfigParser
 import argparse
+import ConfigParser
+from os import path
 
 from microproxy.log import ProxyLogger
 
@@ -133,7 +134,7 @@ def parse_config(config_field_info, args=None):  # pragma: no cover
         cmd_config = cmd_parser.parse_args()
 
     ini_parser = ConfigParserBuilder.setup_ini_parser()
-    ini_parser.read([cmd_config.config_file, "application.cfg"])
+    ini_parser.read([cmd_config.config_file] + resolve_default_config_pathes())
 
     config = gen_config(config_field_info, ini_parser, vars(cmd_config))
 
@@ -194,3 +195,11 @@ def type_transform(config, optionInfo):
             raise ValueError("Non supported type")
 
     return new_config
+
+
+def resolve_default_config_pathes():
+    return [
+        "application.cfg",
+        "conf/application.cfg",
+        path.join(path.expanduser("~"), ".microproxy", "application.cfg")
+    ]

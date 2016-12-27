@@ -22,7 +22,7 @@ def create_proxy_options():
 
     define_option(option_info=proxy_option_info,
                   option_name="mode",
-                  help_str="Speficy the proxy mode, currently support socks proxy and transparent proxy",
+                  help_str="Speficy the proxy mode, available options [socks, transparent, http]",
                   option_type="str",
                   cmd_flags="--mode",
                   config_file_flags="proxy:mode",
@@ -239,7 +239,7 @@ def mpserver():  # pragma: no cover
     run_proxy_mode(config)
 
 
-def mpdump(): # pragma: no cover
+def mpdump():  # pragma: no cover
     from microproxy.viewer import console as console_viewer
 
     config_field_info = create_console_viewer_options()
@@ -247,7 +247,7 @@ def mpdump(): # pragma: no cover
     console_viewer.start(config)
 
 
-def mptui(): # pragma: no cover
+def mptui():  # pragma: no cover
     from microproxy.viewer import tui as tui_viewer
 
     config_field_info = create_tui_viewer_options()
