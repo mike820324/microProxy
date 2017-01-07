@@ -3,7 +3,9 @@ from __future__ import absolute_import
 from tornado import gen
 from tornado import iostream
 
-from microproxy.exception import DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError
+from microproxy.exception import (
+    DestStreamClosedError, SrcStreamClosedError, DestNotConnectedError,
+    TlsError)
 from microproxy.layer import (
     SocksLayer, TransparentLayer, ReplayLayer, HttpProxyLayer,
     ForwardLayer, TlsLayer, Http1Layer, Http2Layer
@@ -32,44 +34,40 @@ def run_layers(server_state, initial_layer, initial_layer_context):  # pragma: n
     current_context = initial_layer_context
     current_layer = initial_layer
 
-    try:
-        while current_layer:
+    while current_layer:
+        try:
             logger.debug("Enter {0} Layer".format(current_layer))
             current_context = yield current_layer.process_and_return_context()
             logger.debug("Leave {0} Layer".format(current_layer))
             current_layer = _next_layer(server_state, current_layer, current_context)
-    except Exception as error:
-        _handle_layer_error(error, current_context)
+        except Exception as error:
+            _handle_layer_error(error, current_layer)
+            break
 
     raise gen.Return(None)
 
 
-def _handle_layer_error(error, layer_context):
+def _handle_layer_error(error, layer):
     if isinstance(error, gen.TimeoutError):
-        layer_context.src_stream.close()
-        return
-
-    if isinstance(error, DestNotConnectedError):
-        logger.debug("destination not conected")
-        return
-
-    if isinstance(error, DestStreamClosedError):
-        logger.error(error)
-        layer_context.src_stream.close()
-        return
-
-    if isinstance(error, SrcStreamClosedError):
-        logger.error(error)
-        return
-
-    if isinstance(error, iostream.StreamClosedError):
-        logger.error("stream closed")
+        logger.warn("{0} timeout".format(layer))
+        layer.src_stream.close()
+    elif isinstance(error, DestNotConnectedError):
+        logger.warn("{0} destination not connected".format(layer))
+    elif isinstance(error, DestStreamClosedError):
+        logger.error("{0} failed with {1}".format(layer, error))
+        layer.src_stream.close()
+    elif isinstance(error, SrcStreamClosedError):
+        logger.error("{0} failed with {1}".format(layer, error))
+    elif isinstance(error, iostream.StreamClosedError):
         # NOTE: unhandled StreamClosedError, print stack to find out where
-        logger.exception(error)
-        layer_context.src_stream.close()
-        return
-
-    raise
+        logger.exception("{0} failed with {1}".format(layer, error))
+        layer.src_stream.close()
+    elif isinstance(error, TlsError):
+        logger.error(error)
+        layer.src_stream.close()
+    else:
+        logger.exception("{0} unhandled exception {1}".format(layer, error))
+        layer.src_stream.close()
 
 
 def _next_layer(server_state, current_layer, context):

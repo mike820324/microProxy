@@ -41,6 +41,16 @@ class ApplicationLayer(Layer):
     def dest_stream(self, value):
         self.context.dest_stream = value
 
+    def __repr__(self):
+        return "{0}({1} -> {2}:{3})".format(
+            type(self).__name__, self.context.src_info,
+            self.context.host, self.context.port)
+
+    def __str__(self):
+        return "{0}({1} -> {2}:{3})".format(
+            type(self).__name__, self.context.src_info,
+            self.context.host, self.context.port)
+
 
 class DestStreamCreatorMixin:
     @gen.coroutine
@@ -59,3 +69,11 @@ class ProxyLayer(Layer, DestStreamCreatorMixin):
 
         for k, v in kwargs.iteritems():
             self.__setattr__(k, v)
+
+    def __repr__(self):
+        return "{0}({1})".format(
+            type(self).__name__, self.context.src_info)
+
+    def __str__(self):
+        return "{0}({1}) ".format(
+            type(self).__name__, self.context.src_info)

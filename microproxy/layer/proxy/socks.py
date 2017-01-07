@@ -26,7 +26,7 @@ class SocksLayer(ProxyLayer):
                 data = yield self.context.src_stream.read_bytes(1024, partial=True)
             except iostream.StreamClosedError:
                 raise SrcStreamClosedError(
-                    self, detail="client closed while socks handshaking")
+                    detail="client closed while socks handshaking")
 
             _event = self.socks_conn.recv(data)
             if _event == "GreetingRequest":
@@ -85,7 +85,7 @@ class SocksLayer(ProxyLayer):
             yield self.context.src_stream.write(data)
         except iostream.StreamClosedError as e:  # pragma: no cover
             if raise_exception:
-                raise SrcStreamClosedError(self, detail="failed on {0}".format(type(event).__name__))
+                raise SrcStreamClosedError(detail="failed on {0}".format(type(event).__name__))
             logger.error("stream closed on {0}".format(type(event)))
         except Exception as e:  # pragma: no cover
             if raise_exception:
