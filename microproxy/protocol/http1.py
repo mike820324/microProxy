@@ -18,6 +18,7 @@ class Connection(H11Connection):
                  on_info_response=None, on_unhandled=None, **kwargs):
         super(Connection, self).__init__(our_role, **kwargs)
         on_unhandled = on_unhandled or self._default_on_unhandled
+
         self.io_stream = io_stream
         self.conn_type = conn_type or str(our_role)
         self.readonly = readonly
