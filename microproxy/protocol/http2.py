@@ -73,20 +73,20 @@ class Connection(H2Connection):
 
     def receive(self, data):
         try:
-            logger.debug("data received from {0} with length {1}".format(self.conn_type, len(data)))
+            logger.debug("Direction: {0} -> data received with length {1}".format(self.conn_type, len(data)))
             events = self.receive_data(data)
             self.handle_events(events)
         except Http2Error as e:  # pragma: no cover
-            logger.error("handled event failed on {0}: {1}".format(
+            logger.error("Direction: {0} -> handled event failed: {1}".format(
                 self.conn_type, e))
         except Exception as e:  # pragma: no cover
-            logger.exception("Unhandled exception occured at {0}".format(
+            logger.exception("{0}: Unhandled exception occured.".format(
                 self.conn_type))
             self.stream.closed()
 
     def handle_events(self, events):
         for event in events:
-            logger.debug("event received from {0}: {1}".format(self.conn_type, event))
+            logger.debug("Direction: {0} -> event received: {1}".format(self.conn_type, event))
             if isinstance(event, ResponseReceived):
                 self.handle_response(event)
             elif isinstance(event, RequestReceived):
@@ -113,7 +113,7 @@ class Connection(H2Connection):
                 # Note: nothing need to do with this event
                 pass
             else:  # pragma: no cover
-                logger.warn("not handled event: {0}".format(event))
+                logger.warn("Direction: {0} -> not handled event: {0}".format(self.conn_type, event))
 
     def handle_request(self, event):
         headers_dict = dict(event.headers)
@@ -176,7 +176,7 @@ class Connection(H2Connection):
         self.on_reset(event.stream_id, event.error_code)
 
     def send_request(self, stream_id, request, **kwargs):
-        logger.debug("request sent to {0}: {1}".format(
+        logger.debug("Direction: {0} -> request sent: {1}".format(
             self.conn_type, dict(stream_id=stream_id, request=dict(
                 headers=request.headers))))
         self.send_headers(
@@ -185,7 +185,7 @@ class Connection(H2Connection):
             self.send_data(stream_id, request.body)
 
     def send_response(self, stream_id, response):
-        logger.debug("response sent to {0}: {1}".format(
+        logger.debug("Direction: {0} -> response sent: {1}".format(
             self.conn_type, dict(stream_id=stream_id, response=dict(
                 headers=response.headers))))
         self.send_headers(
@@ -226,20 +226,20 @@ class Connection(H2Connection):
             raise Http2Error(self.conn_type, e, "send data failed", stream_id=stream_id)
 
     def send_update_settings(self, new_settings):
-        logger.debug("settings update sent to {0}: {1}".format(
+        logger.debug("Direction: {0} -> settings update sent: {1}".format(
             self.conn_type, new_settings))
         self.update_settings(new_settings)
         self.flush()
 
     def send_window_updates(self, stream_id, delta):
         stream_id = stream_id or None
-        logger.debug("window updates sent to {0}: {1}".format(
+        logger.debug("Direction: {0} -> window updates sent: {1}".format(
             self.conn_type, locals()))
         self.increment_flow_control_window(delta, stream_id)
         self.flush()
 
     def send_priority_updates(self, stream_id, depends_on, weight, exclusive):
-        logger.debug("priority updated sent to {0}: {1}".format(
+        logger.debug("Direction: {0} priority updated sent: {1}".format(
             self.conn_type, locals()))
         self.prioritize(
             stream_id, weight,
@@ -247,7 +247,7 @@ class Connection(H2Connection):
         self.flush()
 
     def send_pushed_stream(self, stream_id, promised_stream_id, request):
-        logger.debug("pushed sent to {0}: {1}".format(
+        logger.debug("Direction: {0} pushed sent: {1}".format(
             self.conn_type, locals()))
         self.push_stream(
             stream_id,
@@ -256,7 +256,7 @@ class Connection(H2Connection):
         self.flush()
 
     def send_reset(self, stream_id, error_code):
-        logger.debug("reset sent to {0}: {1}".format(
+        logger.debug("Direction: {0} reset sent: {1}".format(
             self.conn_type, locals()))
         self.reset_stream(stream_id, error_code)
         self.flush()
@@ -264,7 +264,7 @@ class Connection(H2Connection):
     def send_terminate(self, **kwargs):
         if not self.stream.closed():
             # NOTE: there is no need to send terimate to a closed connection
-            logger.debug("terminate sent to {0}: {1}".format(
+            logger.debug("Direction: {0} terminate sent: {1}".format(
                 self.conn_type, kwargs))
             self.close_connection(**kwargs)
             self.flush()
