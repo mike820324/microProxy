@@ -24,6 +24,7 @@ class Connection(H2Connection):
 
     def __init__(self, stream, client_side=False, conn_type=None,
                  on_request=None, on_response=None, on_push=None,
+                 on_pending_events=None, on_header_receive=None,
                  on_settings=None, on_window_updates=None,
                  on_priority_updates=None, on_reset=None,
                  on_terminate=None, readonly=False,
@@ -38,6 +39,8 @@ class Connection(H2Connection):
 
         self.stream = stream
 
+        self.on_pending_events = on_pending_events or on_unhandled_with_type("PENDING_EVENTS")
+        self.on_header_receive = on_header_receive or on_unhandled_with_type("REQUEST_HEADER_RECEIVE")
         self.on_request = on_request or on_unhandled_with_type("REQUEST")
         self.on_response = on_response or on_unhandled_with_type("RESPONSE")
         self.on_push = on_push or on_unhandled_with_type("PUSH")
@@ -123,6 +126,7 @@ class Connection(H2Connection):
                 method=headers_dict[":method"],
                 path=headers_dict[":path"],
                 headers=event.headers), [], event.priority_updated)
+        self.on_header_receive(event.stream_id)
 
     def handle_response(self, event):
         headers_dict = dict(event.headers)
@@ -148,6 +152,7 @@ class Connection(H2Connection):
         else:
             request, chunks, priority_updated = self.ongoings_streams[stream_id]
             request.body = b"".join(chunks)
+
             self.on_request(stream_id, request, priority_updated)
 
     def handle_pushed_stream(self, event):
@@ -166,14 +171,14 @@ class Connection(H2Connection):
         self.on_settings(event.changed_settings)
 
     def handle_window_updates(self, event):
-        self.on_window_updates(event.stream_id, event.delta)
+        self.on_window_updates(event.stream_id, event.delta, event)
 
     def handle_priority_updates(self, event):
         self.on_priority_updates(
-            event.stream_id, event.depends_on, event.weight, event.exclusive)
+            event.stream_id, event.depends_on, event.weight, event.exclusive, event)
 
     def handle_reset(self, event):
-        self.on_reset(event.stream_id, event.error_code)
+        self.on_reset(event.stream_id, event.error_code, event)
 
     def send_request(self, stream_id, request, **kwargs):
         logger.debug("Direction: {0} -> request sent: {1}".format(
@@ -181,6 +186,8 @@ class Connection(H2Connection):
                 headers=request.headers))))
         self.send_headers(
             stream_id, request.headers, stream_ended=not bool(request.body), **kwargs)
+        self.on_pending_events(stream_id)
+
         if request.body:
             self.send_data(stream_id, request.body)
 
