@@ -71,12 +71,12 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("host", "mpserver")]))
 
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
         self.server_conn.send_response(
-            1, HttpResponse(headers=[(":status", "200"), ("aaa", "bbb")],
+            1, HttpResponse(headers=[(":status", "200"), ("host", "mpserver")],
                             body=b"ccc"))
 
         yield self.read_until_new_event(self.client_conn, self.src_events)
@@ -96,7 +96,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
         self.assertEqual(
             response.headers,
             HttpHeaders([(":status", "200"),
-                         ("aaa", "bbb")]))
+                         ("host", "mpserver")]))
         self.assertEqual(response.body, b"ccc")
 
         self.assertEqual(len(self.dest_events), 1)
@@ -109,7 +109,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             request.headers,
             HttpHeaders([(":method", "GET"),
                          (":path", "/"),
-                         ("aaa", "bbb")]))
+                         ("host", "mpserver")]))
 
     @gen_test
     def test_req_with_priority_updated(self):
@@ -129,7 +129,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]),
+                ("host", "mpserver")]),
             priority_weight=10,
             priority_depends_on=0,
             priority_exclusive=False)
@@ -151,7 +151,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             request.headers,
             HttpHeaders([(":method", "GET"),
                          (":path", "/"),
-                         ("aaa", "bbb")]))
+                         ("host", "mpserver")]))
         self.assertIsNotNone(priority_updated)
         self.assertEqual(priority_updated.weight, 10)
         self.assertEqual(priority_updated.exclusive, False)
@@ -177,7 +177,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
 
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
@@ -238,7 +238,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
         self.client_conn.send_window_updates(1, 200)
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
@@ -274,7 +274,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
         self.client_conn.send_priority_updates(1, 0, 10, False)
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
@@ -305,7 +305,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
         self.client_conn.send_reset(1, 0)
@@ -315,7 +315,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             3, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
         self.server_conn.send_reset(3, 0)
@@ -434,12 +434,12 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             1, HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("host", "mpserver")]))
 
         yield self.read_until_new_event(self.server_conn, self.dest_events)
 
         self.server_conn.send_response(
-            1, HttpResponse(headers=[(":status", "200"), ("aaa", "bbb")],
+            1, HttpResponse(headers=[(":status", "200"), ("host", "mpserver")],
                             body=b"ccc"))
 
         result = yield result_future
@@ -457,7 +457,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             request.headers,
             HttpHeaders([(":method", "GET"),
                          (":path", "/"),
-                         ("aaa", "bbb")]))
+                         ("host", "mpserver")]))
 
     def tearDown(self):
         self.client_stream.close()

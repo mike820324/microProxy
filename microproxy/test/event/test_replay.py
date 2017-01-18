@@ -113,7 +113,7 @@ class TestReplayHandler(AsyncTestCase):
             host="localhost", port=8080, scheme="h2", path="/",
             request=dict(
                 method="GET", path="/", version="HTTP/2",
-                headers=[(":method", "GET"), (":path", "/")]),
+                headers=[(":method", "GET"), (":path", "/"), ("host", "mpserver")]),
             response=None)
         event = Event(REPLAY, ctx)
         yield self.replay_handler.handle(event)
@@ -134,7 +134,7 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.version, "HTTP/2")
         self.assertEqual(req.path, "/")
         self.assertEqual(req.headers, HttpHeaders([
-            (":method", "GET"), (":path", "/")]))
+            (":method", "GET"), (":path", "/"), ("host", "mpserver")]))
 
     @gen_test
     def test_http2_post_body(self):
@@ -144,7 +144,7 @@ class TestReplayHandler(AsyncTestCase):
             host="localhost", port=8080, scheme="h2", path="/",
             request=dict(
                 method="POST", path="/", version="HTTP/2",
-                headers=[(":method", "POST"), (":path", "/"), ("content-length", str(body_length))],
+                headers=[(":method", "POST"), (":path", "/"), ("content-length", str(body_length)), ("host", "mpserver")],
                 body=body.encode("base64")),
             response=None)
         event = Event(REPLAY, ctx)
@@ -166,7 +166,7 @@ class TestReplayHandler(AsyncTestCase):
         self.assertEqual(req.version, "HTTP/2")
         self.assertEqual(req.path, "/")
         self.assertEqual(req.headers, HttpHeaders([
-            (":method", "POST"), (":path", "/"), ("content-length", str(body_length))]))
+            (":method", "POST"), (":path", "/"), ("content-length", str(body_length)), ("host", "mpserver")]))
         self.assertEqual(req.body, body)
 
     @gen_test

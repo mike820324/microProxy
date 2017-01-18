@@ -62,7 +62,7 @@ class TestConnection(ProxyAsyncTestCase):
             HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("host", "mpserver")]))
 
         server_conn = Connection(
             self.server_stream, client_side=False, on_request=self.on_request,
@@ -76,7 +76,7 @@ class TestConnection(ProxyAsyncTestCase):
                          HttpHeaders([
                              (":method", "GET"),
                              (":path", "/"),
-                             ("aaa", "bbb")]))
+                             ("host", "mpserver")]))
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.version, "HTTP/2")
@@ -92,7 +92,7 @@ class TestConnection(ProxyAsyncTestCase):
             HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
 
         server_conn = Connection(
             self.server_stream, client_side=False,
@@ -167,7 +167,7 @@ class TestConnection(ProxyAsyncTestCase):
             HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
         client_conn.send_priority_updates(
             stream_id, 0, 10, False)
 
@@ -192,7 +192,8 @@ class TestConnection(ProxyAsyncTestCase):
             client_conn.get_next_available_stream_id(),
             HttpRequest(headers=[
                 (":method", "GET"),
-                (":path", "/")]))
+                (":path", "/"),
+                ("Host", "mpserver")]))
 
         server_conn = Connection(
             self.server_stream, client_side=False, on_request=self.on_request,
@@ -227,7 +228,8 @@ class TestConnection(ProxyAsyncTestCase):
             client_conn.get_next_available_stream_id(),
             HttpRequest(headers=[
                 (":method", "GET"),
-                (":path", "/")]))
+                (":path", "/"),
+                ("Host", "nginx")]))
 
         server_conn = Connection(
             self.server_stream, client_side=False, on_request=self.on_request,
@@ -267,7 +269,7 @@ class TestConnection(ProxyAsyncTestCase):
             HttpRequest(headers=[
                 (":method", "POST"),
                 (":path", "/"),
-                ("aaa", "bbb")], body=b"aaaa"))
+                ("host", "mpserver")], body=b"aaaa"))
 
         server_conn = Connection(
             self.server_stream, client_side=False, on_request=self.on_request,
@@ -281,7 +283,7 @@ class TestConnection(ProxyAsyncTestCase):
                          HttpHeaders([
                              (":method", "POST"),
                              (":path", "/"),
-                             ("aaa", "bbb")]))
+                             ("host", "mpserver")]))
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.version, "HTTP/2")
@@ -296,7 +298,7 @@ class TestConnection(ProxyAsyncTestCase):
             HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
-                ("aaa", "bbb")]))
+                ("Host", "mpserver")]))
 
         with self.assertRaises(gen.TimeoutError):
             yield gen.with_timeout(
