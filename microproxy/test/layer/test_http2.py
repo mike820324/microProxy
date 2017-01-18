@@ -222,6 +222,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
             self.client_stream, client_side=True,
             on_window_updates=self.record_src_event,
             on_unhandled=self.ignore_event)
+
         self.server_conn = Connection(
             self.server_stream, client_side=False,
             on_window_updates=self.record_dest_event,
@@ -249,12 +250,11 @@ class TestHttp2Layer(ProxyAsyncTestCase):
         self.server_stream.close()
 
         yield result_future
-        print self.src_events
         self.assertEqual(len(self.src_events), 1)
-        self.assertEqual(self.src_events[0], (1, 300))
+        self.assertEqual(self.src_events[0][:-1], (1, 300))
         self.assertEqual(len(self.dest_events), 2)
-        self.assertEqual(self.dest_events[0], (0, 100))
-        self.assertEqual(self.dest_events[1], (1, 200))
+        self.assertEqual(self.dest_events[0][:-1], (0, 100))
+        self.assertEqual(self.dest_events[1][:-1], (1, 200))
 
     @gen_test
     def test_priority_updated(self):
@@ -283,7 +283,7 @@ class TestHttp2Layer(ProxyAsyncTestCase):
 
         yield result_future
         self.assertEqual(len(self.dest_events), 1)
-        self.assertEqual(self.dest_events[0], (1, 0, 10, False))
+        self.assertEqual(self.dest_events[0][:-1], (1, 0, 10, False))
 
     @gen_test
     def test_reset(self):
@@ -326,9 +326,9 @@ class TestHttp2Layer(ProxyAsyncTestCase):
 
         yield result_future
         self.assertEqual(len(self.src_events), 1)
-        self.assertEqual(self.src_events[0], (3, 0))
+        self.assertEqual(self.src_events[0][:-1], (3, 0))
         self.assertEqual(len(self.dest_events), 3)  # NOTE: req, reset, req
-        self.assertEqual(self.dest_events[1], (1, 0))
+        self.assertEqual(self.dest_events[1][:-1], (1, 0))
 
     @gen_test
     def test_src_send_terminate(self):
@@ -383,37 +383,6 @@ class TestHttp2Layer(ProxyAsyncTestCase):
         yield result_future
         self.assertEqual(len(self.src_events), 3)
         self.assertEqual(self.src_events[2], (None, 0, 0))
-
-    @gen_test
-    def test_safe_mapping_id(self):
-        self.client_conn = Connection(
-            self.client_stream, client_side=True,
-            on_unhandled=self.ignore_event)
-        self.server_conn = Connection(
-            self.server_stream, client_side=False,
-            on_request=self.record_dest_event,
-            on_unhandled=self.ignore_event)
-
-        result_future = self.http_layer.process_and_return_context()
-        self.client_conn.initiate_connection()
-        self.server_conn.initiate_connection()
-
-        self.assertEqual(
-            self.http_layer.safe_mapping_id(self.http_layer.src_to_dest_ids, 1), 0)
-
-        self.client_conn.send_request(
-            1, HttpRequest(headers=[
-                (":method", "GET"),
-                (":path", "/"),
-                ("aaa", "bbb")]))
-        yield self.read_until_new_event(self.server_conn, self.dest_events)
-
-        self.assertEqual(
-            self.http_layer.safe_mapping_id(self.http_layer.src_to_dest_ids, 1), 1)
-
-        self.client_stream.close()
-        self.server_stream.close()
-        yield result_future
 
     @gen_test
     def test_replay(self):

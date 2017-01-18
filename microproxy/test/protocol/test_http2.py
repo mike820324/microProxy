@@ -35,11 +35,11 @@ class TestConnection(ProxyAsyncTestCase):
     def on_settings(self, settings):
         self.settings = settings
 
-    def on_window_updates(self, stream_id, delta):
+    def on_window_updates(self, stream_id, delta, event):
         self.window_updates = (stream_id, delta)
 
     def on_priority_updates(self, stream_id, depends_on,
-                            weight, exclusive):
+                            weight, exclusive, event):
         self.priority_updates = dict(
             stream_id=stream_id, depends_on=depends_on,
             weight=weight, exclusive=exclusive)
@@ -50,7 +50,7 @@ class TestConnection(ProxyAsyncTestCase):
             parent_stream_id=parent_stream_id,
             request=request)
 
-    def on_reset(self, stream_id, error_code):
+    def on_reset(self, stream_id, error_code, event):
         self.reset = (stream_id, error_code)
 
     @gen_test
@@ -162,12 +162,14 @@ class TestConnection(ProxyAsyncTestCase):
             self.client_stream, client_side=True, on_unhandled=mock.Mock())
         client_conn.initiate_connection()
         stream_id = client_conn.get_next_available_stream_id()
+
         client_conn.send_request(
             stream_id,
             HttpRequest(headers=[
                 (":method", "GET"),
                 (":path", "/"),
                 ("Host", "mpserver")]))
+
         client_conn.send_priority_updates(
             stream_id, 0, 10, False)
 
