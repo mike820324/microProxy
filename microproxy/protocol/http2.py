@@ -88,7 +88,19 @@ class Connection(H2Connection):
             self.stream.closed()
 
     def handle_events(self, events):
+        # NOTE: Look ahead current event list and remove duplicate priority update.
+        # If we proxy all the events receive from hyper-h2, we will duplicate the PRIORITY frame.
+        new_events = []
+        duplicate_priority_updated = None
         for event in events:
+            if isinstance(event, RequestReceived) and event.stream_ended and event.priority_updated:
+                duplicate_priority_updated = event.priority_updated
+            elif isinstance(event, PriorityUpdated) and duplicate_priority_updated is event:
+                continue
+
+            new_events.append(event)
+
+        for event in new_events:
             logger.debug("Direction: {0} -> event received: {1}".format(self.conn_type, event))
             if isinstance(event, ResponseReceived):
                 self.handle_response(event)
